@@ -1,0 +1,21 @@
+\ This is a test Forth program
+\ Comments start with backslash
+
+\ Define SQUARE word
+: SQUARE DUP * ;
+
+\ Define CUBE word
+: CUBE DUP SQUARE * ;
+
+\ Test SQUARE
+5 SQUARE .
+
+\ Test CUBE
+3 CUBE .
+
+\ Test arithmetic
+10 20 + 5 * .
+
+\ Test comparison with IF/THEN/ELSE
+: BIGGER? > IF 99 ELSE 88 THEN ;
+10 5 BIGGER? .
