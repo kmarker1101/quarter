@@ -381,3 +381,20 @@ pub fn zero_greater(
         println!("Stack underflow!");
     }
 }
+
+// Boolean constants
+pub fn forth_true(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+) {
+    stack.push(-1);
+}
+
+pub fn forth_false(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+) {
+    stack.push(0);
+}

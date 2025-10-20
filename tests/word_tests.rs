@@ -1005,3 +1005,146 @@ fn test_zero_greater_false_negative() {
 
     assert_eq!(stack.pop(), Some(0)); // false
 }
+
+// TRUE and FALSE tests
+#[test]
+fn test_true_word() {
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+    let mut return_stack = ReturnStack::new();
+
+    dict.execute_word("TRUE", &mut stack, &mut loop_stack, &mut return_stack).unwrap();
+    assert_eq!(stack.pop(), Some(-1));
+}
+
+#[test]
+fn test_false_word() {
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+    let mut return_stack = ReturnStack::new();
+
+    dict.execute_word("FALSE", &mut stack, &mut loop_stack, &mut return_stack).unwrap();
+    assert_eq!(stack.pop(), Some(0));
+}
+
+#[test]
+fn test_true_false_comparison() {
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+    let mut return_stack = ReturnStack::new();
+
+    dict.execute_word("TRUE", &mut stack, &mut loop_stack, &mut return_stack).unwrap();
+    dict.execute_word("FALSE", &mut stack, &mut loop_stack, &mut return_stack).unwrap();
+    dict.execute_word("=", &mut stack, &mut loop_stack, &mut return_stack).unwrap();
+    assert_eq!(stack.pop(), Some(0)); // TRUE != FALSE
+}
+
+// EXIT tests
+#[test]
+fn test_exit_simple() {
+    let mut stack = Stack::new();
+    let mut dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+    let mut return_stack = ReturnStack::new();
+
+    // : test-exit 42 exit 99 ;
+    let tokens = vec!["42", "EXIT", "99"];
+    let ast = parse_tokens(&tokens).unwrap();
+    dict.add_compiled("TEST-EXIT".to_string(), ast);
+
+    dict.execute_word("TEST-EXIT", &mut stack, &mut loop_stack, &mut return_stack).unwrap();
+    assert_eq!(stack.pop(), Some(42));
+    assert!(stack.is_empty()); // 99 should not be pushed
+}
+
+#[test]
+fn test_exit_in_if() {
+    let mut stack = Stack::new();
+    let mut dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+    let mut return_stack = ReturnStack::new();
+
+    // : test-exit-if 1 if 42 exit then 99 ;
+    let tokens = vec!["1", "IF", "42", "EXIT", "THEN", "99"];
+    let ast = parse_tokens(&tokens).unwrap();
+    dict.add_compiled("TEST-EXIT-IF".to_string(), ast);
+
+    dict.execute_word("TEST-EXIT-IF", &mut stack, &mut loop_stack, &mut return_stack).unwrap();
+    assert_eq!(stack.pop(), Some(42));
+    assert!(stack.is_empty()); // 99 should not be pushed
+}
+
+#[test]
+fn test_exit_in_loop() {
+    let mut stack = Stack::new();
+    let mut dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+    let mut return_stack = ReturnStack::new();
+
+    // : test-exit-loop 10 0 do i 5 = if i exit then loop 99 ;
+    let tokens = vec!["10", "0", "DO", "I", "5", "=", "IF", "I", "EXIT", "THEN", "LOOP", "99"];
+    let ast = parse_tokens(&tokens).unwrap();
+    dict.add_compiled("TEST-EXIT-LOOP".to_string(), ast);
+
+    dict.execute_word("TEST-EXIT-LOOP", &mut stack, &mut loop_stack, &mut return_stack).unwrap();
+    assert_eq!(stack.pop(), Some(5)); // Should exit at i=5
+    assert!(stack.is_empty()); // 99 should not be pushed
+}
+
+#[test]
+fn test_exit_with_true_false() {
+    let mut stack = Stack::new();
+    let mut dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+    let mut return_stack = ReturnStack::new();
+
+    // : test 1 0 = if false exit then true ;
+    let tokens = vec!["1", "0", "=", "IF", "FALSE", "EXIT", "THEN", "TRUE"];
+    let ast = parse_tokens(&tokens).unwrap();
+    dict.add_compiled("TEST".to_string(), ast);
+
+    dict.execute_word("TEST", &mut stack, &mut loop_stack, &mut return_stack).unwrap();
+    assert_eq!(stack.pop(), Some(-1)); // Should get TRUE (no EXIT taken)
+}
+
+#[test]
+fn test_leap_year() {
+    let mut stack = Stack::new();
+    let mut dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+    let mut return_stack = ReturnStack::new();
+
+    // : leap-year? dup 400 mod 0= if drop true exit then 
+    //              dup 100 mod 0= if drop false exit then 
+    //              4 mod 0= ;
+    let tokens = vec![
+        "DUP", "400", "MOD", "0=", "IF", "DROP", "TRUE", "EXIT", "THEN",
+        "DUP", "100", "MOD", "0=", "IF", "DROP", "FALSE", "EXIT", "THEN",
+        "4", "MOD", "0="
+    ];
+    let ast = parse_tokens(&tokens).unwrap();
+    dict.add_compiled("LEAP-YEAR?".to_string(), ast);
+
+    // Test 2000 (divisible by 400)
+    stack.push(2000);
+    dict.execute_word("LEAP-YEAR?", &mut stack, &mut loop_stack, &mut return_stack).unwrap();
+    assert_eq!(stack.pop(), Some(-1));
+
+    // Test 1900 (divisible by 100 but not 400)
+    stack.push(1900);
+    dict.execute_word("LEAP-YEAR?", &mut stack, &mut loop_stack, &mut return_stack).unwrap();
+    assert_eq!(stack.pop(), Some(0));
+
+    // Test 2004 (divisible by 4)
+    stack.push(2004);
+    dict.execute_word("LEAP-YEAR?", &mut stack, &mut loop_stack, &mut return_stack).unwrap();
+    assert_eq!(stack.pop(), Some(-1));
+
+    // Test 2001 (not divisible by 4)
+    stack.push(2001);
+    dict.execute_word("LEAP-YEAR?", &mut stack, &mut loop_stack, &mut return_stack).unwrap();
+    assert_eq!(stack.pop(), Some(0));
+}

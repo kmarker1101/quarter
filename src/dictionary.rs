@@ -57,6 +57,8 @@ impl Dictionary {
         dict.add_primitive("0=", words::zero_equals);
         dict.add_primitive("0<", words::zero_less);
         dict.add_primitive("0>", words::zero_greater);
+        dict.add_primitive("TRUE", words::forth_true);
+        dict.add_primitive("FALSE", words::forth_false);
 
         dict
     }
@@ -86,7 +88,13 @@ impl Dictionary {
                     func(stack, loop_stack, return_stack);
                     Ok(())
                 }
-                Word::Compiled(ast) => ast.execute(stack, self, loop_stack, return_stack),
+                Word::Compiled(ast) => {
+                    // Execute the AST, catching EXIT to convert it to Ok
+                    match ast.execute(stack, self, loop_stack, return_stack) {
+                        Err(msg) if msg == "EXIT" => Ok(()),
+                        result => result,
+                    }
+                }
             }
         } else {
             Err(format!("Unknown word: {}", word))

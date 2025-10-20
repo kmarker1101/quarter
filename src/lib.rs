@@ -242,6 +242,10 @@ pub fn parse_tokens(tokens: &[&str]) -> Result<AstNode, String> {
                 nodes.push(AstNode::Leave);
                 i += 1;
             }
+            "EXIT" => {
+                nodes.push(AstNode::Exit);
+                i += 1;
+            }
             _ => {
                 // Try to parse as number, otherwise it's a word
                 if let Ok(num) = token.parse::<i32>() {
@@ -474,9 +478,10 @@ pub fn execute_line(
                         || upper == "LOOP"
                         || upper == "+LOOP"
                         || upper == "LEAVE"
+                        || upper == "EXIT"
                         || upper == ".\""
                 }) {
-                    return Err("Control flow and string words (IF/THEN/ELSE/BEGIN/UNTIL/WHILE/REPEAT/DO/LOOP/LEAVE/.\") are compile-only".to_string());
+                    return Err("Control flow and string words (IF/THEN/ELSE/BEGIN/UNTIL/WHILE/REPEAT/DO/LOOP/LEAVE/EXIT/.\") are compile-only".to_string());
                 }
 
                 let ast = parse_tokens(&exec_tokens)?;

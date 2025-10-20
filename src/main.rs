@@ -112,6 +112,7 @@ fn main() {
                             || upper == "LOOP"
                             || upper == "+LOOP"
                             || upper == "LEAVE"
+                            || upper == "EXIT"
                             || upper == ".\""
                     }) {
                         println!(
