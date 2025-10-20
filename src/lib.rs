@@ -79,6 +79,64 @@ impl ReturnStack {
     }
 }
 
+// Memory for @, !, C@, C!
+#[derive(Debug)]
+pub struct Memory {
+    bytes: Vec<u8>,
+}
+
+impl Memory {
+    pub fn new() -> Self {
+        Memory {
+            bytes: vec![0; 8 * 1024 * 1024], // 8MB like gforth
+        }
+    }
+
+    // @ - fetch cell (4 bytes as i32, little-endian)
+    pub fn fetch(&self, addr: usize) -> Result<i32, String> {
+        if addr + 4 > self.bytes.len() {
+            return Err(format!("Memory fetch out of bounds: address {}", addr));
+        }
+        let bytes = [
+            self.bytes[addr],
+            self.bytes[addr + 1],
+            self.bytes[addr + 2],
+            self.bytes[addr + 3],
+        ];
+        Ok(i32::from_le_bytes(bytes))
+    }
+
+    // ! - store cell (i32 as 4 bytes, little-endian)
+    pub fn store(&mut self, addr: usize, value: i32) -> Result<(), String> {
+        if addr + 4 > self.bytes.len() {
+            return Err(format!("Memory store out of bounds: address {}", addr));
+        }
+        let bytes = value.to_le_bytes();
+        self.bytes[addr] = bytes[0];
+        self.bytes[addr + 1] = bytes[1];
+        self.bytes[addr + 2] = bytes[2];
+        self.bytes[addr + 3] = bytes[3];
+        Ok(())
+    }
+
+    // C@ - fetch byte (return as i32)
+    pub fn fetch_byte(&self, addr: usize) -> Result<i32, String> {
+        if addr >= self.bytes.len() {
+            return Err(format!("Memory byte fetch out of bounds: address {}", addr));
+        }
+        Ok(self.bytes[addr] as i32)
+    }
+
+    // C! - store byte (store low byte of i32)
+    pub fn store_byte(&mut self, addr: usize, value: i32) -> Result<(), String> {
+        if addr >= self.bytes.len() {
+            return Err(format!("Memory byte store out of bounds: address {}", addr));
+        }
+        self.bytes[addr] = (value & 0xFF) as u8;
+        Ok(())
+    }
+}
+
 pub fn parse_tokens(tokens: &[&str]) -> Result<AstNode, String> {
     let mut nodes = Vec::new();
     let mut i = 0;
@@ -353,6 +411,7 @@ pub fn load_file(
     dict: &mut Dictionary,
     loop_stack: &mut LoopStack,
     return_stack: &mut ReturnStack,
+    memory: &mut Memory,
 ) -> Result<(), String> {
     let contents = fs::read_to_string(filename).map_err(|e| format!("Cannot read file: {}", e))?;
 
@@ -393,7 +452,7 @@ pub fn load_file(
     }
 
     // Now execute the entire file as one token stream
-    execute_line(&result, stack, dict, loop_stack, return_stack)?;
+    execute_line(&result, stack, dict, loop_stack, return_stack, memory)?;
 
     Ok(())
 }
@@ -404,6 +463,7 @@ pub fn execute_line(
     dict: &mut Dictionary,
     loop_stack: &mut LoopStack,
     return_stack: &mut ReturnStack,
+    memory: &mut Memory,
 ) -> Result<(), String> {
     let tokens: Vec<&str> = input.split_whitespace().collect();
 
@@ -422,7 +482,7 @@ pub fn execute_line(
             }
 
             let filename = tokens[i + 1];
-            load_file(filename, stack, dict, loop_stack, return_stack)?;
+            load_file(filename, stack, dict, loop_stack, return_stack, memory)?;
             i += 2;
         } else if token_upper == ":" {
             // Find matching semicolon for definition
@@ -485,7 +545,7 @@ pub fn execute_line(
                 }
 
                 let ast = parse_tokens(&exec_tokens)?;
-                ast.execute(stack, dict, loop_stack, return_stack)?;
+                ast.execute(stack, dict, loop_stack, return_stack, memory)?;
             }
         }
     }

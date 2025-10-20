@@ -7,6 +7,7 @@ fn main() {
     let mut dict = Dictionary::new();
     let mut loop_stack = LoopStack::new();
     let mut return_stack = quarter::ReturnStack::new();
+    let mut memory = quarter::Memory::new();
 
     println!("Forth Interpreter v0.1");
 
@@ -16,7 +17,7 @@ fn main() {
     if args.len() > 1 {
         let filename = &args[1];
         println!("Loading {}", filename);
-        match load_file(filename, &mut stack, &mut dict, &mut loop_stack, &mut return_stack) {
+        match load_file(filename, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory) {
             Ok(_) => {
                 return;
             }
@@ -60,7 +61,7 @@ fn main() {
                     }
 
                     let filename = tokens[1];
-                    match load_file(filename, &mut stack, &mut dict, &mut loop_stack, &mut return_stack) {
+                    match load_file(filename, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory) {
                         Ok(_) => {
                             println!("ok");
                         }
@@ -120,7 +121,7 @@ fn main() {
                         );
                     } else {
                         match parse_tokens(&tokens) {
-                            Ok(ast) => match ast.execute(&mut stack, &dict, &mut loop_stack, &mut return_stack) {
+                            Ok(ast) => match ast.execute(&mut stack, &dict, &mut loop_stack, &mut return_stack, &mut memory) {
                                 Ok(_) => println!("ok"),
                                 Err(e) => println!("{}", e),
                             },

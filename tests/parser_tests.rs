@@ -1,4 +1,4 @@
-use quarter::{LoopStack, parse_tokens, AstNode, Dictionary, ReturnStack, Stack};
+use quarter::{LoopStack, parse_tokens, AstNode, Dictionary, ReturnStack, Stack, Memory};
 
 #[test]
 fn test_parse_simple_number() {
@@ -134,8 +134,9 @@ fn test_parse_complex_if_expression() {
     let mut loop_stack = LoopStack::new();
     let dict = Dictionary::new();
     let mut return_stack = ReturnStack::new();
+    let mut memory = Memory::new();
     let ast = result.unwrap();
-    ast.execute(&mut stack, &dict, &mut loop_stack, &mut return_stack).unwrap();
+    ast.execute(&mut stack, &dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
     assert_eq!(stack.pop(), Some(5)); // 10 > 5 is true, so 2 + 3
 }
 

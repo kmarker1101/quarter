@@ -90,16 +90,17 @@ impl AstNode {
         dict: &crate::dictionary::Dictionary,
         loop_stack: &mut crate::LoopStack,
         return_stack: &mut crate::ReturnStack,
+        memory: &mut crate::Memory,
     ) -> Result<(), String> {
         match self {
             AstNode::PushNumber(n) => {
                 stack.push(*n);
                 Ok(())
             }
-            AstNode::CallWord(name) => dict.execute_word(name, stack, loop_stack, return_stack),
+            AstNode::CallWord(name) => dict.execute_word(name, stack, loop_stack, return_stack, memory),
             AstNode::Sequence(nodes) => {
                 for node in nodes {
-                    match node.execute(stack, dict, loop_stack, return_stack) {
+                    match node.execute(stack, dict, loop_stack, return_stack, memory) {
                         Err(msg) if msg == "EXIT" => {
                             // EXIT was called, stop processing and return success
                             return Ok(());
@@ -119,7 +120,7 @@ impl AstNode {
                     if condition != 0 {
                         // Non-zero is true in Forth
                         for node in then_branch {
-                            match node.execute(stack, dict, loop_stack, return_stack) {
+                            match node.execute(stack, dict, loop_stack, return_stack, memory) {
                                 Err(msg) if msg == "EXIT" => return Err(msg),
                                 Err(e) => return Err(e),
                                 Ok(()) => {}
@@ -127,7 +128,7 @@ impl AstNode {
                         }
                     } else if let Some(else_nodes) = else_branch {
                         for node in else_nodes {
-                            match node.execute(stack, dict, loop_stack, return_stack) {
+                            match node.execute(stack, dict, loop_stack, return_stack, memory) {
                                 Err(msg) if msg == "EXIT" => return Err(msg),
                                 Err(e) => return Err(e),
                                 Ok(()) => {}
@@ -143,7 +144,7 @@ impl AstNode {
                 loop {
                     // Execute body
                     for node in body {
-                        match node.execute(stack, dict, loop_stack, return_stack) {
+                        match node.execute(stack, dict, loop_stack, return_stack, memory) {
                             Err(msg) if msg == "EXIT" => return Err(msg),
                             Err(e) => return Err(e),
                             Ok(()) => {}
@@ -164,7 +165,7 @@ impl AstNode {
                 loop {
                     // Evaluate condition
                     for node in condition {
-                        match node.execute(stack, dict, loop_stack, return_stack) {
+                        match node.execute(stack, dict, loop_stack, return_stack, memory) {
                             Err(msg) if msg == "EXIT" => return Err(msg),
                             Err(e) => return Err(e),
                             Ok(()) => {}
@@ -180,7 +181,7 @@ impl AstNode {
                     }
                     // Execute body
                     for node in body {
-                        match node.execute(stack, dict, loop_stack, return_stack) {
+                        match node.execute(stack, dict, loop_stack, return_stack, memory) {
                             Err(msg) if msg == "EXIT" => return Err(msg),
                             Err(e) => return Err(e),
                             Ok(()) => {}
@@ -198,7 +199,7 @@ impl AstNode {
                         // Execute body
                         let mut should_leave = false;
                         for node in body {
-                            match node.execute(stack, dict, loop_stack, return_stack) {
+                            match node.execute(stack, dict, loop_stack, return_stack, memory) {
                                 Err(msg) if msg == "LEAVE" => {
                                     // LEAVE was called, exit loop early
                                     should_leave = true;
