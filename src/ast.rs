@@ -22,6 +22,7 @@ pub enum AstNode {
     },
     PrintString(String),
     Leave,
+    Exit,
 }
 
 impl AstNode {
@@ -31,6 +32,7 @@ impl AstNode {
             AstNode::PushNumber(_) => Ok(()),
             AstNode::PrintString(_) => Ok(()),
             AstNode::Leave => Ok(()),
+            AstNode::Exit => Ok(()),
             AstNode::CallWord(name) => {
                 if dict.has_word(name) {
                     Ok(())
@@ -97,7 +99,14 @@ impl AstNode {
             AstNode::CallWord(name) => dict.execute_word(name, stack, loop_stack, return_stack),
             AstNode::Sequence(nodes) => {
                 for node in nodes {
-                    node.execute(stack, dict, loop_stack, return_stack)?;
+                    match node.execute(stack, dict, loop_stack, return_stack) {
+                        Err(msg) if msg == "EXIT" => {
+                            // EXIT was called, stop processing and return success
+                            return Ok(());
+                        }
+                        Err(e) => return Err(e),
+                        Ok(()) => {}
+                    }
                 }
                 Ok(())
             }
@@ -110,11 +119,19 @@ impl AstNode {
                     if condition != 0 {
                         // Non-zero is true in Forth
                         for node in then_branch {
-                            node.execute(stack, dict, loop_stack, return_stack)?;
+                            match node.execute(stack, dict, loop_stack, return_stack) {
+                                Err(msg) if msg == "EXIT" => return Err(msg),
+                                Err(e) => return Err(e),
+                                Ok(()) => {}
+                            }
                         }
                     } else if let Some(else_nodes) = else_branch {
                         for node in else_nodes {
-                            node.execute(stack, dict, loop_stack, return_stack)?;
+                            match node.execute(stack, dict, loop_stack, return_stack) {
+                                Err(msg) if msg == "EXIT" => return Err(msg),
+                                Err(e) => return Err(e),
+                                Ok(()) => {}
+                            }
                         }
                     }
                     Ok(())
@@ -126,7 +143,11 @@ impl AstNode {
                 loop {
                     // Execute body
                     for node in body {
-                        node.execute(stack, dict, loop_stack, return_stack)?;
+                        match node.execute(stack, dict, loop_stack, return_stack) {
+                            Err(msg) if msg == "EXIT" => return Err(msg),
+                            Err(e) => return Err(e),
+                            Ok(()) => {}
+                        }
                     }
                     // Check condition (top of stack)
                     if let Some(condition) = stack.pop() {
@@ -143,7 +164,11 @@ impl AstNode {
                 loop {
                     // Evaluate condition
                     for node in condition {
-                        node.execute(stack, dict, loop_stack, return_stack)?;
+                        match node.execute(stack, dict, loop_stack, return_stack) {
+                            Err(msg) if msg == "EXIT" => return Err(msg),
+                            Err(e) => return Err(e),
+                            Ok(()) => {}
+                        }
                     }
                     // Check if we should continue
                     if let Some(cond) = stack.pop() {
@@ -155,7 +180,11 @@ impl AstNode {
                     }
                     // Execute body
                     for node in body {
-                        node.execute(stack, dict, loop_stack, return_stack)?;
+                        match node.execute(stack, dict, loop_stack, return_stack) {
+                            Err(msg) if msg == "EXIT" => return Err(msg),
+                            Err(e) => return Err(e),
+                            Ok(()) => {}
+                        }
                     }
                 }
                 Ok(())
@@ -174,6 +203,11 @@ impl AstNode {
                                     // LEAVE was called, exit loop early
                                     should_leave = true;
                                     break;
+                                }
+                                Err(msg) if msg == "EXIT" => {
+                                    // EXIT was called, exit loop AND word
+                                    loop_stack.pop_loop();
+                                    return Err(msg);
                                 }
                                 Err(e) => {
                                     loop_stack.pop_loop();
@@ -220,6 +254,10 @@ impl AstNode {
             AstNode::Leave => {
                 // Signal to exit the loop
                 Err("LEAVE".to_string())
+            }
+            AstNode::Exit => {
+                // Signal to exit the current word
+                Err("EXIT".to_string())
             }
         }
     }
