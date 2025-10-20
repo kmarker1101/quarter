@@ -46,6 +46,12 @@ impl Dictionary {
         dict.add_primitive("EMIT", words::emit);
         dict.add_primitive("KEY", words::key);
         dict.add_primitive("SPACE", words::space);
+        dict.add_primitive("AND", words::and);
+        dict.add_primitive("OR", words::or);
+        dict.add_primitive("XOR", words::xor);
+        dict.add_primitive("INVERT", words::invert);
+        dict.add_primitive("LSHIFT", words::lshift);
+        dict.add_primitive("RSHIFT", words::rshift);
 
         dict
     }
