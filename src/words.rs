@@ -1,5 +1,5 @@
-use crate::stack::Stack;
 use crate::LoopStack;
+use crate::stack::Stack;
 
 // Built-in word definitions
 pub fn dot(stack: &mut Stack, _loop_stack: &LoopStack) {
@@ -210,4 +210,33 @@ pub fn loop_j(stack: &mut Stack, loop_stack: &LoopStack) {
     } else {
         println!("Not in a nested loop!");
     }
+}
+
+pub fn emit(stack: &mut Stack, _loop_stack: &LoopStack) {
+    if let Some(value) = stack.pop() {
+        if let Some(ch) = char::from_u32(value as u32) {
+            print!("{}", ch);
+        } else {
+            println!("Invalid character code: {}", value);
+        }
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn key(stack: &mut Stack, _loop_stack: &LoopStack) {
+    use std::io::Read;
+
+    let mut buffer = [0; 1];
+    match std::io::stdin().read_exact(&mut buffer) {
+        Ok(_) => stack.push(buffer[0] as i32),
+        Err(_) => {
+            // EOF or error - push 0
+            stack.push(0);
+        }
+    }
+}
+
+pub fn space(_stack: &mut Stack, _loop_stack: &LoopStack) {
+    print!(" ");
 }

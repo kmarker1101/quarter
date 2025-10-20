@@ -71,7 +71,8 @@ fn test_mod_word() {
 
     stack.push(13);
     stack.push(5);
-    dict.execute_word("MOD", &mut stack, &mut loop_stack).unwrap();
+    dict.execute_word("MOD", &mut stack, &mut loop_stack)
+        .unwrap();
 
     assert_eq!(stack.pop(), Some(3));
 }
@@ -84,7 +85,8 @@ fn test_slash_mod_basic() {
 
     stack.push(10);
     stack.push(3);
-    dict.execute_word("/MOD", &mut stack, &mut loop_stack).unwrap();
+    dict.execute_word("/MOD", &mut stack, &mut loop_stack)
+        .unwrap();
 
     // Should leave remainder then quotient: 1 3
     assert_eq!(stack.pop(), Some(3)); // quotient on top
@@ -99,7 +101,8 @@ fn test_dup_word() {
 
     stack.push(6);
     stack.push(7);
-    dict.execute_word("DUP", &mut stack, &mut loop_stack).unwrap();
+    dict.execute_word("DUP", &mut stack, &mut loop_stack)
+        .unwrap();
 
     assert_eq!(stack.pop(), Some(7));
     assert_eq!(stack.pop(), Some(7));
@@ -114,7 +117,8 @@ fn test_swap_word() {
 
     stack.push(6);
     stack.push(7);
-    dict.execute_word("SWAP", &mut stack, &mut loop_stack).unwrap();
+    dict.execute_word("SWAP", &mut stack, &mut loop_stack)
+        .unwrap();
 
     assert_eq!(stack.pop(), Some(6));
     assert_eq!(stack.pop(), Some(7));
@@ -144,7 +148,8 @@ fn test_negate_positive() {
     let dict = Dictionary::new();
 
     stack.push(42);
-    dict.execute_word("NEGATE", &mut stack, &mut loop_stack).unwrap();
+    dict.execute_word("NEGATE", &mut stack, &mut loop_stack)
+        .unwrap();
 
     assert_eq!(stack.pop(), Some(-42));
 }
@@ -156,7 +161,8 @@ fn test_negate_negative() {
     let dict = Dictionary::new();
 
     stack.push(-42);
-    dict.execute_word("NEGATE", &mut stack, &mut loop_stack).unwrap();
+    dict.execute_word("NEGATE", &mut stack, &mut loop_stack)
+        .unwrap();
 
     assert_eq!(stack.pop(), Some(42));
 }
@@ -167,7 +173,10 @@ fn test_unknown_word() {
     let mut loop_stack = LoopStack::new();
     let dict = Dictionary::new();
 
-    assert!(dict.execute_word("UNKNOWN", &mut stack, &mut loop_stack).is_err());
+    assert!(
+        dict.execute_word("UNKNOWN", &mut stack, &mut loop_stack)
+            .is_err()
+    );
 }
 
 #[test]
@@ -177,7 +186,8 @@ fn test_abs_word() {
     let dict = Dictionary::new();
 
     stack.push(-12);
-    dict.execute_word("ABS", &mut stack, &mut loop_stack).unwrap();
+    dict.execute_word("ABS", &mut stack, &mut loop_stack)
+        .unwrap();
 
     assert_eq!(stack.pop(), Some(12));
 }
@@ -192,7 +202,8 @@ fn test_drop_word() {
     stack.push(20);
     stack.push(30);
 
-    dict.execute_word("DROP", &mut stack, &mut loop_stack).unwrap();
+    dict.execute_word("DROP", &mut stack, &mut loop_stack)
+        .unwrap();
 
     assert_eq!(stack.pop(), Some(20));
     assert_eq!(stack.pop(), Some(10));
@@ -209,7 +220,8 @@ fn test_rot_word() {
     stack.push(2);
     stack.push(3);
 
-    dict.execute_word("ROT", &mut stack, &mut loop_stack).unwrap();
+    dict.execute_word("ROT", &mut stack, &mut loop_stack)
+        .unwrap();
 
     assert_eq!(stack.pop(), Some(1)); // 1 rotated to top
     assert_eq!(stack.pop(), Some(3));
@@ -225,7 +237,8 @@ fn test_over_word() {
     stack.push(5);
     stack.push(10);
 
-    dict.execute_word("OVER", &mut stack, &mut loop_stack).unwrap();
+    dict.execute_word("OVER", &mut stack, &mut loop_stack)
+        .unwrap();
 
     assert_eq!(stack.pop(), Some(5)); // copied to top
     assert_eq!(stack.pop(), Some(10));
@@ -261,9 +274,9 @@ fn test_do_loop_basic() {
     // : TEST 5 0 DO I LOOP ;  (pushes 0 1 2 3 4 onto stack)
     let tokens = vec!["5", "0", "DO", "I", "LOOP"];
     let ast = parse_tokens(&tokens).unwrap();
-    
+
     ast.execute(&mut stack, &dict, &mut loop_stack).unwrap();
-    
+
     // Should have pushed indices 0 through 4
     assert_eq!(stack.pop(), Some(4));
     assert_eq!(stack.pop(), Some(3));
@@ -280,11 +293,13 @@ fn test_begin_while_repeat() {
     let mut loop_stack = LoopStack::new();
 
     // : TEST 5 BEGIN DUP WHILE DUP 1 - REPEAT DROP ;
-    let tokens = vec!["5", "BEGIN", "DUP", "WHILE", "DUP", "1", "-", "REPEAT", "DROP"];
+    let tokens = vec![
+        "5", "BEGIN", "DUP", "WHILE", "DUP", "1", "-", "REPEAT", "DROP",
+    ];
     let ast = parse_tokens(&tokens).unwrap();
-    
+
     ast.execute(&mut stack, &dict, &mut loop_stack).unwrap();
-    
+
     // Stack should have: 5 4 3 2 1
     assert_eq!(stack.pop(), Some(1));
     assert_eq!(stack.pop(), Some(2));
@@ -392,8 +407,8 @@ fn test_loop_j_word() {
     let mut loop_stack = LoopStack::new();
 
     // Manually create nested loop context
-    loop_stack.push_loop(5, 10);  // Outer loop
-    loop_stack.push_loop(2, 8);   // Inner loop
+    loop_stack.push_loop(5, 10); // Outer loop
+    loop_stack.push_loop(2, 8); // Inner loop
 
     dict.execute_word("J", &mut stack, &mut loop_stack).unwrap();
 
@@ -414,7 +429,9 @@ fn test_nested_loops_with_j() {
     // Outer loop: 0, 1, 2
     // Inner loop for each outer: 0, 1
     // Should push: J+I for each combination = 0, 1, 1, 2, 2, 3
-    let tokens = vec!["3", "0", "DO", "2", "0", "DO", "J", "I", "+", "LOOP", "LOOP"];
+    let tokens = vec![
+        "3", "0", "DO", "2", "0", "DO", "J", "I", "+", "LOOP", "LOOP",
+    ];
     let ast = parse_tokens(&tokens).unwrap();
 
     ast.execute(&mut stack, &dict, &mut loop_stack).unwrap();
@@ -438,7 +455,9 @@ fn test_leave_early_exit() {
     // : TEST 10 0 DO I DUP 5 = IF LEAVE THEN LOOP ;
     // I pushes index, DUP duplicates, 5 pushes 5, = compares (consuming DUP and 5)
     // So each iteration leaves one I value, and exits when i=5
-    let tokens = vec!["10", "0", "DO", "I", "DUP", "5", "=", "IF", "LEAVE", "THEN", "LOOP"];
+    let tokens = vec![
+        "10", "0", "DO", "I", "DUP", "5", "=", "IF", "LEAVE", "THEN", "LOOP",
+    ];
     let ast = parse_tokens(&tokens).unwrap();
 
     ast.execute(&mut stack, &dict, &mut loop_stack).unwrap();
@@ -461,7 +480,9 @@ fn test_leave_in_plus_loop() {
     // : TEST 20 0 DO I DUP 7 > IF LEAVE THEN 2 +LOOP ;
     // I pushes index, DUP duplicates, 7 pushes 7, > compares (consuming DUP and 7)
     // Exits when i=8 (first time 8 > 7 is true)
-    let tokens = vec!["20", "0", "DO", "I", "DUP", "7", ">", "IF", "LEAVE", "THEN", "2", "+LOOP"];
+    let tokens = vec![
+        "20", "0", "DO", "I", "DUP", "7", ">", "IF", "LEAVE", "THEN", "2", "+LOOP",
+    ];
     let ast = parse_tokens(&tokens).unwrap();
 
     ast.execute(&mut stack, &dict, &mut loop_stack).unwrap();
@@ -472,4 +493,78 @@ fn test_leave_in_plus_loop() {
     assert_eq!(stack.pop(), Some(4));
     assert_eq!(stack.pop(), Some(2));
     assert_eq!(stack.pop(), Some(0));
+}
+
+#[test]
+fn test_emit_word() {
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+
+    // Test emitting 'A' (65)
+    stack.push(65);
+    assert!(
+        dict.execute_word("EMIT", &mut stack, &mut loop_stack)
+            .is_ok()
+    );
+
+    // Stack should be empty after EMIT
+    assert!(stack.is_empty());
+}
+
+#[test]
+fn test_emit_unicode() {
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+
+    // Test emitting Unicode smiley (128515 = 😃)
+    stack.push(128515);
+    assert!(
+        dict.execute_word("EMIT", &mut stack, &mut loop_stack)
+            .is_ok()
+    );
+
+    assert!(stack.is_empty());
+}
+
+#[test]
+fn test_emit_multiple_chars() {
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+
+    // Emit "Hi!" (72, 105, 33)
+    stack.push(72); // H
+    stack.push(105); // i
+    stack.push(33); // !
+
+    assert!(
+        dict.execute_word("EMIT", &mut stack, &mut loop_stack)
+            .is_ok()
+    );
+    assert!(
+        dict.execute_word("EMIT", &mut stack, &mut loop_stack)
+            .is_ok()
+    );
+    assert!(
+        dict.execute_word("EMIT", &mut stack, &mut loop_stack)
+            .is_ok()
+    );
+
+    assert!(stack.is_empty());
+}
+
+#[test]
+fn test_space_word() {
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+
+    // SPACE should just print a space, not affect stack
+    assert!(
+        dict.execute_word("SPACE", &mut stack, &mut loop_stack)
+            .is_ok()
+    );
+    assert!(stack.is_empty());
 }

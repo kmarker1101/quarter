@@ -1,0 +1,16 @@
+\ Combined KEY and EMIT test
+\ Run with: echo "Hello" | cargo run examples/key_emit_combined.qtr
+
+\ Echo 5 characters (H e l l o)
+KEY EMIT
+KEY EMIT
+KEY EMIT
+KEY EMIT
+KEY EMIT
+CR
+
+\ Read newline (from echo) and 3 more - but there aren't any more!
+\ So this will read EOF and push 0
+KEY . CR
+KEY . CR
+KEY . CR
