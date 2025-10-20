@@ -72,10 +72,19 @@ jobs:
         with:
           path: artifacts
 
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          # Rename artifacts to match their target names
+          mv artifacts/quarter-linux-x86_64/quarter release-assets/quarter-linux-x86_64
+          mv artifacts/quarter-macos-x86_64/quarter release-assets/quarter-macos-x86_64
+          mv artifacts/quarter-macos-aarch64/quarter release-assets/quarter-macos-aarch64
+          mv artifacts/quarter-windows-x86_64.exe/quarter.exe release-assets/quarter-windows-x86_64.exe
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: artifacts/*/*
+          files: release-assets/*
           draft: false
           prerelease: false
           generate_release_notes: true
