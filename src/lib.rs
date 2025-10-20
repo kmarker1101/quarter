@@ -52,30 +52,56 @@ impl LoopStack {
 }
 
 // Return stack for >R, R>, R@
+// Return stack now resides in Memory space starting at address 0x010000
+// Return stack pointer (RP) tracks current top of return stack
 #[derive(Debug, Clone)]
 pub struct ReturnStack {
-    stack: Vec<i32>,
+    rp: usize,  // Return stack pointer (byte address in memory)
 }
 
 impl ReturnStack {
     pub fn new() -> Self {
-        ReturnStack { stack: Vec::new() }
+        ReturnStack {
+            rp: 0x010000,  // Start at beginning of return stack region
+        }
     }
 
-    pub fn push(&mut self, value: i32) {
-        self.stack.push(value);
+    pub fn push(&mut self, value: i32, memory: &mut Memory) {
+        // Store value at current RP
+        memory.store(self.rp, value).expect("Return stack overflow");
+        // Move RP to next cell (4 bytes)
+        self.rp += 4;
     }
 
-    pub fn pop(&mut self) -> Option<i32> {
-        self.stack.pop()
+    pub fn pop(&mut self, memory: &mut Memory) -> Option<i32> {
+        if self.rp == 0x010000 {
+            return None;  // Return stack underflow
+        }
+        // Move RP back one cell
+        self.rp -= 4;
+        // Fetch value at new RP
+        memory.fetch(self.rp).ok()
     }
 
-    pub fn peek(&self) -> Option<i32> {
-        self.stack.last().copied()
+    pub fn peek(&self, memory: &Memory) -> Option<i32> {
+        if self.rp == 0x010000 {
+            return None;  // Return stack empty
+        }
+        // Peek at top of return stack (RP - 4)
+        memory.fetch(self.rp - 4).ok()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.stack.is_empty()
+        self.rp == 0x010000
+    }
+
+    // New methods for return stack pointer access
+    pub fn get_rp(&self) -> usize {
+        self.rp
+    }
+
+    pub fn set_rp(&mut self, rp: usize) {
+        self.rp = rp;
     }
 }
 

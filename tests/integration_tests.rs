@@ -11,7 +11,7 @@ fn test_execute_line_simple_expression() {
     let mut memory = Memory::new();
 
     execute_line("5 3 +", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
-    assert_eq!(stack.pop(), Some(8));
+    assert_eq!(stack.pop(&mut memory), Some(8));
 }
 
 #[test]
@@ -27,7 +27,7 @@ fn test_execute_line_word_definition() {
 
     // Use SQUARE
     execute_line("5 SQUARE", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
-    assert_eq!(stack.pop(), Some(25));
+    assert_eq!(stack.pop(&mut memory), Some(25));
 }
 
 #[test]
@@ -110,11 +110,11 @@ fn test_execute_line_definition_with_if() {
 
     // Test with negative
     execute_line("-5 ABS", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
-    assert_eq!(stack.pop(), Some(5));
+    assert_eq!(stack.pop(&mut memory), Some(5));
 
     // Test with positive
     execute_line("5 ABS", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
-    assert_eq!(stack.pop(), Some(5));
+    assert_eq!(stack.pop(&mut memory), Some(5));
 }
 
 #[test]
@@ -134,7 +134,7 @@ fn test_load_file_simple() {
     // Load and execute
     load_file(test_file, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
 
-    assert_eq!(stack.pop(), Some(80)); // (5 + 3) * 10
+    assert_eq!(stack.pop(&mut memory), Some(80)); // (5 + 3) * 10
 
     // Cleanup
     fs::remove_file(test_file).unwrap();
@@ -159,7 +159,7 @@ fn test_load_file_with_comments() {
     // Load and execute
     load_file(test_file, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
 
-    assert_eq!(stack.pop(), Some(16)); // (5 + 3) * 2
+    assert_eq!(stack.pop(&mut memory), Some(16)); // (5 + 3) * 2
 
     // Cleanup
     fs::remove_file(test_file).unwrap();
@@ -183,7 +183,7 @@ fn test_load_file_with_definitions() {
     // Load and execute
     load_file(test_file, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
 
-    assert_eq!(stack.pop(), Some(27)); // 3^3
+    assert_eq!(stack.pop(&mut memory), Some(27)); // 3^3
 
     // Cleanup
     fs::remove_file(test_file).unwrap();
@@ -210,7 +210,7 @@ fn test_load_file_with_empty_lines() {
     // Load and execute
     load_file(test_file, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
 
-    assert_eq!(stack.pop(), Some(16)); // (5 + 3) * 2
+    assert_eq!(stack.pop(&mut memory), Some(16)); // (5 + 3) * 2
 
     // Cleanup
     fs::remove_file(test_file).unwrap();
@@ -247,7 +247,7 @@ fn test_load_file_with_paren_comments() {
     // Load and execute
     load_file(test_file, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
 
-    assert_eq!(stack.pop(), Some(8));
+    assert_eq!(stack.pop(&mut memory), Some(8));
 
     // Cleanup
     fs::remove_file(test_file).unwrap();
@@ -272,11 +272,11 @@ fn test_include_simple() {
     execute_line(&format!("INCLUDE {}", lib_file), &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
 
     // Should have 30 on stack from the file
-    assert_eq!(stack.pop(), Some(30));
+    assert_eq!(stack.pop(&mut memory), Some(30));
 
     // DOUBLE should be defined
     execute_line("5 DOUBLE", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
-    assert_eq!(stack.pop(), Some(10));
+    assert_eq!(stack.pop(&mut memory), Some(10));
 
     // Cleanup
     fs::remove_file(lib_file).unwrap();
@@ -306,11 +306,11 @@ fn test_include_nested() {
 
     // WORD1 from lib1 should be defined
     execute_line("WORD1", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
-    assert_eq!(stack.pop(), Some(42));
+    assert_eq!(stack.pop(&mut memory), Some(42));
 
     // WORD2 from lib2 should be defined and use WORD1
     execute_line("WORD2", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
-    assert_eq!(stack.pop(), Some(84));
+    assert_eq!(stack.pop(&mut memory), Some(84));
 
     // Cleanup
     fs::remove_file(lib1_file).unwrap();

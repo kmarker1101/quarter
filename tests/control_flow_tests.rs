@@ -14,7 +14,7 @@ fn test_if_then_true() {
     dict.add_compiled("TEST".to_string(), ast);
 
     dict.execute_word("TEST", &mut stack, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
-    assert_eq!(stack.pop(), Some(99));
+    assert_eq!(stack.pop(&mut memory), Some(99));
 }
 
 #[test]
@@ -32,7 +32,7 @@ fn test_if_then_false() {
 
     dict.execute_word("TEST", &mut stack, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
     // Stack should be empty since IF was false
-    assert_eq!(stack.pop(), None);
+    assert_eq!(stack.pop(&mut memory), None);
 }
 
 #[test]
@@ -49,7 +49,7 @@ fn test_if_else_then_true() {
     dict.add_compiled("TEST".to_string(), ast);
 
     dict.execute_word("TEST", &mut stack, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
-    assert_eq!(stack.pop(), Some(99));
+    assert_eq!(stack.pop(&mut memory), Some(99));
 }
 
 #[test]
@@ -66,7 +66,7 @@ fn test_if_else_then_false() {
     dict.add_compiled("TEST".to_string(), ast);
 
     dict.execute_word("TEST", &mut stack, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
-    assert_eq!(stack.pop(), Some(88));
+    assert_eq!(stack.pop(&mut memory), Some(88));
 }
 
 #[test]
@@ -85,7 +85,7 @@ fn test_if_with_multiple_operations() {
     dict.add_compiled("TEST".to_string(), ast);
 
     dict.execute_word("TEST", &mut stack, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
-    assert_eq!(stack.pop(), Some(5)); // 2 + 3
+    assert_eq!(stack.pop(&mut memory), Some(5)); // 2 + 3
 }
 
 #[test]
@@ -102,7 +102,7 @@ fn test_nested_if() {
     dict.add_compiled("TEST".to_string(), ast);
 
     dict.execute_word("TEST", &mut stack, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
-    assert_eq!(stack.pop(), Some(42));
+    assert_eq!(stack.pop(&mut memory), Some(42));
 }
 
 #[test]
@@ -119,16 +119,16 @@ fn test_if_with_stack_operations() {
     dict.add_compiled("DOUBLE_IF_POSITIVE".to_string(), ast);
 
     // Test with positive number
-    stack.push(21);
+    stack.push(21, &mut memory);
     dict.execute_word("DOUBLE_IF_POSITIVE", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
         .unwrap();
-    assert_eq!(stack.pop(), Some(42));
+    assert_eq!(stack.pop(&mut memory), Some(42));
 
     // Test with negative number (should not double)
-    stack.push(-5);
+    stack.push(-5, &mut memory);
     dict.execute_word("DOUBLE_IF_POSITIVE", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
         .unwrap();
-    assert_eq!(stack.pop(), Some(-5));
+    assert_eq!(stack.pop(&mut memory), Some(-5));
 }
 
 #[test]
