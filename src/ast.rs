@@ -30,16 +30,17 @@ impl AstNode {
         stack: &mut Stack,
         dict: &crate::dictionary::Dictionary,
         loop_stack: &mut crate::LoopStack,
+        return_stack: &mut crate::ReturnStack,
     ) -> Result<(), String> {
         match self {
             AstNode::PushNumber(n) => {
                 stack.push(*n);
                 Ok(())
             }
-            AstNode::CallWord(name) => dict.execute_word(name, stack, loop_stack),
+            AstNode::CallWord(name) => dict.execute_word(name, stack, loop_stack, return_stack),
             AstNode::Sequence(nodes) => {
                 for node in nodes {
-                    node.execute(stack, dict, loop_stack)?;
+                    node.execute(stack, dict, loop_stack, return_stack)?;
                 }
                 Ok(())
             }
@@ -52,11 +53,11 @@ impl AstNode {
                     if condition != 0 {
                         // Non-zero is true in Forth
                         for node in then_branch {
-                            node.execute(stack, dict, loop_stack)?;
+                            node.execute(stack, dict, loop_stack, return_stack)?;
                         }
                     } else if let Some(else_nodes) = else_branch {
                         for node in else_nodes {
-                            node.execute(stack, dict, loop_stack)?;
+                            node.execute(stack, dict, loop_stack, return_stack)?;
                         }
                     }
                     Ok(())
@@ -68,7 +69,7 @@ impl AstNode {
                 loop {
                     // Execute body
                     for node in body {
-                        node.execute(stack, dict, loop_stack)?;
+                        node.execute(stack, dict, loop_stack, return_stack)?;
                     }
                     // Check condition (top of stack)
                     if let Some(condition) = stack.pop() {
@@ -85,7 +86,7 @@ impl AstNode {
                 loop {
                     // Evaluate condition
                     for node in condition {
-                        node.execute(stack, dict, loop_stack)?;
+                        node.execute(stack, dict, loop_stack, return_stack)?;
                     }
                     // Check if we should continue
                     if let Some(cond) = stack.pop() {
@@ -97,7 +98,7 @@ impl AstNode {
                     }
                     // Execute body
                     for node in body {
-                        node.execute(stack, dict, loop_stack)?;
+                        node.execute(stack, dict, loop_stack, return_stack)?;
                     }
                 }
                 Ok(())
@@ -111,7 +112,7 @@ impl AstNode {
                         // Execute body
                         let mut should_leave = false;
                         for node in body {
-                            match node.execute(stack, dict, loop_stack) {
+                            match node.execute(stack, dict, loop_stack, return_stack) {
                                 Err(msg) if msg == "LEAVE" => {
                                     // LEAVE was called, exit loop early
                                     should_leave = true;

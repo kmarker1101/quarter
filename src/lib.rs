@@ -12,7 +12,7 @@ use std::fs;
 // Loop stack for DO...LOOP counters
 #[derive(Debug, Clone)]
 pub struct LoopStack {
-    stack: Vec<(i32, i32)>,  // (index, limit) pairs
+    stack: Vec<(i32, i32)>, // (index, limit) pairs
 }
 
 impl LoopStack {
@@ -44,10 +44,38 @@ impl LoopStack {
     pub fn increment(&mut self, amount: i32) -> bool {
         if let Some((index, limit)) = self.stack.last_mut() {
             *index += amount;
-            *index < *limit  // Continue if index < limit
+            *index < *limit // Continue if index < limit
         } else {
             false
         }
+    }
+}
+
+// Return stack for >R, R>, R@
+#[derive(Debug, Clone)]
+pub struct ReturnStack {
+    stack: Vec<i32>,
+}
+
+impl ReturnStack {
+    pub fn new() -> Self {
+        ReturnStack { stack: Vec::new() }
+    }
+
+    pub fn push(&mut self, value: i32) {
+        self.stack.push(value);
+    }
+
+    pub fn pop(&mut self) -> Option<i32> {
+        self.stack.pop()
+    }
+
+    pub fn peek(&self) -> Option<i32> {
+        self.stack.last().copied()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.stack.is_empty()
     }
 }
 
@@ -153,9 +181,9 @@ pub fn parse_tokens(tokens: &[&str]) -> Result<AstNode, String> {
                 let body_ast = parse_tokens(body_tokens)?;
 
                 let increment = if loop_keyword == "+LOOP" {
-                    0  // Special marker for +LOOP (stack-based increment)
+                    0 // Special marker for +LOOP (stack-based increment)
                 } else {
-                    1  // LOOP always increments by 1
+                    1 // LOOP always increments by 1
                 };
 
                 nodes.push(AstNode::DoLoop {
@@ -315,20 +343,48 @@ pub fn load_file(
     stack: &mut Stack,
     dict: &mut Dictionary,
     loop_stack: &mut LoopStack,
+    return_stack: &mut ReturnStack,
 ) -> Result<(), String> {
-    let contents = fs::read_to_string(filename)
-        .map_err(|e| format!("Cannot read file: {}", e))?;
+    let contents = fs::read_to_string(filename).map_err(|e| format!("Cannot read file: {}", e))?;
+
+    // Process file as token stream to support multi-line definitions
+    let mut processed = String::new();
 
     for line in contents.lines() {
         let line = line.trim();
 
-        // Skip empty lines and comments
-        if line.is_empty() || line.starts_with('\\') || line.starts_with('(') {
+        // Skip backslash comments (entire line)
+        if line.starts_with('\\') {
             continue;
         }
 
-        execute_line(line, stack, dict, loop_stack)?;
+        // Handle inline backslash comments (remove everything after \)
+        let line = if let Some(pos) = line.find('\\') {
+            &line[..pos]
+        } else {
+            line
+        };
+
+        processed.push_str(line);
+        processed.push(' ');
     }
+
+    // Remove parenthesis comments ( ... )
+    let mut result = String::new();
+    let mut in_paren_comment = false;
+
+    for ch in processed.chars() {
+        if ch == '(' {
+            in_paren_comment = true;
+        } else if ch == ')' {
+            in_paren_comment = false;
+        } else if !in_paren_comment {
+            result.push(ch);
+        }
+    }
+
+    // Now execute the entire file as one token stream
+    execute_line(&result, stack, dict, loop_stack, return_stack)?;
 
     Ok(())
 }
@@ -338,6 +394,7 @@ pub fn execute_line(
     stack: &mut Stack,
     dict: &mut Dictionary,
     loop_stack: &mut LoopStack,
+    return_stack: &mut ReturnStack,
 ) -> Result<(), String> {
     let tokens: Vec<&str> = input.split_whitespace().collect();
 
@@ -345,50 +402,73 @@ pub fn execute_line(
         return Ok(());
     }
 
-    if tokens.first() == Some(&"INCLUDE") {
-        // INCLUDE <filename>
-        if tokens.len() < 2 {
-            return Err("INCLUDE requires a filename".to_string());
-        }
-
-        let filename = tokens[1];
-        load_file(filename, stack, dict, loop_stack)?;
-    } else if tokens.first() == Some(&":") {
-        // Definition mode
-        if let Some(&";") = tokens.last() {
-            if tokens.len() < 3 {
-                return Err("Invalid word definition".to_string());
+    // Process tokens sequentially, handling multiple definitions
+    let mut i = 0;
+    while i < tokens.len() {
+        if tokens[i] == "INCLUDE" {
+            // INCLUDE <filename>
+            if i + 1 >= tokens.len() {
+                return Err("INCLUDE requires a filename".to_string());
             }
 
-            let word_name = tokens[1].to_string();
-            let word_tokens = &tokens[2..tokens.len() - 1];
+            let filename = tokens[i + 1];
+            load_file(filename, stack, dict, loop_stack, return_stack)?;
+            i += 2;
+        } else if tokens[i] == ":" {
+            // Find matching semicolon for definition
+            let mut semicolon_pos = None;
+            for j in (i + 1)..tokens.len() {
+                if tokens[j] == ";" {
+                    semicolon_pos = Some(j);
+                    break;
+                }
+            }
 
-            let ast = parse_tokens(word_tokens)?;
-            dict.add_compiled(word_name, ast);
+            if let Some(end) = semicolon_pos {
+                if end - i < 2 {
+                    return Err("Invalid word definition".to_string());
+                }
+
+                let word_name = tokens[i + 1].to_string();
+                let word_tokens = &tokens[i + 2..end];
+
+                let ast = parse_tokens(word_tokens)?;
+                dict.add_compiled(word_name, ast);
+                i = end + 1;
+            } else {
+                return Err("Missing ; in word definition".to_string());
+            }
         } else {
-            return Err("Missing ; in word definition".to_string());
-        }
-    } else {
-        // Check for compile-only words
-        if tokens.iter().any(|&t| {
-            t == "IF"
-                || t == "THEN"
-                || t == "ELSE"
-                || t == "BEGIN"
-                || t == "UNTIL"
-                || t == "WHILE"
-                || t == "REPEAT"
-                || t == "DO"
-                || t == "LOOP"
-                || t == "+LOOP"
-                || t == "LEAVE"
-                || t == ".\""
-        }) {
-            return Err("Control flow and string words (IF/THEN/ELSE/BEGIN/UNTIL/WHILE/REPEAT/DO/LOOP/LEAVE/.\") are compile-only".to_string());
-        }
+            // Collect tokens until we hit : or INCLUDE or end
+            let mut exec_tokens = Vec::new();
+            while i < tokens.len() && tokens[i] != ":" && tokens[i] != "INCLUDE" {
+                exec_tokens.push(tokens[i]);
+                i += 1;
+            }
 
-        let ast = parse_tokens(&tokens)?;
-        ast.execute(stack, dict, loop_stack)?;
+            if !exec_tokens.is_empty() {
+                // Check for compile-only words
+                if exec_tokens.iter().any(|&t| {
+                    t == "IF"
+                        || t == "THEN"
+                        || t == "ELSE"
+                        || t == "BEGIN"
+                        || t == "UNTIL"
+                        || t == "WHILE"
+                        || t == "REPEAT"
+                        || t == "DO"
+                        || t == "LOOP"
+                        || t == "+LOOP"
+                        || t == "LEAVE"
+                        || t == ".\""
+                }) {
+                    return Err("Control flow and string words (IF/THEN/ELSE/BEGIN/UNTIL/WHILE/REPEAT/DO/LOOP/LEAVE/.\") are compile-only".to_string());
+                }
+
+                let ast = parse_tokens(&exec_tokens)?;
+                ast.execute(stack, dict, loop_stack, return_stack)?;
+            }
+        }
     }
 
     Ok(())
