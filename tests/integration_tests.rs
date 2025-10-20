@@ -1,4 +1,4 @@
-use quarter::{execute_line, load_file, Dictionary, LoopStack, ReturnStack, Stack};
+use quarter::{execute_line, load_file, Dictionary, LoopStack, ReturnStack, Stack, Memory};
 use std::fs;
 use std::io::Write;
 
@@ -8,8 +8,9 @@ fn test_execute_line_simple_expression() {
     let mut loop_stack = LoopStack::new();
     let mut dict = Dictionary::new();
     let mut return_stack = ReturnStack::new();
+    let mut memory = Memory::new();
 
-    execute_line("5 3 +", &mut stack, &mut dict, &mut loop_stack, &mut return_stack).unwrap();
+    execute_line("5 3 +", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
     assert_eq!(stack.pop(), Some(8));
 }
 
@@ -19,12 +20,13 @@ fn test_execute_line_word_definition() {
     let mut loop_stack = LoopStack::new();
     let mut dict = Dictionary::new();
     let mut return_stack = ReturnStack::new();
+    let mut memory = Memory::new();
 
     // Define SQUARE
-    execute_line(": SQUARE DUP * ;", &mut stack, &mut dict, &mut loop_stack, &mut return_stack).unwrap();
+    execute_line(": SQUARE DUP * ;", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
 
     // Use SQUARE
-    execute_line("5 SQUARE", &mut stack, &mut dict, &mut loop_stack, &mut return_stack).unwrap();
+    execute_line("5 SQUARE", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
     assert_eq!(stack.pop(), Some(25));
 }
 
@@ -34,9 +36,10 @@ fn test_execute_line_if_then_error() {
     let mut loop_stack = LoopStack::new();
     let mut dict = Dictionary::new();
     let mut return_stack = ReturnStack::new();
+    let mut memory = Memory::new();
 
     // IF/THEN outside definition should error
-    let result = execute_line("1 IF 42 THEN", &mut stack, &mut dict, &mut loop_stack, &mut return_stack);
+    let result = execute_line("1 IF 42 THEN", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("compile-only"));
 }
@@ -47,9 +50,10 @@ fn test_execute_line_empty() {
     let mut loop_stack = LoopStack::new();
     let mut dict = Dictionary::new();
     let mut return_stack = ReturnStack::new();
+    let mut memory = Memory::new();
 
     // Empty line should not error
-    let result = execute_line("", &mut stack, &mut dict, &mut loop_stack, &mut return_stack);
+    let result = execute_line("", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
     assert!(result.is_ok());
 }
 
@@ -59,9 +63,10 @@ fn test_execute_line_whitespace_only() {
     let mut loop_stack = LoopStack::new();
     let mut dict = Dictionary::new();
     let mut return_stack = ReturnStack::new();
+    let mut memory = Memory::new();
 
     // Whitespace-only line should not error
-    let result = execute_line("   ", &mut stack, &mut dict, &mut loop_stack, &mut return_stack);
+    let result = execute_line("   ", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
     assert!(result.is_ok());
 }
 
@@ -71,9 +76,10 @@ fn test_execute_line_invalid_word() {
     let mut loop_stack = LoopStack::new();
     let mut dict = Dictionary::new();
     let mut return_stack = ReturnStack::new();
+    let mut memory = Memory::new();
 
     // Unknown word should error
-    let result = execute_line("NONEXISTENT", &mut stack, &mut dict, &mut loop_stack, &mut return_stack);
+    let result = execute_line("NONEXISTENT", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
     assert!(result.is_err());
 }
 
@@ -83,9 +89,10 @@ fn test_execute_line_incomplete_definition() {
     let mut loop_stack = LoopStack::new();
     let mut dict = Dictionary::new();
     let mut return_stack = ReturnStack::new();
+    let mut memory = Memory::new();
 
     // Missing semicolon
-    let result = execute_line(": SQUARE DUP *", &mut stack, &mut dict, &mut loop_stack, &mut return_stack);
+    let result = execute_line(": SQUARE DUP *", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("Missing ;"));
 }
@@ -96,16 +103,17 @@ fn test_execute_line_definition_with_if() {
     let mut loop_stack = LoopStack::new();
     let mut dict = Dictionary::new();
     let mut return_stack = ReturnStack::new();
+    let mut memory = Memory::new();
 
     // Define word with IF/THEN
-    execute_line(": ABS DUP 0 < IF NEGATE THEN ;", &mut stack, &mut dict, &mut loop_stack, &mut return_stack).unwrap();
+    execute_line(": ABS DUP 0 < IF NEGATE THEN ;", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
 
     // Test with negative
-    execute_line("-5 ABS", &mut stack, &mut dict, &mut loop_stack, &mut return_stack).unwrap();
+    execute_line("-5 ABS", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
     assert_eq!(stack.pop(), Some(5));
 
     // Test with positive
-    execute_line("5 ABS", &mut stack, &mut dict, &mut loop_stack, &mut return_stack).unwrap();
+    execute_line("5 ABS", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
     assert_eq!(stack.pop(), Some(5));
 }
 
@@ -115,6 +123,7 @@ fn test_load_file_simple() {
     let mut loop_stack = LoopStack::new();
     let mut dict = Dictionary::new();
     let mut return_stack = ReturnStack::new();
+    let mut memory = Memory::new();
 
     // Create a temporary test file
     let test_file = "/tmp/quarter_test_simple.qtr";
@@ -123,7 +132,7 @@ fn test_load_file_simple() {
     writeln!(file, "10 *").unwrap();
 
     // Load and execute
-    load_file(test_file, &mut stack, &mut dict, &mut loop_stack, &mut return_stack).unwrap();
+    load_file(test_file, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
 
     assert_eq!(stack.pop(), Some(80)); // (5 + 3) * 10
 
@@ -137,6 +146,7 @@ fn test_load_file_with_comments() {
     let mut loop_stack = LoopStack::new();
     let mut dict = Dictionary::new();
     let mut return_stack = ReturnStack::new();
+    let mut memory = Memory::new();
 
     // Create a temporary test file
     let test_file = "/tmp/quarter_test_comments.qtr";
@@ -147,7 +157,7 @@ fn test_load_file_with_comments() {
     writeln!(file, "2 *").unwrap();
 
     // Load and execute
-    load_file(test_file, &mut stack, &mut dict, &mut loop_stack, &mut return_stack).unwrap();
+    load_file(test_file, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
 
     assert_eq!(stack.pop(), Some(16)); // (5 + 3) * 2
 
@@ -161,6 +171,7 @@ fn test_load_file_with_definitions() {
     let mut loop_stack = LoopStack::new();
     let mut dict = Dictionary::new();
     let mut return_stack = ReturnStack::new();
+    let mut memory = Memory::new();
 
     // Create a temporary test file
     let test_file = "/tmp/quarter_test_defs.qtr";
@@ -170,7 +181,7 @@ fn test_load_file_with_definitions() {
     writeln!(file, "3 CUBE").unwrap();
 
     // Load and execute
-    load_file(test_file, &mut stack, &mut dict, &mut loop_stack, &mut return_stack).unwrap();
+    load_file(test_file, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
 
     assert_eq!(stack.pop(), Some(27)); // 3^3
 
@@ -184,6 +195,7 @@ fn test_load_file_with_empty_lines() {
     let mut loop_stack = LoopStack::new();
     let mut dict = Dictionary::new();
     let mut return_stack = ReturnStack::new();
+    let mut memory = Memory::new();
 
     // Create a temporary test file
     let test_file = "/tmp/quarter_test_empty.qtr";
@@ -196,7 +208,7 @@ fn test_load_file_with_empty_lines() {
     writeln!(file).unwrap();
 
     // Load and execute
-    load_file(test_file, &mut stack, &mut dict, &mut loop_stack, &mut return_stack).unwrap();
+    load_file(test_file, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
 
     assert_eq!(stack.pop(), Some(16)); // (5 + 3) * 2
 
@@ -210,9 +222,10 @@ fn test_load_file_nonexistent() {
     let mut loop_stack = LoopStack::new();
     let mut dict = Dictionary::new();
     let mut return_stack = ReturnStack::new();
+    let mut memory = Memory::new();
 
     // Try to load a file that doesn't exist
-    let result = load_file("/tmp/nonexistent_file.qtr", &mut stack, &mut dict, &mut loop_stack, &mut return_stack);
+    let result = load_file("/tmp/nonexistent_file.qtr", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("Cannot read file"));
 }
@@ -223,6 +236,7 @@ fn test_load_file_with_paren_comments() {
     let mut loop_stack = LoopStack::new();
     let mut dict = Dictionary::new();
     let mut return_stack = ReturnStack::new();
+    let mut memory = Memory::new();
 
     // Create a temporary test file
     let test_file = "/tmp/quarter_test_paren.qtr";
@@ -231,7 +245,7 @@ fn test_load_file_with_paren_comments() {
     writeln!(file, "5 3 +").unwrap();
 
     // Load and execute
-    load_file(test_file, &mut stack, &mut dict, &mut loop_stack, &mut return_stack).unwrap();
+    load_file(test_file, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
 
     assert_eq!(stack.pop(), Some(8));
 
@@ -246,6 +260,7 @@ fn test_include_simple() {
     let mut loop_stack = LoopStack::new();
     let mut dict = Dictionary::new();
     let mut return_stack = ReturnStack::new();
+    let mut memory = Memory::new();
 
     // Create a library file
     let lib_file = "/tmp/quarter_test_include_lib.qtr";
@@ -254,13 +269,13 @@ fn test_include_simple() {
     writeln!(file, "10 20 +").unwrap();
 
     // Use INCLUDE via execute_line
-    execute_line(&format!("INCLUDE {}", lib_file), &mut stack, &mut dict, &mut loop_stack, &mut return_stack).unwrap();
+    execute_line(&format!("INCLUDE {}", lib_file), &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
 
     // Should have 30 on stack from the file
     assert_eq!(stack.pop(), Some(30));
 
     // DOUBLE should be defined
-    execute_line("5 DOUBLE", &mut stack, &mut dict, &mut loop_stack, &mut return_stack).unwrap();
+    execute_line("5 DOUBLE", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
     assert_eq!(stack.pop(), Some(10));
 
     // Cleanup
@@ -273,6 +288,7 @@ fn test_include_nested() {
     let mut loop_stack = LoopStack::new();
     let mut dict = Dictionary::new();
     let mut return_stack = ReturnStack::new();
+    let mut memory = Memory::new();
 
     // Create first library file
     let lib1_file = "/tmp/quarter_test_include_lib1.qtr";
@@ -286,14 +302,14 @@ fn test_include_nested() {
     writeln!(file2, ": WORD2 WORD1 2 * ;").unwrap();
 
     // Include the second file (which includes the first)
-    execute_line(&format!("INCLUDE {}", lib2_file), &mut stack, &mut dict, &mut loop_stack, &mut return_stack).unwrap();
+    execute_line(&format!("INCLUDE {}", lib2_file), &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
 
     // WORD1 from lib1 should be defined
-    execute_line("WORD1", &mut stack, &mut dict, &mut loop_stack, &mut return_stack).unwrap();
+    execute_line("WORD1", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
     assert_eq!(stack.pop(), Some(42));
 
     // WORD2 from lib2 should be defined and use WORD1
-    execute_line("WORD2", &mut stack, &mut dict, &mut loop_stack, &mut return_stack).unwrap();
+    execute_line("WORD2", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
     assert_eq!(stack.pop(), Some(84));
 
     // Cleanup
@@ -307,9 +323,10 @@ fn test_include_nonexistent() {
     let mut loop_stack = LoopStack::new();
     let mut dict = Dictionary::new();
     let mut return_stack = ReturnStack::new();
+    let mut memory = Memory::new();
 
     // Try to include a nonexistent file
-    let result = execute_line("INCLUDE /tmp/nonexistent_lib.qtr", &mut stack, &mut dict, &mut loop_stack, &mut return_stack);
+    let result = execute_line("INCLUDE /tmp/nonexistent_lib.qtr", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
 
     // Should error gracefully
     assert!(result.is_err());
@@ -322,9 +339,10 @@ fn test_include_missing_filename() {
     let mut loop_stack = LoopStack::new();
     let mut dict = Dictionary::new();
     let mut return_stack = ReturnStack::new();
+    let mut memory = Memory::new();
 
     // INCLUDE without filename should error
-    let result = execute_line("INCLUDE", &mut stack, &mut dict, &mut loop_stack, &mut return_stack);
+    let result = execute_line("INCLUDE", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("requires a filename"));
 }
