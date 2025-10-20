@@ -345,7 +345,15 @@ pub fn execute_line(
         return Ok(());
     }
 
-    if tokens.first() == Some(&":") {
+    if tokens.first() == Some(&"INCLUDE") {
+        // INCLUDE <filename>
+        if tokens.len() < 2 {
+            return Err("INCLUDE requires a filename".to_string());
+        }
+
+        let filename = tokens[1];
+        load_file(filename, stack, dict, loop_stack)?;
+    } else if tokens.first() == Some(&":") {
         // Definition mode
         if let Some(&";") = tokens.last() {
             if tokens.len() < 3 {

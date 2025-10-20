@@ -224,3 +224,89 @@ fn test_load_file_with_paren_comments() {
     // Cleanup
     fs::remove_file(test_file).unwrap();
 }
+
+// INCLUDE tests
+#[test]
+fn test_include_simple() {
+    let mut stack = Stack::new();
+    let mut loop_stack = LoopStack::new();
+    let mut dict = Dictionary::new();
+
+    // Create a library file
+    let lib_file = "/tmp/quarter_test_include_lib.qtr";
+    let mut file = fs::File::create(lib_file).unwrap();
+    writeln!(file, ": DOUBLE DUP + ;").unwrap();
+    writeln!(file, "10 20 +").unwrap();
+
+    // Use INCLUDE via execute_line
+    execute_line(&format!("INCLUDE {}", lib_file), &mut stack, &mut dict, &mut loop_stack).unwrap();
+
+    // Should have 30 on stack from the file
+    assert_eq!(stack.pop(), Some(30));
+
+    // DOUBLE should be defined
+    execute_line("5 DOUBLE", &mut stack, &mut dict, &mut loop_stack).unwrap();
+    assert_eq!(stack.pop(), Some(10));
+
+    // Cleanup
+    fs::remove_file(lib_file).unwrap();
+}
+
+#[test]
+fn test_include_nested() {
+    let mut stack = Stack::new();
+    let mut loop_stack = LoopStack::new();
+    let mut dict = Dictionary::new();
+
+    // Create first library file
+    let lib1_file = "/tmp/quarter_test_include_lib1.qtr";
+    let mut file1 = fs::File::create(lib1_file).unwrap();
+    writeln!(file1, ": WORD1 42 ;").unwrap();
+
+    // Create second library file that includes the first
+    let lib2_file = "/tmp/quarter_test_include_lib2.qtr";
+    let mut file2 = fs::File::create(lib2_file).unwrap();
+    writeln!(file2, "INCLUDE {}", lib1_file).unwrap();
+    writeln!(file2, ": WORD2 WORD1 2 * ;").unwrap();
+
+    // Include the second file (which includes the first)
+    execute_line(&format!("INCLUDE {}", lib2_file), &mut stack, &mut dict, &mut loop_stack).unwrap();
+
+    // WORD1 from lib1 should be defined
+    execute_line("WORD1", &mut stack, &mut dict, &mut loop_stack).unwrap();
+    assert_eq!(stack.pop(), Some(42));
+
+    // WORD2 from lib2 should be defined and use WORD1
+    execute_line("WORD2", &mut stack, &mut dict, &mut loop_stack).unwrap();
+    assert_eq!(stack.pop(), Some(84));
+
+    // Cleanup
+    fs::remove_file(lib1_file).unwrap();
+    fs::remove_file(lib2_file).unwrap();
+}
+
+#[test]
+fn test_include_nonexistent() {
+    let mut stack = Stack::new();
+    let mut loop_stack = LoopStack::new();
+    let mut dict = Dictionary::new();
+
+    // Try to include a nonexistent file
+    let result = execute_line("INCLUDE /tmp/nonexistent_lib.qtr", &mut stack, &mut dict, &mut loop_stack);
+
+    // Should error gracefully
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("Cannot read file"));
+}
+
+#[test]
+fn test_include_missing_filename() {
+    let mut stack = Stack::new();
+    let mut loop_stack = LoopStack::new();
+    let mut dict = Dictionary::new();
+
+    // INCLUDE without filename should error
+    let result = execute_line("INCLUDE", &mut stack, &mut dict, &mut loop_stack);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("requires a filename"));
+}
