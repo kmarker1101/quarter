@@ -94,7 +94,7 @@ impl AstNode {
     ) -> Result<(), String> {
         match self {
             AstNode::PushNumber(n) => {
-                stack.push(*n);
+                stack.push(*n, memory);
                 Ok(())
             }
             AstNode::CallWord(name) => dict.execute_word(name, stack, loop_stack, return_stack, memory),
@@ -116,7 +116,7 @@ impl AstNode {
                 else_branch,
             } => {
                 // Pop the condition from the stack
-                if let Some(condition) = stack.pop() {
+                if let Some(condition) = stack.pop(memory) {
                     if condition != 0 {
                         // Non-zero is true in Forth
                         for node in then_branch {
@@ -151,7 +151,7 @@ impl AstNode {
                         }
                     }
                     // Check condition (top of stack)
-                    if let Some(condition) = stack.pop() {
+                    if let Some(condition) = stack.pop(memory) {
                         if condition != 0 {
                             break;  // Exit if true (-1)
                         }
@@ -172,7 +172,7 @@ impl AstNode {
                         }
                     }
                     // Check if we should continue
-                    if let Some(cond) = stack.pop() {
+                    if let Some(cond) = stack.pop(memory) {
                         if cond == 0 {
                             break;  // Exit if false (0)
                         }
@@ -192,7 +192,7 @@ impl AstNode {
             }
             AstNode::DoLoop { body, increment } => {
                 // Pop limit and start from stack ( limit start -- )
-                if let (Some(start), Some(limit)) = (stack.pop(), stack.pop()) {
+                if let (Some(start), Some(limit)) = (stack.pop(memory), stack.pop(memory)) {
                     loop_stack.push_loop(start, limit);
 
                     let result = loop {
@@ -225,7 +225,7 @@ impl AstNode {
                         // Get increment value
                         let inc = if *increment == 0 {
                             // +LOOP: pop increment from stack
-                            if let Some(n) = stack.pop() {
+                            if let Some(n) = stack.pop(memory) {
                                 n
                             } else {
                                 loop_stack.pop_loop();

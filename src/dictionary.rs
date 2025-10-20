@@ -63,6 +63,13 @@ impl Dictionary {
         dict.add_primitive("@", words::fetch);
         dict.add_primitive("C!", words::c_store);
         dict.add_primitive("C@", words::c_fetch);
+        dict.add_primitive("SP@", words::sp_fetch);
+        dict.add_primitive("SP!", words::sp_store);
+        dict.add_primitive("RP@", words::rp_fetch);
+        dict.add_primitive("RP!", words::rp_store);
+        dict.add_primitive("CELLS", words::cells);
+        dict.add_primitive("CELL+", words::cell_plus);
+        dict.add_primitive("+!", words::plus_store);
 
         dict
     }
