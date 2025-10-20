@@ -1,10 +1,9 @@
-use crate::ast::AstNode;
-use crate::stack::Stack;
 use crate::words;
+use crate::{ast::AstNode, stack::Stack};
 use std::collections::HashMap;
 
 pub enum Word {
-    Primitive(fn(&mut Stack, &crate::LoopStack)),
+    Primitive(fn(&mut Stack, &crate::LoopStack, &mut crate::ReturnStack)),
     Compiled(AstNode),
 }
 
@@ -52,11 +51,14 @@ impl Dictionary {
         dict.add_primitive("INVERT", words::invert);
         dict.add_primitive("LSHIFT", words::lshift);
         dict.add_primitive("RSHIFT", words::rshift);
+        dict.add_primitive(">R", words::to_r);
+        dict.add_primitive("R>", words::r_from);
+        dict.add_primitive("R@", words::r_fetch);
 
         dict
     }
 
-    pub fn add_primitive(&mut self, name: &str, func: fn(&mut Stack, &crate::LoopStack)) {
+    pub fn add_primitive(&mut self, name: &str, func: fn(&mut Stack, &crate::LoopStack, &mut crate::ReturnStack)) {
         self.words.insert(name.to_string(), Word::Primitive(func));
     }
 
@@ -69,14 +71,15 @@ impl Dictionary {
         word: &str,
         stack: &mut Stack,
         loop_stack: &mut crate::LoopStack,
+        return_stack: &mut crate::ReturnStack,
     ) -> Result<(), String> {
         if let Some(w) = self.words.get(word) {
             match w {
                 Word::Primitive(func) => {
-                    func(stack, loop_stack);
+                    func(stack, loop_stack, return_stack);
                     Ok(())
                 }
-                Word::Compiled(ast) => ast.execute(stack, self, loop_stack),
+                Word::Compiled(ast) => ast.execute(stack, self, loop_stack, return_stack),
             }
         } else {
             Err(format!("Unknown word: {}", word))
