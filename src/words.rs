@@ -23,7 +23,11 @@ pub fn add(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate
     }
 }
 
-pub fn subtract(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack) {
+pub fn subtract(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+) {
     if let (Some(b), Some(a)) = (stack.pop(), stack.pop()) {
         stack.push(a - b);
     } else {
@@ -31,7 +35,11 @@ pub fn subtract(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut 
     }
 }
 
-pub fn multiply(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack) {
+pub fn multiply(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+) {
     if let (Some(b), Some(a)) = (stack.pop(), stack.pop()) {
         stack.push(a * b);
     } else {
@@ -67,7 +75,11 @@ pub fn modulo(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut cr
     }
 }
 
-pub fn slash_modulo(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack) {
+pub fn slash_modulo(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+) {
     if let (Some(b), Some(a)) = (stack.pop(), stack.pop()) {
         if b == 0 {
             print!("Division by zero!");
@@ -109,7 +121,11 @@ pub fn swap(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crat
 }
 
 // Comparison operators (Forth uses 0 for false, -1 for true)
-pub fn less_than(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack) {
+pub fn less_than(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+) {
     if let (Some(b), Some(a)) = (stack.pop(), stack.pop()) {
         stack.push(if a < b { -1 } else { 0 });
     } else {
@@ -117,7 +133,11 @@ pub fn less_than(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut
     }
 }
 
-pub fn greater_than(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack) {
+pub fn greater_than(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+) {
     if let (Some(b), Some(a)) = (stack.pop(), stack.pop()) {
         stack.push(if a > b { -1 } else { 0 });
     } else {
@@ -133,7 +153,11 @@ pub fn equals(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut cr
     }
 }
 
-pub fn not_equals(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack) {
+pub fn not_equals(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+) {
     if let (Some(b), Some(a)) = (stack.pop(), stack.pop()) {
         stack.push(if a != b { -1 } else { 0 });
     } else {
@@ -141,7 +165,11 @@ pub fn not_equals(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mu
     }
 }
 
-pub fn less_or_equal(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack) {
+pub fn less_or_equal(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+) {
     if let (Some(b), Some(a)) = (stack.pop(), stack.pop()) {
         stack.push(if a <= b { -1 } else { 0 });
     } else {
@@ -149,7 +177,11 @@ pub fn less_or_equal(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: 
     }
 }
 
-pub fn greater_or_equal(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack) {
+pub fn greater_or_equal(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+) {
     if let (Some(b), Some(a)) = (stack.pop(), stack.pop()) {
         stack.push(if a >= b { -1 } else { 0 });
     } else {
@@ -311,5 +343,41 @@ pub fn r_fetch(stack: &mut Stack, _loop_stack: &LoopStack, return_stack: &mut cr
         stack.push(n);
     } else {
         println!("Return stack underflow!");
+    }
+}
+
+pub fn zero_equals(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+) {
+    if let Some(n) = stack.pop() {
+        stack.push(if n == 0 { -1 } else { 0 });
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn zero_less(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+) {
+    if let Some(n) = stack.pop() {
+        stack.push(if n < 0 { -1 } else { 0 });
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn zero_greater(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+) {
+    if let Some(n) = stack.pop() {
+        stack.push(if n > 0 { -1 } else { 0 });
+    } else {
+        println!("Stack underflow!");
     }
 }

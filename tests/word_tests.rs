@@ -878,3 +878,130 @@ fn test_return_stack_sequence() {
     assert_eq!(stack.pop(), Some(20));
     assert_eq!(stack.pop(), Some(15));
 }
+
+// Zero comparison tests
+#[test]
+fn test_zero_equals_true() {
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+    let mut return_stack = ReturnStack::new();
+
+    stack.push(0);
+    dict.execute_word("0=", &mut stack, &mut loop_stack, &mut return_stack)
+        .unwrap();
+
+    assert_eq!(stack.pop(), Some(-1)); // true
+}
+
+#[test]
+fn test_zero_equals_false() {
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+    let mut return_stack = ReturnStack::new();
+
+    stack.push(5);
+    dict.execute_word("0=", &mut stack, &mut loop_stack, &mut return_stack)
+        .unwrap();
+
+    assert_eq!(stack.pop(), Some(0)); // false
+}
+
+#[test]
+fn test_zero_equals_negative() {
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+    let mut return_stack = ReturnStack::new();
+
+    stack.push(-5);
+    dict.execute_word("0=", &mut stack, &mut loop_stack, &mut return_stack)
+        .unwrap();
+
+    assert_eq!(stack.pop(), Some(0)); // false
+}
+
+#[test]
+fn test_zero_less_true() {
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+    let mut return_stack = ReturnStack::new();
+
+    stack.push(-5);
+    dict.execute_word("0<", &mut stack, &mut loop_stack, &mut return_stack)
+        .unwrap();
+
+    assert_eq!(stack.pop(), Some(-1)); // true
+}
+
+#[test]
+fn test_zero_less_false_zero() {
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+    let mut return_stack = ReturnStack::new();
+
+    stack.push(0);
+    dict.execute_word("0<", &mut stack, &mut loop_stack, &mut return_stack)
+        .unwrap();
+
+    assert_eq!(stack.pop(), Some(0)); // false
+}
+
+#[test]
+fn test_zero_less_false_positive() {
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+    let mut return_stack = ReturnStack::new();
+
+    stack.push(5);
+    dict.execute_word("0<", &mut stack, &mut loop_stack, &mut return_stack)
+        .unwrap();
+
+    assert_eq!(stack.pop(), Some(0)); // false
+}
+
+#[test]
+fn test_zero_greater_true() {
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+    let mut return_stack = ReturnStack::new();
+
+    stack.push(5);
+    dict.execute_word("0>", &mut stack, &mut loop_stack, &mut return_stack)
+        .unwrap();
+
+    assert_eq!(stack.pop(), Some(-1)); // true
+}
+
+#[test]
+fn test_zero_greater_false_zero() {
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+    let mut return_stack = ReturnStack::new();
+
+    stack.push(0);
+    dict.execute_word("0>", &mut stack, &mut loop_stack, &mut return_stack)
+        .unwrap();
+
+    assert_eq!(stack.pop(), Some(0)); // false
+}
+
+#[test]
+fn test_zero_greater_false_negative() {
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+    let mut return_stack = ReturnStack::new();
+
+    stack.push(-5);
+    dict.execute_word("0>", &mut stack, &mut loop_stack, &mut return_stack)
+        .unwrap();
+
+    assert_eq!(stack.pop(), Some(0)); // false
+}
