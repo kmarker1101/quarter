@@ -81,8 +81,13 @@ fn main() {
 
                         match parse_tokens(word_tokens) {
                             Ok(ast) => {
-                                dict.add_compiled(word_name, ast);
-                                println!("ok");
+                                // Validate that all words in the AST exist
+                                if let Err(e) = ast.validate(&dict) {
+                                    println!("{}", e);
+                                } else {
+                                    dict.add_compiled(word_name, ast);
+                                    println!("ok");
+                                }
                             }
                             Err(e) => {
                                 println!("Parse error: {}", e);

@@ -69,6 +69,10 @@ impl Dictionary {
         self.words.insert(name, Word::Compiled(ast));
     }
 
+    pub fn has_word(&self, word: &str) -> bool {
+        self.words.contains_key(word)
+    }
+
     pub fn execute_word(
         &self,
         word: &str,

@@ -440,6 +440,8 @@ pub fn execute_line(
                 let word_tokens = &tokens[i + 2..end];
 
                 let ast = parse_tokens(word_tokens)?;
+                // Validate that all words in the AST exist
+                ast.validate(dict)?;
                 dict.add_compiled(word_name, ast);
                 i = end + 1;
             } else {

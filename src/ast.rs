@@ -25,6 +25,63 @@ pub enum AstNode {
 }
 
 impl AstNode {
+    /// Validate that all words referenced in this AST exist in the dictionary
+    pub fn validate(&self, dict: &crate::dictionary::Dictionary) -> Result<(), String> {
+        match self {
+            AstNode::PushNumber(_) => Ok(()),
+            AstNode::PrintString(_) => Ok(()),
+            AstNode::Leave => Ok(()),
+            AstNode::CallWord(name) => {
+                if dict.has_word(name) {
+                    Ok(())
+                } else {
+                    Err(format!("Undefined word: {}", name))
+                }
+            }
+            AstNode::Sequence(nodes) => {
+                for node in nodes {
+                    node.validate(dict)?;
+                }
+                Ok(())
+            }
+            AstNode::IfThenElse {
+                then_branch,
+                else_branch,
+            } => {
+                for node in then_branch {
+                    node.validate(dict)?;
+                }
+                if let Some(else_nodes) = else_branch {
+                    for node in else_nodes {
+                        node.validate(dict)?;
+                    }
+                }
+                Ok(())
+            }
+            AstNode::BeginUntil { body } => {
+                for node in body {
+                    node.validate(dict)?;
+                }
+                Ok(())
+            }
+            AstNode::BeginWhileRepeat { condition, body } => {
+                for node in condition {
+                    node.validate(dict)?;
+                }
+                for node in body {
+                    node.validate(dict)?;
+                }
+                Ok(())
+            }
+            AstNode::DoLoop { body, .. } => {
+                for node in body {
+                    node.validate(dict)?;
+                }
+                Ok(())
+            }
+        }
+    }
+
     pub fn execute(
         &self,
         stack: &mut Stack,
