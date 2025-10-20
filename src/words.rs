@@ -1,7 +1,8 @@
 use crate::stack::Stack;
+use crate::LoopStack;
 
 // Built-in word definitions
-pub fn dot(stack: &mut Stack) {
+pub fn dot(stack: &mut Stack, _loop_stack: &LoopStack) {
     if let Some(value) = stack.pop() {
         print!("{} ", value);
     } else {
@@ -9,12 +10,12 @@ pub fn dot(stack: &mut Stack) {
     }
 }
 
-pub fn dot_s(stack: &mut Stack) {
+pub fn dot_s(stack: &mut Stack, _loop_stack: &LoopStack) {
     stack.print_stack();
 }
 
 // Arithmetic Operations
-pub fn add(stack: &mut Stack) {
+pub fn add(stack: &mut Stack, _loop_stack: &LoopStack) {
     if let (Some(b), Some(a)) = (stack.pop(), stack.pop()) {
         stack.push(a + b);
     } else {
@@ -22,7 +23,7 @@ pub fn add(stack: &mut Stack) {
     }
 }
 
-pub fn subtract(stack: &mut Stack) {
+pub fn subtract(stack: &mut Stack, _loop_stack: &LoopStack) {
     if let (Some(b), Some(a)) = (stack.pop(), stack.pop()) {
         stack.push(a - b);
     } else {
@@ -30,7 +31,7 @@ pub fn subtract(stack: &mut Stack) {
     }
 }
 
-pub fn multiply(stack: &mut Stack) {
+pub fn multiply(stack: &mut Stack, _loop_stack: &LoopStack) {
     if let (Some(b), Some(a)) = (stack.pop(), stack.pop()) {
         stack.push(a * b);
     } else {
@@ -38,7 +39,7 @@ pub fn multiply(stack: &mut Stack) {
     }
 }
 
-pub fn divide(stack: &mut Stack) {
+pub fn divide(stack: &mut Stack, _loop_stack: &LoopStack) {
     if let (Some(b), Some(a)) = (stack.pop(), stack.pop()) {
         if b == 0 {
             print!("Division by zero!");
@@ -52,7 +53,7 @@ pub fn divide(stack: &mut Stack) {
     }
 }
 
-pub fn modulo(stack: &mut Stack) {
+pub fn modulo(stack: &mut Stack, _loop_stack: &LoopStack) {
     if let (Some(b), Some(a)) = (stack.pop(), stack.pop()) {
         if b == 0 {
             print!("Division by zero!");
@@ -66,7 +67,22 @@ pub fn modulo(stack: &mut Stack) {
     }
 }
 
-pub fn negate(stack: &mut Stack) {
+pub fn slash_modulo(stack: &mut Stack, _loop_stack: &LoopStack) {
+    if let (Some(b), Some(a)) = (stack.pop(), stack.pop()) {
+        if b == 0 {
+            print!("Division by zero!");
+            stack.push(a);
+            stack.push(b);
+        } else {
+            stack.push(a % b);
+            stack.push(a / b);
+        }
+    } else {
+        print!("Stack underflow!");
+    }
+}
+
+pub fn negate(stack: &mut Stack, _loop_stack: &LoopStack) {
     if let Some(value) = stack.pop() {
         stack.push(-value);
     } else {
@@ -75,7 +91,7 @@ pub fn negate(stack: &mut Stack) {
 }
 
 // Stack manipulation
-pub fn dup(stack: &mut Stack) {
+pub fn dup(stack: &mut Stack, _loop_stack: &LoopStack) {
     if let Some(&value) = stack.peek() {
         stack.push(value);
     } else {
@@ -83,7 +99,7 @@ pub fn dup(stack: &mut Stack) {
     }
 }
 
-pub fn swap(stack: &mut Stack) {
+pub fn swap(stack: &mut Stack, _loop_stack: &LoopStack) {
     if let (Some(a), Some(b)) = (stack.pop(), stack.pop()) {
         stack.push(a);
         stack.push(b);
@@ -93,7 +109,7 @@ pub fn swap(stack: &mut Stack) {
 }
 
 // Comparison operators (Forth uses 0 for false, -1 for true)
-pub fn less_than(stack: &mut Stack) {
+pub fn less_than(stack: &mut Stack, _loop_stack: &LoopStack) {
     if let (Some(b), Some(a)) = (stack.pop(), stack.pop()) {
         stack.push(if a < b { -1 } else { 0 });
     } else {
@@ -101,7 +117,7 @@ pub fn less_than(stack: &mut Stack) {
     }
 }
 
-pub fn greater_than(stack: &mut Stack) {
+pub fn greater_than(stack: &mut Stack, _loop_stack: &LoopStack) {
     if let (Some(b), Some(a)) = (stack.pop(), stack.pop()) {
         stack.push(if a > b { -1 } else { 0 });
     } else {
@@ -109,7 +125,7 @@ pub fn greater_than(stack: &mut Stack) {
     }
 }
 
-pub fn equals(stack: &mut Stack) {
+pub fn equals(stack: &mut Stack, _loop_stack: &LoopStack) {
     if let (Some(b), Some(a)) = (stack.pop(), stack.pop()) {
         stack.push(if a == b { -1 } else { 0 });
     } else {
@@ -117,7 +133,7 @@ pub fn equals(stack: &mut Stack) {
     }
 }
 
-pub fn not_equals(stack: &mut Stack) {
+pub fn not_equals(stack: &mut Stack, _loop_stack: &LoopStack) {
     if let (Some(b), Some(a)) = (stack.pop(), stack.pop()) {
         stack.push(if a != b { -1 } else { 0 });
     } else {
@@ -125,7 +141,7 @@ pub fn not_equals(stack: &mut Stack) {
     }
 }
 
-pub fn less_or_equal(stack: &mut Stack) {
+pub fn less_or_equal(stack: &mut Stack, _loop_stack: &LoopStack) {
     if let (Some(b), Some(a)) = (stack.pop(), stack.pop()) {
         stack.push(if a <= b { -1 } else { 0 });
     } else {
@@ -133,10 +149,65 @@ pub fn less_or_equal(stack: &mut Stack) {
     }
 }
 
-pub fn greater_or_equal(stack: &mut Stack) {
+pub fn greater_or_equal(stack: &mut Stack, _loop_stack: &LoopStack) {
     if let (Some(b), Some(a)) = (stack.pop(), stack.pop()) {
         stack.push(if a >= b { -1 } else { 0 });
     } else {
         println!("Stack underflow!");
+    }
+}
+
+pub fn abs(stack: &mut Stack, _loop_stack: &LoopStack) {
+    if let Some(value) = stack.pop() {
+        stack.push(value.abs());
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn cr(_stack: &mut Stack, _loop_stack: &LoopStack) {
+    println!();
+}
+
+pub fn drop(stack: &mut Stack, _loop_stack: &LoopStack) {
+    if stack.pop().is_none() {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn rot(stack: &mut Stack, _loop_stack: &LoopStack) {
+    if let (Some(a), Some(b), Some(c)) = (stack.pop(), stack.pop(), stack.pop()) {
+        stack.push(b);
+        stack.push(a);
+        stack.push(c);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn over(stack: &mut Stack, _loop_stack: &LoopStack) {
+    if let (Some(b), Some(a)) = (stack.pop(), stack.pop()) {
+        stack.push(a);
+        stack.push(b);
+        stack.push(a);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+// Loop index words
+pub fn loop_i(stack: &mut Stack, loop_stack: &LoopStack) {
+    if let Some(index) = loop_stack.get_index() {
+        stack.push(index);
+    } else {
+        println!("Not in a loop!");
+    }
+}
+
+pub fn loop_j(stack: &mut Stack, loop_stack: &LoopStack) {
+    if let Some(index) = loop_stack.get_outer_index() {
+        stack.push(index);
+    } else {
+        println!("Not in a nested loop!");
     }
 }
