@@ -51,7 +51,23 @@ fn main() {
                     continue;
                 }
 
-                if tokens.first() == Some(&":") {
+                if tokens.first() == Some(&"INCLUDE") {
+                    // INCLUDE <filename>
+                    if tokens.len() < 2 {
+                        println!("INCLUDE requires a filename");
+                        continue;
+                    }
+
+                    let filename = tokens[1];
+                    match load_file(filename, &mut stack, &mut dict, &mut loop_stack) {
+                        Ok(_) => {
+                            println!("ok");
+                        }
+                        Err(e) => {
+                            println!("Error loading {}: {}", filename, e);
+                        }
+                    }
+                } else if tokens.first() == Some(&":") {
                     // Definition mode
                     if let Some(&";") = tokens.last() {
                         if tokens.len() < 3 {
