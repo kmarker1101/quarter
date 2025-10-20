@@ -1,0 +1,23 @@
+\ EMIT Test - No user input required
+\ Run with: cargo run examples/emit_test.qtr
+
+\ Test 1: Print "Hello"
+72 EMIT 101 EMIT 108 EMIT 108 EMIT 111 EMIT CR
+
+\ Test 2: Print "ABC"
+65 EMIT 66 EMIT 67 EMIT CR
+
+\ Test 3: Print "Hi!"
+72 EMIT 105 EMIT 33 EMIT CR
+
+\ Test 4: Unicode emoji (smiley face)
+128515 EMIT CR
+
+\ Test 5: Numbers as characters "123"
+49 EMIT 50 EMIT 51 EMIT CR
+
+\ Test 6: Newline test
+65 EMIT CR 66 EMIT CR 67 EMIT CR
+
+\ Test 7: Space between characters
+72 EMIT 32 EMIT 105 EMIT 32 EMIT 33 EMIT CR

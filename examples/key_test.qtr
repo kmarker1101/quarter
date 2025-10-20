@@ -1,0 +1,11 @@
+\ KEY Test - Requires input
+\ Run with: echo "ABC" | cargo run examples/key_test.qtr
+
+\ Test 1: Read character and show its code
+KEY DUP . CR
+
+\ Test 2: Read character and echo it
+KEY EMIT CR
+
+\ Test 3: Read character, show code, then echo
+KEY DUP . 32 EMIT EMIT CR

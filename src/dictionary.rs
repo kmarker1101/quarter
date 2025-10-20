@@ -43,6 +43,9 @@ impl Dictionary {
         dict.add_primitive("/MOD", words::slash_modulo);
         dict.add_primitive("I", words::loop_i);
         dict.add_primitive("J", words::loop_j);
+        dict.add_primitive("EMIT", words::emit);
+        dict.add_primitive("KEY", words::key);
+        dict.add_primitive("SPACE", words::space);
 
         dict
     }

@@ -1,6 +1,6 @@
-use quarter::{load_file, parse_tokens, Dictionary, LoopStack, Stack};
-use rustyline::error::ReadlineError;
+use quarter::{Dictionary, LoopStack, Stack, load_file, parse_tokens};
 use rustyline::DefaultEditor;
+use rustyline::error::ReadlineError;
 
 fn main() {
     let mut stack = Stack::new();
@@ -14,9 +14,9 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() > 1 {
         let filename = &args[1];
+        println!("Loading {}", filename);
         match load_file(filename, &mut stack, &mut dict, &mut loop_stack) {
             Ok(_) => {
-                println!("Loaded {}", filename);
                 return;
             }
             Err(e) => {

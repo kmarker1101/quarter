@@ -1,0 +1,64 @@
+\ Manual test file for KEY and EMIT words
+\ Run with: cargo run examples/test_key_emit.fth
+\ Note: Pipe input or type interactively
+
+\ ========================================
+\ Part 1: EMIT Tests (no user input needed)
+\ ========================================
+
+." === EMIT Tests ===" CR CR
+
+." Test 1: Print ASCII letters" CR
+." Expected: Hello" CR
+." Actual:   " 72 EMIT 101 EMIT 108 EMIT 108 EMIT 111 EMIT CR CR
+
+." Test 2: Print with explicit spaces" CR
+." Expected: H i !" CR
+." Actual:   " 72 EMIT 32 EMIT 105 EMIT 32 EMIT 33 EMIT CR CR
+
+." Test 3: Print numbers as characters" CR
+." Expected: ABC" CR
+." Actual:   " 65 EMIT 66 EMIT 67 EMIT CR CR
+
+." Test 4: Unicode emoji" CR
+." Expected: 😃" CR
+." Actual:   " 128515 EMIT CR CR
+
+\ ========================================
+\ Part 2: KEY Tests (requires user input)
+\ ========================================
+
+." === KEY Tests ===" CR CR
+
+." Test 5: Read and display character code" CR
+." Press 'A' then Enter: "
+KEY DUP . CR
+." Expected: 65 (ASCII code for 'A')" CR CR
+
+." Test 6: Echo typed character" CR
+." Press any key then Enter: "
+KEY DUP ." You pressed: " EMIT CR
+." The character code was: " . CR CR
+
+." Test 7: Read and uppercase" CR
+." Press a lowercase letter then Enter: "
+KEY DUP 32 - EMIT CR
+." (Subtracting 32 converts lowercase to uppercase)" CR CR
+
+\ ========================================
+\ Part 3: Combined KEY and EMIT
+\ ========================================
+
+." === Combined Tests ===" CR CR
+
+." Test 8: Simple echo program" CR
+." Type 3 characters then Enter: "
+KEY EMIT KEY EMIT KEY EMIT CR CR
+
+." Test 9: Show character codes" CR
+." Type 'Hi!' then Enter: "
+KEY DUP . 32 EMIT EMIT CR
+KEY DUP . 32 EMIT EMIT CR
+KEY DUP . 32 EMIT EMIT CR CR
+
+." === All tests complete ===" CR
