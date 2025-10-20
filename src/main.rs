@@ -1,10 +1,11 @@
-use quarter::{load_file, parse_tokens, Dictionary, Stack};
+use quarter::{load_file, parse_tokens, Dictionary, LoopStack, Stack};
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 
 fn main() {
     let mut stack = Stack::new();
     let mut dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
 
     println!("Forth Interpreter v0.1");
 
@@ -13,7 +14,7 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() > 1 {
         let filename = &args[1];
-        match load_file(filename, &mut stack, &mut dict) {
+        match load_file(filename, &mut stack, &mut dict, &mut loop_stack) {
             Ok(_) => {
                 println!("Loaded {}", filename);
                 return;
@@ -76,16 +77,26 @@ fn main() {
                 } else {
                     // Normal execution mode
                     // Check for compile-only words
-                    if tokens
-                        .iter()
-                        .any(|&t| t == "IF" || t == "THEN" || t == "ELSE")
-                    {
+                    if tokens.iter().any(|&t| {
+                        t == "IF"
+                            || t == "THEN"
+                            || t == "ELSE"
+                            || t == "BEGIN"
+                            || t == "UNTIL"
+                            || t == "WHILE"
+                            || t == "REPEAT"
+                            || t == "DO"
+                            || t == "LOOP"
+                            || t == "+LOOP"
+                            || t == "LEAVE"
+                            || t == ".\""
+                    }) {
                         println!(
-                            "Error: IF/THEN/ELSE are compile-only words (use inside : ; definitions)"
+                            "Error: Control flow and string words are compile-only (use inside : ; definitions)"
                         );
                     } else {
                         match parse_tokens(&tokens) {
-                            Ok(ast) => match ast.execute(&mut stack, &dict) {
+                            Ok(ast) => match ast.execute(&mut stack, &dict, &mut loop_stack) {
                                 Ok(_) => println!("ok"),
                                 Err(e) => println!("{}", e),
                             },

@@ -1,8 +1,9 @@
-use quarter::Stack;
+use quarter::{LoopStack, Stack};
 
 #[test]
 fn test_stack_push_pop() {
     let mut stack = Stack::new();
+    let mut _loop_stack = LoopStack::new();
     stack.push(10);
     stack.push(20);
 
@@ -14,6 +15,7 @@ fn test_stack_push_pop() {
 #[test]
 fn test_stack_peek() {
     let mut stack = Stack::new();
+    let mut _loop_stack = LoopStack::new();
     stack.push(42);
 
     assert_eq!(stack.peek(), Some(&42));
@@ -23,6 +25,7 @@ fn test_stack_peek() {
 #[test]
 fn test_stack_is_empty() {
     let mut stack = Stack::new();
+    let mut _loop_stack = LoopStack::new();
     assert!(stack.is_empty());
 
     stack.push(1);
