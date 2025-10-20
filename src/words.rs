@@ -240,3 +240,51 @@ pub fn key(stack: &mut Stack, _loop_stack: &LoopStack) {
 pub fn space(_stack: &mut Stack, _loop_stack: &LoopStack) {
     print!(" ");
 }
+
+pub fn and(stack: &mut Stack, _loop_stack: &LoopStack) {
+    if let (Some(b), Some(a)) = (stack.pop(), stack.pop()) {
+        stack.push(a & b);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn or(stack: &mut Stack, _loop_stack: &LoopStack) {
+    if let (Some(b), Some(a)) = (stack.pop(), stack.pop()) {
+        stack.push(a | b);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn xor(stack: &mut Stack, _loop_stack: &LoopStack) {
+    if let (Some(b), Some(a)) = (stack.pop(), stack.pop()) {
+        stack.push(a ^ b);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn invert(stack: &mut Stack, _loop_stack: &LoopStack) {
+    if let Some(n) = stack.pop() {
+        stack.push(!n);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn lshift(stack: &mut Stack, _loop_stack: &LoopStack) {
+    if let (Some(u), Some(n)) = (stack.pop(), stack.pop()) {
+        stack.push(n << u);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn rshift(stack: &mut Stack, _loop_stack: &LoopStack) {
+    if let (Some(u), Some(n)) = (stack.pop(), stack.pop()) {
+        stack.push(n >> u);
+    } else {
+        println!("Stack underflow!");
+    }
+}

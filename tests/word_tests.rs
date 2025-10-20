@@ -568,3 +568,173 @@ fn test_space_word() {
     );
     assert!(stack.is_empty());
 }
+
+// Bitwise operation tests
+#[test]
+fn test_and_word() {
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+
+    // 12 (1100) AND 10 (1010) = 8 (1000)
+    stack.push(12);
+    stack.push(10);
+    dict.execute_word("AND", &mut stack, &mut loop_stack)
+        .unwrap();
+
+    assert_eq!(stack.pop(), Some(8));
+}
+
+#[test]
+fn test_or_word() {
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+
+    // 12 (1100) OR 10 (1010) = 14 (1110)
+    stack.push(12);
+    stack.push(10);
+    dict.execute_word("OR", &mut stack, &mut loop_stack)
+        .unwrap();
+
+    assert_eq!(stack.pop(), Some(14));
+}
+
+#[test]
+fn test_xor_word() {
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+
+    // 12 (1100) XOR 10 (1010) = 6 (0110)
+    stack.push(12);
+    stack.push(10);
+    dict.execute_word("XOR", &mut stack, &mut loop_stack)
+        .unwrap();
+
+    assert_eq!(stack.pop(), Some(6));
+}
+
+#[test]
+fn test_invert_word() {
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+
+    // INVERT flips all bits
+    stack.push(0);
+    dict.execute_word("INVERT", &mut stack, &mut loop_stack)
+        .unwrap();
+    assert_eq!(stack.pop(), Some(-1)); // All bits set = -1
+
+    // INVERT -1 should give 0
+    stack.push(-1);
+    dict.execute_word("INVERT", &mut stack, &mut loop_stack)
+        .unwrap();
+    assert_eq!(stack.pop(), Some(0));
+}
+
+#[test]
+fn test_lshift_word() {
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+
+    // 1 << 3 = 8
+    stack.push(1);
+    stack.push(3);
+    dict.execute_word("LSHIFT", &mut stack, &mut loop_stack)
+        .unwrap();
+
+    assert_eq!(stack.pop(), Some(8));
+}
+
+#[test]
+fn test_rshift_word() {
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+
+    // 8 >> 2 = 2
+    stack.push(8);
+    stack.push(2);
+    dict.execute_word("RSHIFT", &mut stack, &mut loop_stack)
+        .unwrap();
+
+    assert_eq!(stack.pop(), Some(2));
+}
+
+#[test]
+fn test_and_boolean_logic() {
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+
+    // Forth uses -1 for true, 0 for false
+    // -1 AND -1 = -1 (true AND true = true)
+    stack.push(-1);
+    stack.push(-1);
+    dict.execute_word("AND", &mut stack, &mut loop_stack)
+        .unwrap();
+    assert_eq!(stack.pop(), Some(-1));
+
+    // -1 AND 0 = 0 (true AND false = false)
+    stack.push(-1);
+    stack.push(0);
+    dict.execute_word("AND", &mut stack, &mut loop_stack)
+        .unwrap();
+    assert_eq!(stack.pop(), Some(0));
+}
+
+#[test]
+fn test_or_boolean_logic() {
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+
+    // -1 OR 0 = -1 (true OR false = true)
+    stack.push(-1);
+    stack.push(0);
+    dict.execute_word("OR", &mut stack, &mut loop_stack)
+        .unwrap();
+    assert_eq!(stack.pop(), Some(-1));
+
+    // 0 OR 0 = 0 (false OR false = false)
+    stack.push(0);
+    stack.push(0);
+    dict.execute_word("OR", &mut stack, &mut loop_stack)
+        .unwrap();
+    assert_eq!(stack.pop(), Some(0));
+}
+
+#[test]
+fn test_and_with_negative() {
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+
+    // -1 (all bits set) AND 15 (1111) = 15
+    stack.push(-1);
+    stack.push(15);
+    dict.execute_word("AND", &mut stack, &mut loop_stack)
+        .unwrap();
+    assert_eq!(stack.pop(), Some(15));
+}
+
+#[test]
+fn test_rshift_with_negative() {
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+
+    // Shifting negative numbers (arithmetic vs logical shift)
+    // -8 >> 1 in Rust does arithmetic shift (sign extension)
+    stack.push(-8);
+    stack.push(1);
+    dict.execute_word("RSHIFT", &mut stack, &mut loop_stack)
+        .unwrap();
+
+    // This will be implementation-dependent
+    // Rust's >> on signed integers is arithmetic shift
+    assert_eq!(stack.pop(), Some(-4));
+}
