@@ -85,8 +85,9 @@ pub fn parse_tokens(tokens: &[&str]) -> Result<AstNode, String> {
 
     while i < tokens.len() {
         let token = tokens[i];
+        let token_upper = token.to_uppercase();
 
-        match token {
+        match token_upper.as_str() {
             ".\"" => {
                 // Handle string literals: collect tokens until closing "
                 let mut string_parts: Vec<String> = Vec::new();
@@ -126,7 +127,7 @@ pub fn parse_tokens(tokens: &[&str]) -> Result<AstNode, String> {
                 let end_pos = find_begin_end(&tokens[i + 1..])?;
 
                 // Check if it's BEGIN...UNTIL or BEGIN...WHILE...REPEAT
-                let end_keyword = tokens[i + 1 + end_pos.0];
+                let end_keyword = tokens[i + 1 + end_pos.0].to_uppercase();
 
                 if end_keyword == "UNTIL" {
                     // BEGIN...UNTIL loop
@@ -246,7 +247,8 @@ pub fn parse_tokens(tokens: &[&str]) -> Result<AstNode, String> {
                 if let Ok(num) = token.parse::<i32>() {
                     nodes.push(AstNode::PushNumber(num));
                 } else {
-                    nodes.push(AstNode::CallWord(token.to_string()));
+                    // Store word names in uppercase for case-insensitive lookup
+                    nodes.push(AstNode::CallWord(token_upper.clone()));
                 }
                 i += 1;
             }
@@ -265,7 +267,8 @@ fn find_then_else(tokens: &[&str]) -> Result<(usize, Option<usize>), String> {
     let mut else_pos = None;
 
     for (i, &token) in tokens.iter().enumerate() {
-        match token {
+        let token_upper = token.to_uppercase();
+        match token_upper.as_str() {
             "IF" => depth += 1,
             "ELSE" => {
                 if depth == 0 && else_pos.is_none() {
@@ -292,7 +295,8 @@ fn find_begin_end(tokens: &[&str]) -> Result<(usize, Option<usize>), String> {
     let mut while_pos = None;
 
     for (i, &token) in tokens.iter().enumerate() {
-        match token {
+        let token_upper = token.to_uppercase();
+        match token_upper.as_str() {
             "BEGIN" => depth += 1,
             "WHILE" => {
                 if depth == 0 && while_pos.is_none() {
@@ -323,7 +327,8 @@ fn find_do_loop(tokens: &[&str]) -> Result<usize, String> {
     let mut depth = 0;
 
     for (i, &token) in tokens.iter().enumerate() {
-        match token {
+        let token_upper = token.to_uppercase();
+        match token_upper.as_str() {
             "DO" => depth += 1,
             "LOOP" | "+LOOP" => {
                 if depth == 0 {
@@ -405,7 +410,8 @@ pub fn execute_line(
     // Process tokens sequentially, handling multiple definitions
     let mut i = 0;
     while i < tokens.len() {
-        if tokens[i] == "INCLUDE" {
+        let token_upper = tokens[i].to_uppercase();
+        if token_upper == "INCLUDE" {
             // INCLUDE <filename>
             if i + 1 >= tokens.len() {
                 return Err("INCLUDE requires a filename".to_string());
@@ -414,11 +420,11 @@ pub fn execute_line(
             let filename = tokens[i + 1];
             load_file(filename, stack, dict, loop_stack, return_stack)?;
             i += 2;
-        } else if tokens[i] == ":" {
+        } else if token_upper == ":" {
             // Find matching semicolon for definition
             let mut semicolon_pos = None;
             for j in (i + 1)..tokens.len() {
-                if tokens[j] == ";" {
+                if tokens[j].to_uppercase() == ";" {
                     semicolon_pos = Some(j);
                     break;
                 }
@@ -429,10 +435,13 @@ pub fn execute_line(
                     return Err("Invalid word definition".to_string());
                 }
 
-                let word_name = tokens[i + 1].to_string();
+                // Store word names in uppercase for case-insensitive lookup
+                let word_name = tokens[i + 1].to_uppercase();
                 let word_tokens = &tokens[i + 2..end];
 
                 let ast = parse_tokens(word_tokens)?;
+                // Validate that all words in the AST exist
+                ast.validate(dict)?;
                 dict.add_compiled(word_name, ast);
                 i = end + 1;
             } else {
@@ -441,26 +450,31 @@ pub fn execute_line(
         } else {
             // Collect tokens until we hit : or INCLUDE or end
             let mut exec_tokens = Vec::new();
-            while i < tokens.len() && tokens[i] != ":" && tokens[i] != "INCLUDE" {
+            while i < tokens.len() {
+                let check_upper = tokens[i].to_uppercase();
+                if check_upper == ":" || check_upper == "INCLUDE" {
+                    break;
+                }
                 exec_tokens.push(tokens[i]);
                 i += 1;
             }
 
             if !exec_tokens.is_empty() {
-                // Check for compile-only words
+                // Check for compile-only words (case-insensitive)
                 if exec_tokens.iter().any(|&t| {
-                    t == "IF"
-                        || t == "THEN"
-                        || t == "ELSE"
-                        || t == "BEGIN"
-                        || t == "UNTIL"
-                        || t == "WHILE"
-                        || t == "REPEAT"
-                        || t == "DO"
-                        || t == "LOOP"
-                        || t == "+LOOP"
-                        || t == "LEAVE"
-                        || t == ".\""
+                    let upper = t.to_uppercase();
+                    upper == "IF"
+                        || upper == "THEN"
+                        || upper == "ELSE"
+                        || upper == "BEGIN"
+                        || upper == "UNTIL"
+                        || upper == "WHILE"
+                        || upper == "REPEAT"
+                        || upper == "DO"
+                        || upper == "LOOP"
+                        || upper == "+LOOP"
+                        || upper == "LEAVE"
+                        || upper == ".\""
                 }) {
                     return Err("Control flow and string words (IF/THEN/ELSE/BEGIN/UNTIL/WHILE/REPEAT/DO/LOOP/LEAVE/.\") are compile-only".to_string());
                 }

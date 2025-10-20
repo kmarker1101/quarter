@@ -52,7 +52,7 @@ fn main() {
                     continue;
                 }
 
-                if tokens.first() == Some(&"INCLUDE") {
+                if tokens.first().map(|s| s.to_uppercase()) == Some("INCLUDE".to_string()) {
                     // INCLUDE <filename>
                     if tokens.len() < 2 {
                         println!("INCLUDE requires a filename");
@@ -68,21 +68,26 @@ fn main() {
                             println!("Error loading {}: {}", filename, e);
                         }
                     }
-                } else if tokens.first() == Some(&":") {
+                } else if tokens.first().map(|s| s.to_uppercase()) == Some(":".to_string()) {
                     // Definition mode
-                    if let Some(&";") = tokens.last() {
+                    if tokens.last().map(|s| s.to_uppercase()) == Some(";".to_string()) {
                         if tokens.len() < 3 {
                             println!("Invalid word definition");
                             continue;
                         }
 
-                        let word_name = tokens[1].to_string();
+                        let word_name = tokens[1].to_uppercase();
                         let word_tokens = &tokens[2..tokens.len() - 1];
 
                         match parse_tokens(word_tokens) {
                             Ok(ast) => {
-                                dict.add_compiled(word_name, ast);
-                                println!("ok");
+                                // Validate that all words in the AST exist
+                                if let Err(e) = ast.validate(&dict) {
+                                    println!("{}", e);
+                                } else {
+                                    dict.add_compiled(word_name, ast);
+                                    println!("ok");
+                                }
                             }
                             Err(e) => {
                                 println!("Parse error: {}", e);
@@ -95,18 +100,19 @@ fn main() {
                     // Normal execution mode
                     // Check for compile-only words
                     if tokens.iter().any(|&t| {
-                        t == "IF"
-                            || t == "THEN"
-                            || t == "ELSE"
-                            || t == "BEGIN"
-                            || t == "UNTIL"
-                            || t == "WHILE"
-                            || t == "REPEAT"
-                            || t == "DO"
-                            || t == "LOOP"
-                            || t == "+LOOP"
-                            || t == "LEAVE"
-                            || t == ".\""
+                        let upper = t.to_uppercase();
+                        upper == "IF"
+                            || upper == "THEN"
+                            || upper == "ELSE"
+                            || upper == "BEGIN"
+                            || upper == "UNTIL"
+                            || upper == "WHILE"
+                            || upper == "REPEAT"
+                            || upper == "DO"
+                            || upper == "LOOP"
+                            || upper == "+LOOP"
+                            || upper == "LEAVE"
+                            || upper == ".\""
                     }) {
                         println!(
                             "Error: Control flow and string words are compile-only (use inside : ; definitions)"

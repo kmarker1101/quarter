@@ -54,6 +54,9 @@ impl Dictionary {
         dict.add_primitive(">R", words::to_r);
         dict.add_primitive("R>", words::r_from);
         dict.add_primitive("R@", words::r_fetch);
+        dict.add_primitive("0=", words::zero_equals);
+        dict.add_primitive("0<", words::zero_less);
+        dict.add_primitive("0>", words::zero_greater);
 
         dict
     }
@@ -64,6 +67,10 @@ impl Dictionary {
 
     pub fn add_compiled(&mut self, name: String, ast: AstNode) {
         self.words.insert(name, Word::Compiled(ast));
+    }
+
+    pub fn has_word(&self, word: &str) -> bool {
+        self.words.contains_key(word)
     }
 
     pub fn execute_word(
