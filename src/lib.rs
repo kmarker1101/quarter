@@ -127,7 +127,7 @@ pub fn parse_tokens(tokens: &[&str]) -> Result<AstNode, String> {
                 let end_pos = find_begin_end(&tokens[i + 1..])?;
 
                 // Check if it's BEGIN...UNTIL or BEGIN...WHILE...REPEAT
-                let end_keyword = tokens[i + 1 + end_pos.0];
+                let end_keyword = tokens[i + 1 + end_pos.0].to_uppercase();
 
                 if end_keyword == "UNTIL" {
                     // BEGIN...UNTIL loop
@@ -267,7 +267,8 @@ fn find_then_else(tokens: &[&str]) -> Result<(usize, Option<usize>), String> {
     let mut else_pos = None;
 
     for (i, &token) in tokens.iter().enumerate() {
-        match token {
+        let token_upper = token.to_uppercase();
+        match token_upper.as_str() {
             "IF" => depth += 1,
             "ELSE" => {
                 if depth == 0 && else_pos.is_none() {
@@ -294,7 +295,8 @@ fn find_begin_end(tokens: &[&str]) -> Result<(usize, Option<usize>), String> {
     let mut while_pos = None;
 
     for (i, &token) in tokens.iter().enumerate() {
-        match token {
+        let token_upper = token.to_uppercase();
+        match token_upper.as_str() {
             "BEGIN" => depth += 1,
             "WHILE" => {
                 if depth == 0 && while_pos.is_none() {
@@ -325,7 +327,8 @@ fn find_do_loop(tokens: &[&str]) -> Result<usize, String> {
     let mut depth = 0;
 
     for (i, &token) in tokens.iter().enumerate() {
-        match token {
+        let token_upper = token.to_uppercase();
+        match token_upper.as_str() {
             "DO" => depth += 1,
             "LOOP" | "+LOOP" => {
                 if depth == 0 {
