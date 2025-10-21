@@ -27,6 +27,9 @@ impl Dictionary {
         dict.add_primitive("SWAP", words::swap);
         dict.add_primitive("MOD", words::modulo);
         dict.add_primitive(".S", words::dot_s);
+        dict.add_primitive("U.", words::u_dot);
+        dict.add_primitive(".R", words::dot_r);
+        dict.add_primitive("U.R", words::u_dot_r);
         dict.add_primitive("<", words::less_than);
         dict.add_primitive(">", words::greater_than);
         dict.add_primitive("=", words::equals);
