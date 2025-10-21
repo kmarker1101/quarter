@@ -221,6 +221,20 @@ fn main() {
                     let create_ast = AstNode::PushNumber(addr);
                     dict.add_compiled(create_name, create_ast);
                     println!("ok");
+                } else if tokens.first().map(|s| s.to_uppercase()) == Some("S\"".to_string())
+                       && tokens.last().map(|s| s.to_uppercase()) == Some("INCLUDED".to_string()) {
+                    // S" filename" INCLUDED pattern (for forth-mode)
+                    // Parse S" part to get filename on stack, then call INCLUDED
+                    let s_quote_end = tokens.iter().position(|&t| t.ends_with('"') && t != "S\"");
+                    if let Some(_end_idx) = s_quote_end {
+                        let all_tokens_str = tokens.join(" ");
+                        match quarter::execute_line(&all_tokens_str, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory) {
+                            Ok(_) => println!("ok"),
+                            Err(e) => println!("{}", e),
+                        }
+                    } else {
+                        println!("Malformed S\" ... \" INCLUDED");
+                    }
                 } else {
                     // Normal execution mode
                     // Check for compile-only words
@@ -239,7 +253,6 @@ fn main() {
                             || upper == "LEAVE"
                             || upper == "EXIT"
                             || upper == ".\""
-                            || upper == "S\""
                     }) {
                         println!(
                             "Error: Control flow and string words are compile-only (use inside : ; definitions)"

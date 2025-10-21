@@ -646,12 +646,31 @@ pub fn execute_line(
             let create_ast = AstNode::PushNumber(addr);
             dict.add_compiled(create_name, create_ast);
             i += 2;
+        } else if token_upper == "INCLUDED" {
+            // INCLUDED ( addr len -- )
+            // Takes filename from stack and loads the file
+            let len = stack.pop(memory).ok_or("Stack underflow for INCLUDED (length)")?;
+            let addr = stack.pop(memory).ok_or("Stack underflow for INCLUDED (address)")?;
+
+            // Read the filename from memory
+            let mut filename_bytes = Vec::new();
+            for offset in 0..len {
+                let byte = memory.fetch_byte((addr + offset) as usize)?;
+                filename_bytes.push(byte as u8);
+            }
+
+            let filename = String::from_utf8(filename_bytes)
+                .map_err(|_| "Invalid UTF-8 in filename")?;
+
+            // Load the file
+            load_file(&filename, stack, dict, loop_stack, return_stack, memory)?;
+            i += 1;
         } else {
-            // Collect tokens until we hit : or INCLUDE or VARIABLE or CONSTANT or CREATE or end
+            // Collect tokens until we hit : or INCLUDE or INCLUDED or VARIABLE or CONSTANT or CREATE or end
             let mut exec_tokens = Vec::new();
             while i < tokens.len() {
                 let check_upper = tokens[i].to_uppercase();
-                if check_upper == ":" || check_upper == "INCLUDE"
+                if check_upper == ":" || check_upper == "INCLUDE" || check_upper == "INCLUDED"
                    || check_upper == "VARIABLE" || check_upper == "CONSTANT"
                    || check_upper == "CREATE" {
                     break;
