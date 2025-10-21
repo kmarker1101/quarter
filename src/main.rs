@@ -32,8 +32,13 @@ fn main() {
 
     let mut rl = DefaultEditor::new().unwrap();
 
+    // State for multi-line definitions
+    let mut compiling = false;
+    let mut compile_buffer: Vec<String> = Vec::new();
+
     loop {
-        let readline = rl.readline("quarter> ");
+        let prompt = if compiling { "compiled " } else { "quarter> " };
+        let readline = rl.readline(prompt);
 
         match readline {
             Ok(line) => {
@@ -57,6 +62,49 @@ fn main() {
                     continue;
                 }
 
+                // Handle multi-line compilation mode
+                if compiling {
+                    // We're in compilation mode, accumulate tokens
+                    compile_buffer.push(input.to_string());
+
+                    // Check if this line contains ;
+                    if tokens.iter().any(|&t| t.to_uppercase() == ";") {
+                        // End of definition - compile everything
+                        let full_def = compile_buffer.join(" ");
+                        let all_tokens: Vec<&str> = full_def.split_whitespace().collect();
+
+                        if all_tokens.len() < 3 {
+                            println!("Invalid word definition");
+                            compiling = false;
+                            compile_buffer.clear();
+                            continue;
+                        }
+
+                        let word_name = all_tokens[1].to_uppercase();
+                        let word_tokens = &all_tokens[2..all_tokens.len() - 1];
+
+                        match parse_tokens(word_tokens) {
+                            Ok(ast) => {
+                                // Validate that all words in the AST exist
+                                if let Err(e) = ast.validate(&dict) {
+                                    println!("{}", e);
+                                } else {
+                                    dict.add_compiled(word_name, ast);
+                                    println!("ok");
+                                }
+                            }
+                            Err(e) => {
+                                println!("Parse error: {}", e);
+                            }
+                        }
+
+                        compiling = false;
+                        compile_buffer.clear();
+                    }
+                    continue;
+                }
+
+                // Not in compilation mode - process normally
                 if tokens.first().map(|s| s.to_uppercase()) == Some("INCLUDE".to_string()) {
                     // INCLUDE <filename>
                     if tokens.len() < 2 {
@@ -76,6 +124,7 @@ fn main() {
                 } else if tokens.first().map(|s| s.to_uppercase()) == Some(":".to_string()) {
                     // Definition mode
                     if tokens.last().map(|s| s.to_uppercase()) == Some(";".to_string()) {
+                        // Single-line definition
                         if tokens.len() < 3 {
                             println!("Invalid word definition");
                             continue;
@@ -99,7 +148,10 @@ fn main() {
                             }
                         }
                     } else {
-                        println!("Missing ; in word definition");
+                        // Multi-line definition - enter compilation mode
+                        compiling = true;
+                        compile_buffer.clear();
+                        compile_buffer.push(input.to_string());
                     }
                 } else if tokens.first().map(|s| s.to_uppercase()) == Some("VARIABLE".to_string()) {
                     // VARIABLE <name>
