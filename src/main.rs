@@ -187,6 +187,7 @@ fn main() {
                             || upper == "LEAVE"
                             || upper == "EXIT"
                             || upper == ".\""
+                            || upper == "S\""
                     }) {
                         println!(
                             "Error: Control flow and string words are compile-only (use inside : ; definitions)"

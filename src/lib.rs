@@ -227,6 +227,40 @@ pub fn parse_tokens(tokens: &[&str]) -> Result<AstNode, String> {
                 let string_content = string_parts.join(" ");
                 nodes.push(AstNode::PrintString(string_content));
             }
+            "S\"" => {
+                // Handle S" string literals: collect tokens until closing "
+                let mut string_parts: Vec<String> = Vec::new();
+                i += 1; // Skip past S"
+
+                while i < tokens.len() {
+                    let part = tokens[i];
+                    if part.ends_with('"') {
+                        // Found closing quote
+                        if part == "\"" {
+                            // Just a closing quote - means there was a trailing space
+                            // Add space to the last part if there is one
+                            if !string_parts.is_empty() {
+                                let last_idx = string_parts.len() - 1;
+                                string_parts[last_idx].push(' ');
+                            }
+                        } else {
+                            // Text followed by quote
+                            let without_quote = &part[..part.len() - 1];
+                            if !without_quote.is_empty() {
+                                string_parts.push(without_quote.to_string());
+                            }
+                        }
+                        i += 1;
+                        break;
+                    } else {
+                        string_parts.push(part.to_string());
+                        i += 1;
+                    }
+                }
+
+                let string_content = string_parts.join(" ");
+                nodes.push(AstNode::StackString(string_content));
+            }
             "BEGIN" => {
                 // Find matching UNTIL or WHILE/REPEAT
                 let end_pos = find_begin_end(&tokens[i + 1..])?;
