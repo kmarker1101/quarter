@@ -15,6 +15,67 @@ pub fn dot_s(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut cra
     stack.print_stack(memory);
 }
 
+pub fn u_dot(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    // U. ( u -- )
+    // Print unsigned number
+    if let Some(value) = stack.pop(memory) {
+        // Treat as unsigned by converting to u32
+        let unsigned_value = value as u32;
+        print!("{} ", unsigned_value);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn dot_r(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    // .R ( n width -- )
+    // Print number right-justified in field of width
+    if let (Some(width), Some(value)) = (stack.pop(memory), stack.pop(memory)) {
+        let num_str = value.to_string();
+        let width = width as usize;
+        if num_str.len() < width {
+            // Pad with spaces on the left
+            print!("{:>width$} ", num_str, width = width);
+        } else {
+            print!("{} ", num_str);
+        }
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn u_dot_r(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    // U.R ( u width -- )
+    // Print unsigned number right-justified in field of width
+    if let (Some(width), Some(value)) = (stack.pop(memory), stack.pop(memory)) {
+        let unsigned_value = value as u32;
+        let num_str = unsigned_value.to_string();
+        let width = width as usize;
+        if num_str.len() < width {
+            print!("{:>width$} ", num_str, width = width);
+        } else {
+            print!("{} ", num_str);
+        }
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
 // Arithmetic Operations
 pub fn add(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack,
  memory: &mut crate::Memory) {
