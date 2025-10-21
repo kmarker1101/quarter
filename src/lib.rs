@@ -227,6 +227,40 @@ pub fn parse_tokens(tokens: &[&str]) -> Result<AstNode, String> {
                 let string_content = string_parts.join(" ");
                 nodes.push(AstNode::PrintString(string_content));
             }
+            "S\"" => {
+                // Handle S" string literals: collect tokens until closing "
+                let mut string_parts: Vec<String> = Vec::new();
+                i += 1; // Skip past S"
+
+                while i < tokens.len() {
+                    let part = tokens[i];
+                    if part.ends_with('"') {
+                        // Found closing quote
+                        if part == "\"" {
+                            // Just a closing quote - means there was a trailing space
+                            // Add space to the last part if there is one
+                            if !string_parts.is_empty() {
+                                let last_idx = string_parts.len() - 1;
+                                string_parts[last_idx].push(' ');
+                            }
+                        } else {
+                            // Text followed by quote
+                            let without_quote = &part[..part.len() - 1];
+                            if !without_quote.is_empty() {
+                                string_parts.push(without_quote.to_string());
+                            }
+                        }
+                        i += 1;
+                        break;
+                    } else {
+                        string_parts.push(part.to_string());
+                        i += 1;
+                    }
+                }
+
+                let string_content = string_parts.join(" ");
+                nodes.push(AstNode::StackString(string_content));
+            }
             "BEGIN" => {
                 // Find matching UNTIL or WHILE/REPEAT
                 let end_pos = find_begin_end(&tokens[i + 1..])?;
@@ -612,12 +646,31 @@ pub fn execute_line(
             let create_ast = AstNode::PushNumber(addr);
             dict.add_compiled(create_name, create_ast);
             i += 2;
+        } else if token_upper == "INCLUDED" {
+            // INCLUDED ( addr len -- )
+            // Takes filename from stack and loads the file
+            let len = stack.pop(memory).ok_or("Stack underflow for INCLUDED (length)")?;
+            let addr = stack.pop(memory).ok_or("Stack underflow for INCLUDED (address)")?;
+
+            // Read the filename from memory
+            let mut filename_bytes = Vec::new();
+            for offset in 0..len {
+                let byte = memory.fetch_byte((addr + offset) as usize)?;
+                filename_bytes.push(byte as u8);
+            }
+
+            let filename = String::from_utf8(filename_bytes)
+                .map_err(|_| "Invalid UTF-8 in filename")?;
+
+            // Load the file
+            load_file(&filename, stack, dict, loop_stack, return_stack, memory)?;
+            i += 1;
         } else {
-            // Collect tokens until we hit : or INCLUDE or VARIABLE or CONSTANT or CREATE or end
+            // Collect tokens until we hit : or INCLUDE or INCLUDED or VARIABLE or CONSTANT or CREATE or end
             let mut exec_tokens = Vec::new();
             while i < tokens.len() {
                 let check_upper = tokens[i].to_uppercase();
-                if check_upper == ":" || check_upper == "INCLUDE"
+                if check_upper == ":" || check_upper == "INCLUDE" || check_upper == "INCLUDED"
                    || check_upper == "VARIABLE" || check_upper == "CONSTANT"
                    || check_upper == "CREATE" {
                     break;

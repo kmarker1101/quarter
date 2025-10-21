@@ -21,6 +21,7 @@ pub enum AstNode {
         increment: i32,  // 1 for LOOP, variable for +LOOP
     },
     PrintString(String),
+    StackString(String),  // S" - push address and length
     Leave,
     Exit,
 }
@@ -31,6 +32,7 @@ impl AstNode {
         match self {
             AstNode::PushNumber(_) => Ok(()),
             AstNode::PrintString(_) => Ok(()),
+            AstNode::StackString(_) => Ok(()),
             AstNode::Leave => Ok(()),
             AstNode::Exit => Ok(()),
             AstNode::CallWord(name) => {
@@ -250,6 +252,29 @@ impl AstNode {
             }
             AstNode::PrintString(s) => {
                 print!("{}", s);
+                Ok(())
+            }
+            AstNode::StackString(s) => {
+                // S" - Store string in memory and push address and length
+                let addr = memory.here();
+                let bytes = s.as_bytes();
+                let len = bytes.len() as i32;
+
+                // Store each byte in memory
+                for (i, &byte) in bytes.iter().enumerate() {
+                    if let Err(e) = memory.store_byte((addr as usize) + i, byte as i32) {
+                        return Err(e);
+                    }
+                }
+
+                // Advance HERE by string length
+                if let Err(e) = memory.allot(len) {
+                    return Err(e);
+                }
+
+                // Push address and length onto stack
+                stack.push(addr, memory);
+                stack.push(len, memory);
                 Ok(())
             }
             AstNode::Leave => {
