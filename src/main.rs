@@ -1,4 +1,4 @@
-use quarter::{Dictionary, LoopStack, Stack, load_file, parse_tokens};
+use quarter::{Dictionary, LoopStack, Stack, load_file, load_stdlib, parse_tokens};
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
 
@@ -8,6 +8,12 @@ fn main() {
     let mut loop_stack = LoopStack::new();
     let mut return_stack = quarter::ReturnStack::new();
     let mut memory = quarter::Memory::new();
+
+    // Load standard library
+    if let Err(e) = load_stdlib(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory) {
+        eprintln!("Error loading stdlib: {}", e);
+        std::process::exit(1);
+    }
 
     println!("Forth Interpreter v0.1");
 

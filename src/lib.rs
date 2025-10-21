@@ -9,6 +9,13 @@ pub use stack::Stack;
 
 use std::fs;
 
+// Embedded standard library files
+const CORE_FTH: &str = include_str!("../stdlib/core.fth");
+const STACK_FTH: &str = include_str!("../stdlib/stack.fth");
+const COMPARISON_FTH: &str = include_str!("../stdlib/comparison.fth");
+const MATH_FTH: &str = include_str!("../stdlib/math.fth");
+const IO_FTH: &str = include_str!("../stdlib/io.fth");
+
 // Loop stack for DO...LOOP counters
 #[derive(Debug, Clone)]
 pub struct LoopStack {
@@ -705,6 +712,51 @@ pub fn execute_line(
             }
         }
     }
+
+    Ok(())
+}
+
+/// Helper function to process embedded stdlib file content
+/// Strips comments and joins lines, similar to load_file
+fn process_stdlib_content(content: &str) -> String {
+    let mut processed = String::new();
+
+    for line in content.lines() {
+        let line = line.trim();
+        // Strip comments from this line
+        let line = strip_comments(line);
+        processed.push_str(&line);
+        processed.push(' ');
+    }
+
+    processed
+}
+
+/// Load standard library files embedded in the binary
+/// This is called automatically on startup to make stdlib words available
+pub fn load_stdlib(
+    stack: &mut Stack,
+    dict: &mut Dictionary,
+    loop_stack: &mut LoopStack,
+    return_stack: &mut ReturnStack,
+    memory: &mut Memory,
+) -> Result<(), String> {
+    // Load stdlib files in dependency order
+    // core.fth has no dependencies and must be loaded first
+    let core_processed = process_stdlib_content(CORE_FTH);
+    execute_line(&core_processed, stack, dict, loop_stack, return_stack, memory)?;
+
+    let stack_processed = process_stdlib_content(STACK_FTH);
+    execute_line(&stack_processed, stack, dict, loop_stack, return_stack, memory)?;
+
+    let comparison_processed = process_stdlib_content(COMPARISON_FTH);
+    execute_line(&comparison_processed, stack, dict, loop_stack, return_stack, memory)?;
+
+    let math_processed = process_stdlib_content(MATH_FTH);
+    execute_line(&math_processed, stack, dict, loop_stack, return_stack, memory)?;
+
+    let io_processed = process_stdlib_content(IO_FTH);
+    execute_line(&io_processed, stack, dict, loop_stack, return_stack, memory)?;
 
     Ok(())
 }
