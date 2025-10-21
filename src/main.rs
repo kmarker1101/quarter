@@ -43,6 +43,10 @@ fn main() {
                     break;
                 }
 
+                // Strip comments before processing
+                let input = quarter::strip_comments(input);
+                let input = input.trim();
+
                 if !input.is_empty() {
                     rl.add_history_entry(input).unwrap();
                 }

@@ -452,6 +452,37 @@ fn find_do_loop(tokens: &[&str]) -> Result<usize, String> {
     Err("Missing LOOP or +LOOP".to_string())
 }
 
+/// Strip comments from a line of Forth code
+/// Handles both backslash comments (\) and parenthesis comments ( )
+pub fn strip_comments(input: &str) -> String {
+    // First, strip backslash comments (everything after \)
+    let line = if let Some(pos) = input.find('\\') {
+        &input[..pos]
+    } else {
+        input
+    };
+
+    // Then strip parenthesis comments ( ... )
+    let mut result = String::new();
+    let mut in_paren_comment = false;
+
+    for ch in line.chars() {
+        if ch == '(' {
+            in_paren_comment = true;
+        } else if ch == ')' {
+            in_paren_comment = false;
+            // Don't include the ) itself
+            continue;
+        }
+
+        if !in_paren_comment {
+            result.push(ch);
+        }
+    }
+
+    result
+}
+
 pub fn load_file(
     filename: &str,
     stack: &mut Stack,
@@ -468,38 +499,15 @@ pub fn load_file(
     for line in contents.lines() {
         let line = line.trim();
 
-        // Skip backslash comments (entire line)
-        if line.starts_with('\\') {
-            continue;
-        }
+        // Strip comments from this line
+        let line = strip_comments(line);
 
-        // Handle inline backslash comments (remove everything after \)
-        let line = if let Some(pos) = line.find('\\') {
-            &line[..pos]
-        } else {
-            line
-        };
-
-        processed.push_str(line);
+        processed.push_str(&line);
         processed.push(' ');
     }
 
-    // Remove parenthesis comments ( ... )
-    let mut result = String::new();
-    let mut in_paren_comment = false;
-
-    for ch in processed.chars() {
-        if ch == '(' {
-            in_paren_comment = true;
-        } else if ch == ')' {
-            in_paren_comment = false;
-        } else if !in_paren_comment {
-            result.push(ch);
-        }
-    }
-
     // Now execute the entire file as one token stream
-    execute_line(&result, stack, dict, loop_stack, return_stack, memory)?;
+    execute_line(&processed, stack, dict, loop_stack, return_stack, memory)?;
 
     Ok(())
 }
@@ -512,6 +520,8 @@ pub fn execute_line(
     return_stack: &mut ReturnStack,
     memory: &mut Memory,
 ) -> Result<(), String> {
+    // Strip comments from input
+    let input = strip_comments(input);
     let tokens: Vec<&str> = input.split_whitespace().collect();
 
     if tokens.is_empty() {
