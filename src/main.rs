@@ -97,6 +97,74 @@ fn main() {
                     } else {
                         println!("Missing ; in word definition");
                     }
+                } else if tokens.first().map(|s| s.to_uppercase()) == Some("VARIABLE".to_string()) {
+                    // VARIABLE <name>
+                    if tokens.len() < 2 {
+                        println!("VARIABLE requires a name");
+                        continue;
+                    }
+
+                    let var_name = tokens[1].to_uppercase();
+                    let addr = memory.here();
+
+                    // Allocate 1 cell (4 bytes) for the variable
+                    match memory.allot(4) {
+                        Ok(_) => {
+                            // Create a word that pushes the variable's address
+                            use quarter::AstNode;
+                            let var_ast = AstNode::PushNumber(addr);
+                            dict.add_compiled(var_name, var_ast);
+                            println!("ok");
+                        }
+                        Err(e) => {
+                            println!("{}", e);
+                        }
+                    }
+                } else if tokens.len() >= 3 && tokens.get(1).map(|s| s.to_uppercase()) == Some("CONSTANT".to_string()) {
+                    // <value> CONSTANT <name>
+                    // Parse and push the value first
+                    match parse_tokens(&tokens[0..1]) {
+                        Ok(ast) => {
+                            match ast.execute(&mut stack, &dict, &mut loop_stack, &mut return_stack, &mut memory) {
+                                Ok(_) => {
+                                    // Now pop it back and create the constant
+                                    match stack.pop(&mut memory) {
+                                        Some(value) => {
+                                            let const_name = tokens[2].to_uppercase();
+                                            use quarter::AstNode;
+                                            let const_ast = AstNode::PushNumber(value);
+                                            dict.add_compiled(const_name, const_ast);
+                                            println!("ok");
+                                        }
+                                        None => {
+                                            println!("Stack underflow for CONSTANT");
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    println!("{}", e);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            println!("Parse error: {}", e);
+                        }
+                    }
+                } else if tokens.first().map(|s| s.to_uppercase()) == Some("CREATE".to_string()) {
+                    // CREATE <name>
+                    if tokens.len() < 2 {
+                        println!("CREATE requires a name");
+                        continue;
+                    }
+
+                    let create_name = tokens[1].to_uppercase();
+                    let addr = memory.here();
+
+                    // Create a word that pushes the data address
+                    use quarter::AstNode;
+                    let create_ast = AstNode::PushNumber(addr);
+                    dict.add_compiled(create_name, create_ast);
+                    println!("ok");
                 } else {
                     // Normal execution mode
                     // Check for compile-only words
