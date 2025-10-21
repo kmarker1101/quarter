@@ -626,3 +626,59 @@ pub fn plus_store(
         println!("Stack underflow!");
     }
 }
+
+// Dictionary and Memory Allocation Words
+
+pub fn here(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    // HERE ( -- addr )
+    // Push current dictionary pointer
+    stack.push(memory.here(), memory);
+}
+
+pub fn allot(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    // ALLOT ( n -- )
+    // Allocate n bytes in dictionary space
+    if let Some(n) = stack.pop(memory) {
+        match memory.allot(n) {
+            Ok(_) => {}
+            Err(e) => println!("{}", e),
+        }
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn comma(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    // , (comma) ( n -- )
+    // Store n at HERE and advance dictionary pointer by 4 bytes
+    if let Some(n) = stack.pop(memory) {
+        let addr = memory.here() as usize;
+        match memory.store(addr, n) {
+            Ok(_) => {
+                // Advance dictionary pointer by 4 bytes (one cell)
+                match memory.allot(4) {
+                    Ok(_) => {}
+                    Err(e) => println!("{}", e),
+                }
+            }
+            Err(e) => println!("{}", e),
+        }
+    } else {
+        println!("Stack underflow!");
+    }
+}

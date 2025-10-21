@@ -106,16 +106,37 @@ impl ReturnStack {
 }
 
 // Memory for @, !, C@, C!
+// Memory layout:
+// 0x000000-0x00FFFF: Data Stack (64KB)
+// 0x010000-0x01FFFF: Return Stack (64KB)
+// 0x020000-0x7FFFFF: User Memory and Dictionary (~7.5MB)
 #[derive(Debug)]
 pub struct Memory {
     bytes: Vec<u8>,
+    dp: usize,  // Dictionary pointer - tracks next allocation address
 }
 
 impl Memory {
     pub fn new() -> Self {
         Memory {
             bytes: vec![0; 8 * 1024 * 1024], // 8MB like gforth
+            dp: 0x020000,  // Start dictionary at beginning of user memory
         }
+    }
+
+    // HERE - return current dictionary pointer
+    pub fn here(&self) -> i32 {
+        self.dp as i32
+    }
+
+    // ALLOT - allocate n bytes in dictionary space
+    pub fn allot(&mut self, n: i32) -> Result<(), String> {
+        let new_dp = (self.dp as i32 + n) as usize;
+        if new_dp >= self.bytes.len() {
+            return Err("Dictionary overflow".to_string());
+        }
+        self.dp = new_dp;
+        Ok(())
     }
 
     // @ - fetch cell (4 bytes as i32, little-endian)
@@ -537,12 +558,58 @@ pub fn execute_line(
             } else {
                 return Err("Missing ; in word definition".to_string());
             }
+        } else if token_upper == "VARIABLE" {
+            // VARIABLE <name>
+            if i + 1 >= tokens.len() {
+                return Err("VARIABLE requires a name".to_string());
+            }
+
+            let var_name = tokens[i + 1].to_uppercase();
+            let addr = memory.here();
+
+            // Allocate 1 cell (4 bytes) for the variable
+            memory.allot(4)?;
+
+            // Create a word that pushes the variable's address
+            let var_ast = AstNode::PushNumber(addr);
+            dict.add_compiled(var_name, var_ast);
+            i += 2;
+        } else if token_upper == "CONSTANT" {
+            // <value> CONSTANT <name>
+            if i + 1 >= tokens.len() {
+                return Err("CONSTANT requires a name".to_string());
+            }
+
+            // Pop value from stack
+            let value = stack.pop(memory).ok_or("Stack underflow for CONSTANT")?;
+            let const_name = tokens[i + 1].to_uppercase();
+
+            // Create a word that pushes the constant value
+            let const_ast = AstNode::PushNumber(value);
+            dict.add_compiled(const_name, const_ast);
+            i += 2;
+        } else if token_upper == "CREATE" {
+            // CREATE <name>
+            if i + 1 >= tokens.len() {
+                return Err("CREATE requires a name".to_string());
+            }
+
+            let create_name = tokens[i + 1].to_uppercase();
+            let addr = memory.here();
+
+            // Create a word that pushes the data address
+            // User will typically follow with ALLOT to allocate space
+            let create_ast = AstNode::PushNumber(addr);
+            dict.add_compiled(create_name, create_ast);
+            i += 2;
         } else {
-            // Collect tokens until we hit : or INCLUDE or end
+            // Collect tokens until we hit : or INCLUDE or VARIABLE or CONSTANT or CREATE or end
             let mut exec_tokens = Vec::new();
             while i < tokens.len() {
                 let check_upper = tokens[i].to_uppercase();
-                if check_upper == ":" || check_upper == "INCLUDE" {
+                if check_upper == ":" || check_upper == "INCLUDE"
+                   || check_upper == "VARIABLE" || check_upper == "CONSTANT"
+                   || check_upper == "CREATE" {
                     break;
                 }
                 exec_tokens.push(tokens[i]);

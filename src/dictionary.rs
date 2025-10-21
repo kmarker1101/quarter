@@ -70,6 +70,9 @@ impl Dictionary {
         dict.add_primitive("CELLS", words::cells);
         dict.add_primitive("CELL+", words::cell_plus);
         dict.add_primitive("+!", words::plus_store);
+        dict.add_primitive("HERE", words::here);
+        dict.add_primitive("ALLOT", words::allot);
+        dict.add_primitive(",", words::comma);
 
         dict
     }
