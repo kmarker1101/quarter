@@ -2,6 +2,7 @@ pub mod ast;
 pub mod dictionary;
 pub mod stack;
 pub mod words;
+pub mod llvm_codegen;
 
 pub use ast::AstNode;
 pub use dictionary::Dictionary;

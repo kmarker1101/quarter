@@ -1,0 +1,9 @@
+[env]
+LLVM_SYS_181_PREFIX = "/opt/homebrew/opt/llvm@18"
+
+[target.aarch64-apple-darwin]
+rustflags = [
+    "-L", "/usr/lib",
+    "-L", "/opt/homebrew/opt/libffi/lib",
+    "-L", "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib"
+]
