@@ -48,7 +48,7 @@ fn try_forth_compile(
     let name_addr = 302000;
     for (i, ch) in name.bytes().enumerate() {
         // Store each character as a byte
-        if let Err(_) = memory.store(name_addr + i, ch as i32) {
+        if let Err(_) = memory.store_byte(name_addr + i, ch as i32) {
             return false;
         }
     }
