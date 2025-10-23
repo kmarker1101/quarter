@@ -2,6 +2,34 @@ use quarter::{Dictionary, LoopStack, Stack, load_file, load_stdlib, parse_tokens
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
 
+/// Attempt to JIT compile an AST to native code and store in dictionary
+/// Returns true if successful, false otherwise
+fn try_jit_compile(name: String, ast: &quarter::AstNode, dict: &mut quarter::Dictionary, no_jit: bool) -> bool {
+    if no_jit {
+        return false;
+    }
+
+    use inkwell::context::Context;
+    use quarter::llvm_codegen::Compiler;
+
+    // Create LLVM context - leak it to make it 'static
+    let context = Box::leak(Box::new(Context::create()));
+    let mut compiler = match Compiler::new(context) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+
+    // Try to compile the AST
+    match compiler.compile_word(&name, ast) {
+        Ok(jit_fn) => {
+            // Add the JIT function to the dictionary
+            dict.add_jit_compiled_with_compiler(name, jit_fn, Box::new(compiler));
+            true
+        },
+        Err(_) => false,
+    }
+}
+
 fn main() {
     let mut stack = Stack::new();
     let mut dict = Dictionary::new();
@@ -9,8 +37,25 @@ fn main() {
     let mut return_stack = quarter::ReturnStack::new();
     let mut memory = quarter::Memory::new();
 
+    // Parse command line arguments
+    let args: Vec<String> = std::env::args().collect();
+    let mut no_jit = false;
+    let mut filename: Option<String> = None;
+
+    for arg in args.iter().skip(1) {
+        if arg == "--no-jit" {
+            no_jit = true;
+        } else if !arg.starts_with("--") {
+            filename = Some(arg.clone());
+        }
+    }
+
+    if no_jit {
+        println!("JIT compilation disabled");
+    }
+
     // Load standard library
-    if let Err(e) = load_stdlib(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory) {
+    if let Err(e) = load_stdlib(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, no_jit) {
         eprintln!("Error loading stdlib: {}", e);
         std::process::exit(1);
     }
@@ -19,16 +64,14 @@ fn main() {
 
     // Check for file argument
     // Supported extensions: .qtr, .fth, .forth, .quarter
-    let args: Vec<String> = std::env::args().collect();
-    if args.len() > 1 {
-        let filename = &args[1];
-        println!("Loading {}", filename);
-        match load_file(filename, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory) {
+    if let Some(file) = filename {
+        println!("Loading {}", file);
+        match load_file(&file, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, no_jit) {
             Ok(_) => {
                 return;
             }
             Err(e) => {
-                eprintln!("Error loading {}: {}", filename, e);
+                eprintln!("Error loading {}: {}", file, e);
                 std::process::exit(1);
             }
         }
@@ -95,7 +138,10 @@ fn main() {
                                 if let Err(e) = ast.validate(&dict) {
                                     println!("{}", e);
                                 } else {
-                                    dict.add_compiled(word_name, ast);
+                                    // Try JIT compilation, fall back to interpreter
+                                    if !try_jit_compile(word_name.clone(), &ast, &mut dict, no_jit) {
+                                        dict.add_compiled(word_name, ast);
+                                    }
                                     println!("ok");
                                 }
                             }
@@ -119,7 +165,7 @@ fn main() {
                     }
 
                     let filename = tokens[1];
-                    match load_file(filename, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory) {
+                    match load_file(filename, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, no_jit) {
                         Ok(_) => {
                             println!("ok");
                         }
@@ -145,7 +191,10 @@ fn main() {
                                 if let Err(e) = ast.validate(&dict) {
                                     println!("{}", e);
                                 } else {
-                                    dict.add_compiled(word_name, ast);
+                                    // Try JIT compilation, fall back to interpreter
+                                    if !try_jit_compile(word_name.clone(), &ast, &mut dict, no_jit) {
+                                        dict.add_compiled(word_name, ast);
+                                    }
                                     println!("ok");
                                 }
                             }
@@ -234,7 +283,7 @@ fn main() {
                     let s_quote_end = tokens.iter().position(|&t| t.ends_with('"') && t != "S\"");
                     if let Some(_end_idx) = s_quote_end {
                         let all_tokens_str = tokens.join(" ");
-                        match quarter::execute_line(&all_tokens_str, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory) {
+                        match quarter::execute_line(&all_tokens_str, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, no_jit) {
                             Ok(_) => println!("ok"),
                             Err(e) => println!("{}", e),
                         }

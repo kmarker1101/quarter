@@ -47,21 +47,21 @@ fn test_variable_basic() {
     let mut memory = Memory::new();
 
     // Create a variable
-    execute_line("VARIABLE X", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("VARIABLE X", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
 
     // X should push its address (which should be at initial HERE = 131072)
-    execute_line("X", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("X", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
     let addr = stack.pop(&mut memory).unwrap();
     assert_eq!(addr, 131072);
 
     // Store a value
-    execute_line("42 X !", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("42 X !", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
 
     // Fetch the value
-    execute_line("X @", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("X @", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(42));
 }
@@ -75,23 +75,23 @@ fn test_variable_multiple() {
     let mut memory = Memory::new();
 
     // Create two variables
-    execute_line("VARIABLE FOO", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("VARIABLE FOO", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
-    execute_line("VARIABLE BAR", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("VARIABLE BAR", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
 
     // Store different values
-    execute_line("10 FOO !", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("10 FOO !", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
-    execute_line("20 BAR !", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("20 BAR !", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
 
     // Fetch and verify
-    execute_line("FOO @", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("FOO @", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(10));
 
-    execute_line("BAR @", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("BAR @", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(20));
 }
@@ -105,16 +105,16 @@ fn test_constant_basic() {
     let mut memory = Memory::new();
 
     // Create a constant
-    execute_line("100 CONSTANT HUNDRED", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("100 CONSTANT HUNDRED", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
 
     // HUNDRED should push 100
-    execute_line("HUNDRED", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("HUNDRED", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(100));
 
     // Can use multiple times
-    execute_line("HUNDRED HUNDRED +", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("HUNDRED HUNDRED +", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(200));
 }
@@ -128,17 +128,17 @@ fn test_constant_in_definition() {
     let mut memory = Memory::new();
 
     // Create constants
-    execute_line("10 CONSTANT TEN", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("10 CONSTANT TEN", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
-    execute_line("5 CONSTANT FIVE", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("5 CONSTANT FIVE", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
 
     // Use in a word definition
-    execute_line(": SUM TEN FIVE + ;", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line(": SUM TEN FIVE + ;", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
 
     // Execute the word
-    execute_line("SUM", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("SUM", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(15));
 }
@@ -152,15 +152,15 @@ fn test_variable_constant_together() {
     let mut memory = Memory::new();
 
     // Create a variable and a constant
-    execute_line("VARIABLE COUNTER", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("VARIABLE COUNTER", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
-    execute_line("42 CONSTANT ANSWER", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("42 CONSTANT ANSWER", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
 
     // Use them together
-    execute_line("ANSWER COUNTER !", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("ANSWER COUNTER !", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
-    execute_line("COUNTER @", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("COUNTER @", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(42));
 }
@@ -174,16 +174,16 @@ fn test_here_after_variables() {
     let mut memory = Memory::new();
 
     // Get initial HERE
-    execute_line("HERE", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("HERE", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
     let initial = stack.pop(&mut memory).unwrap();
 
     // Create a variable (allocates 4 bytes)
-    execute_line("VARIABLE X", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("VARIABLE X", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
 
     // HERE should be 4 bytes higher
-    execute_line("HERE", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("HERE", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(initial + 4));
 }
@@ -234,11 +234,11 @@ fn test_create_basic() {
     let mut memory = Memory::new();
 
     // CREATE BUFFER should create a word that pushes an address
-    execute_line("CREATE BUFFER", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("CREATE BUFFER", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
 
     // BUFFER should push its address
-    execute_line("BUFFER", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("BUFFER", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
     let addr = stack.pop(&mut memory).unwrap();
     assert_eq!(addr, 131072); // Initial HERE
@@ -253,23 +253,23 @@ fn test_create_with_allot() {
     let mut memory = Memory::new();
 
     // CREATE BUFFER 100 ALLOT
-    execute_line("CREATE BUFFER 100 ALLOT", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("CREATE BUFFER 100 ALLOT", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
 
     // BUFFER should push its address
-    execute_line("BUFFER", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("BUFFER", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
     let buffer_addr = stack.pop(&mut memory).unwrap();
 
     // Store and fetch from the buffer
-    execute_line("42 BUFFER !", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("42 BUFFER !", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
-    execute_line("BUFFER @", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("BUFFER @", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(42));
 
     // HERE should be 100 bytes past BUFFER
-    execute_line("HERE", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("HERE", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(buffer_addr + 100));
 }
@@ -283,17 +283,17 @@ fn test_create_multiple_buffers() {
     let mut memory = Memory::new();
 
     // Create two buffers
-    execute_line("CREATE BUF1 20 ALLOT", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("CREATE BUF1 20 ALLOT", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
-    execute_line("CREATE BUF2 30 ALLOT", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("CREATE BUF2 30 ALLOT", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
 
     // Get their addresses
-    execute_line("BUF1", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("BUF1", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
     let buf1_addr = stack.pop(&mut memory).unwrap();
 
-    execute_line("BUF2", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("BUF2", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
     let buf2_addr = stack.pop(&mut memory).unwrap();
 
@@ -301,17 +301,17 @@ fn test_create_multiple_buffers() {
     assert_eq!(buf2_addr, buf1_addr + 20);
 
     // Store different values
-    execute_line("100 BUF1 !", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("100 BUF1 !", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
-    execute_line("200 BUF2 !", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("200 BUF2 !", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
 
     // Fetch and verify
-    execute_line("BUF1 @", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("BUF1 @", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(100));
 
-    execute_line("BUF2 @", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory)
+    execute_line("BUF2 @", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false)
         .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(200));
 }

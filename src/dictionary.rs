@@ -2,19 +2,30 @@ use crate::words;
 use crate::{ast::AstNode, stack::Stack};
 use std::collections::HashMap;
 
+// Type alias for JIT-compiled Forth functions
+// Function signature: void word(u8* memory, usize* sp, usize* rp)
+// - memory: pointer to the start of the memory buffer
+// - sp: pointer to stack pointer (can be read and modified)
+// - rp: pointer to return stack pointer (can be read and modified)
+pub type JITFunction = unsafe extern "C" fn(*mut u8, *mut usize, *mut usize);
+
 pub enum Word {
     Primitive(fn(&mut Stack, &crate::LoopStack, &mut crate::ReturnStack, &mut crate::Memory)),
     Compiled(AstNode),
+    JITCompiled(JITFunction),
 }
 
 pub struct Dictionary {
     words: HashMap<String, Word>,
+    // Store JIT compilers to keep execution engines alive
+    jit_compilers: Vec<Box<crate::llvm_codegen::Compiler<'static>>>,
 }
 
 impl Dictionary {
     pub fn new() -> Self {
         let mut dict = Dictionary {
             words: HashMap::new(),
+            jit_compilers: Vec::new(),
         };
 
         // Register built-in words as Primitives
@@ -81,6 +92,15 @@ impl Dictionary {
         self.words.insert(name, Word::Compiled(ast));
     }
 
+    pub fn add_jit_compiled(&mut self, name: String, func: JITFunction) {
+        self.words.insert(name, Word::JITCompiled(func));
+    }
+
+    pub fn add_jit_compiled_with_compiler(&mut self, name: String, func: JITFunction, compiler: Box<crate::llvm_codegen::Compiler<'static>>) {
+        self.words.insert(name, Word::JITCompiled(func));
+        self.jit_compilers.push(compiler);
+    }
+
     pub fn has_word(&self, word: &str) -> bool {
         self.words.contains_key(word)
     }
@@ -105,6 +125,18 @@ impl Dictionary {
                         Err(msg) if msg == "EXIT" => Ok(()),
                         result => result,
                     }
+                }
+                Word::JITCompiled(jit_fn) => {
+                    // Execute JIT-compiled native code
+                    // Pass memory buffer and mutable references to sp/rp
+                    let memory_ptr = memory.as_mut_ptr();
+                    let sp_ptr = stack.sp_mut_ptr();
+                    let rp_ptr = return_stack.rp_mut_ptr();
+
+                    unsafe {
+                        jit_fn(memory_ptr, sp_ptr, rp_ptr);
+                    }
+                    Ok(())
                 }
             }
         } else {
