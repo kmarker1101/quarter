@@ -1,8 +1,85 @@
 use quarter::{Dictionary, LoopStack, Stack, load_file, load_stdlib, parse_tokens};
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
+use std::sync::atomic::{AtomicBool, Ordering};
 
-/// Attempt to JIT compile an AST to native code and store in dictionary
+/// Track whether the Forth compiler has been loaded
+static FORTH_COMPILER_LOADED: AtomicBool = AtomicBool::new(false);
+
+/// Attempt to compile using the Forth self-hosting compiler
+/// Returns true if successful, false otherwise
+fn try_forth_compile(
+    name: String,
+    ast: &quarter::AstNode,
+    dict: &mut quarter::Dictionary,
+    stack: &mut quarter::Stack,
+    loop_stack: &mut quarter::LoopStack,
+    return_stack: &mut quarter::ReturnStack,
+    memory: &mut quarter::Memory,
+    use_forth_compiler: bool,
+    no_jit: bool,
+    dump_ir: bool,
+    verify_ir: bool,
+) -> bool {
+    if !use_forth_compiler {
+        return false;
+    }
+
+    // Load the Forth compiler if not already loaded
+    if !FORTH_COMPILER_LOADED.load(Ordering::Relaxed) {
+        // Load stdlib first
+        if let Err(e) = load_file("stdlib/core.fth", stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir) {
+            eprintln!("Failed to load stdlib for Forth compiler: {}", e);
+            return false;
+        }
+        // Load compiler
+        if let Err(e) = load_file("forth/compiler.fth", stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir) {
+            eprintln!("Failed to load Forth compiler: {}", e);
+            return false;
+        }
+        FORTH_COMPILER_LOADED.store(true, Ordering::Relaxed);
+    }
+
+    // Register the AST
+    use quarter::ast_forth::ast_register_node;
+    let ast_handle = ast_register_node(ast.clone());
+
+    // Write word name to memory at address 302000
+    let name_addr = 302000;
+    for (i, ch) in name.bytes().enumerate() {
+        // Store each character as a byte
+        if let Err(_) = memory.store(name_addr + i, ch as i32) {
+            return false;
+        }
+    }
+
+    // Push arguments for COMPILE-WORD: ( ast-handle name-addr name-len -- fn-ptr )
+    stack.push(ast_handle, memory);
+    stack.push(name_addr as i32, memory);
+    stack.push(name.len() as i32, memory);
+
+    // Execute COMPILE-WORD
+    if let Err(e) = dict.execute_word("COMPILE-WORD", stack, loop_stack, return_stack, memory) {
+        eprintln!("Forth compiler error: {}", e);
+        return false;
+    }
+
+    // Get function pointer from stack
+    if let Some(fn_ptr) = stack.pop(memory) {
+        // Cast to JITFunction
+        let jit_fn: quarter::dictionary::JITFunction = unsafe {
+            std::mem::transmute(fn_ptr as *const ())
+        };
+
+        // Register in dictionary
+        dict.add_jit_compiled(name, jit_fn);
+        return true;
+    }
+
+    false
+}
+
+/// Attempt to JIT compile an AST to native code using Rust LLVM codegen
 /// Returns true if successful, false otherwise
 fn try_jit_compile(name: String, ast: &quarter::AstNode, dict: &mut quarter::Dictionary, no_jit: bool, dump_ir: bool, verify_ir: bool) -> bool {
     if no_jit {
@@ -10,11 +87,19 @@ fn try_jit_compile(name: String, ast: &quarter::AstNode, dict: &mut quarter::Dic
     }
 
     use inkwell::context::Context;
-    use quarter::llvm_codegen::Compiler;
+    use quarter::llvm_codegen::{Compiler, register_jit_function};
 
-    // Create LLVM context - leak it to make it 'static
-    let context = Box::leak(Box::new(Context::create()));
-    let mut compiler = match Compiler::new(context) {
+    // Create LLVM context in a Box so it has a stable memory location
+    let boxed_context = Box::new(Context::create());
+
+    // SAFETY: Create a 'static reference to the boxed context.
+    // This is safe because the Box will be stored in Dictionary.jit_contexts
+    // and won't be dropped until Dictionary is dropped.
+    let context_ref: &'static Context = unsafe {
+        &*(boxed_context.as_ref() as *const Context)
+    };
+
+    let mut compiler = match Compiler::new(context_ref) {
         Ok(c) => c,
         Err(_) => return false,
     };
@@ -37,8 +122,16 @@ fn try_jit_compile(name: String, ast: &quarter::AstNode, dict: &mut quarter::Dic
                 }
             }
 
+            // Register the JIT function in the global registry
+            // This allows other words being compiled later to call this word
+            if let Err(e) = register_jit_function(name.clone(), jit_fn) {
+                eprintln!("Failed to register JIT function {}: {}", name, e);
+                return false;
+            }
+
             // Add the JIT function to the dictionary
-            dict.add_jit_compiled_with_compiler(name, jit_fn, Box::new(compiler));
+            // IMPORTANT: We must keep both context and compiler alive so the JIT code memory stays valid
+            dict.add_jit_compiled_with_compiler(name, jit_fn, boxed_context, Box::new(compiler));
             true
         },
         Err(_) => false,
@@ -57,6 +150,7 @@ fn main() {
     let mut no_jit = false;
     let mut dump_ir = false;
     let mut verify_ir = false;
+    let mut use_forth_compiler = false;
     let mut filename: Option<String> = None;
 
     for arg in args.iter().skip(1) {
@@ -66,6 +160,8 @@ fn main() {
             dump_ir = true;
         } else if arg == "--verify-ir" {
             verify_ir = true;
+        } else if arg == "--forth-compiler" {
+            use_forth_compiler = true;
         } else if !arg.starts_with("--") {
             filename = Some(arg.clone());
         }
@@ -79,6 +175,9 @@ fn main() {
     }
     if verify_ir {
         println!("IR verification enabled");
+    }
+    if use_forth_compiler {
+        println!("Using Forth self-hosting compiler");
     }
 
     // Load standard library
@@ -165,8 +264,29 @@ fn main() {
                                 if let Err(e) = ast.validate_with_name(&dict, Some(&word_name)) {
                                     println!("{}", e);
                                 } else {
-                                    // Try JIT compilation, fall back to interpreter
-                                    if !try_jit_compile(word_name.clone(), &ast, &mut dict, no_jit, dump_ir, verify_ir) {
+                                    // Skip JIT compilation for word redefinitions to avoid memory leaks and registry collisions
+                                    // When redefining, always use interpreted mode
+                                    let is_redefinition = dict.has_word(&word_name);
+                                    if !is_redefinition {
+                                        // Try Forth compiler first, fall back to Rust compiler
+                                        let compiled = try_forth_compile(
+                                            word_name.clone(),
+                                            &ast,
+                                            &mut dict,
+                                            &mut stack,
+                                            &mut loop_stack,
+                                            &mut return_stack,
+                                            &mut memory,
+                                            use_forth_compiler,
+                                            no_jit,
+                                            dump_ir,
+                                            verify_ir,
+                                        ) || try_jit_compile(word_name.clone(), &ast, &mut dict, no_jit, dump_ir, verify_ir);
+
+                                        if !compiled {
+                                            dict.add_compiled(word_name, ast);
+                                        }
+                                    } else {
                                         dict.add_compiled(word_name, ast);
                                     }
                                     println!("ok");
@@ -218,8 +338,29 @@ fn main() {
                                 if let Err(e) = ast.validate_with_name(&dict, Some(&word_name)) {
                                     println!("{}", e);
                                 } else {
-                                    // Try JIT compilation, fall back to interpreter
-                                    if !try_jit_compile(word_name.clone(), &ast, &mut dict, no_jit, dump_ir, verify_ir) {
+                                    // Skip JIT compilation for word redefinitions to avoid memory leaks and registry collisions
+                                    // When redefining, always use interpreted mode
+                                    let is_redefinition = dict.has_word(&word_name);
+                                    if !is_redefinition {
+                                        // Try Forth compiler first, fall back to Rust compiler
+                                        let compiled = try_forth_compile(
+                                            word_name.clone(),
+                                            &ast,
+                                            &mut dict,
+                                            &mut stack,
+                                            &mut loop_stack,
+                                            &mut return_stack,
+                                            &mut memory,
+                                            use_forth_compiler,
+                                            no_jit,
+                                            dump_ir,
+                                            verify_ir,
+                                        ) || try_jit_compile(word_name.clone(), &ast, &mut dict, no_jit, dump_ir, verify_ir);
+
+                                        if !compiled {
+                                            dict.add_compiled(word_name, ast);
+                                        }
+                                    } else {
                                         dict.add_compiled(word_name, ast);
                                     }
                                     println!("ok");

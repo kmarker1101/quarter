@@ -18,7 +18,11 @@ pub enum Word {
 pub struct Dictionary {
     words: HashMap<String, Word>,
     // Store JIT compilers to keep execution engines alive
+    // IMPORTANT: Must be declared before jit_contexts so it's dropped first!
     jit_compilers: Vec<Box<crate::llvm_codegen::Compiler<'static>>>,
+    // Store LLVM contexts (in Box so they don't move when Vec resizes)
+    // IMPORTANT: Must be declared after jit_compilers so contexts outlive compilers
+    jit_contexts: Vec<Box<inkwell::context::Context>>,
 }
 
 impl Dictionary {
@@ -26,6 +30,7 @@ impl Dictionary {
         let mut dict = Dictionary {
             words: HashMap::new(),
             jit_compilers: Vec::new(),
+            jit_contexts: Vec::new(),
         };
 
         // Register built-in words as Primitives
@@ -36,6 +41,7 @@ impl Dictionary {
         dict.add_primitive("/", words::divide);
         dict.add_primitive("DUP", words::dup);
         dict.add_primitive("SWAP", words::swap);
+        dict.add_primitive("PICK", words::pick);
         dict.add_primitive(".S", words::dot_s);
         dict.add_primitive("U.", words::u_dot);
         dict.add_primitive(".R", words::dot_r);
@@ -46,6 +52,7 @@ impl Dictionary {
         // NEGATE, ABS now defined in core.fth
         dict.add_primitive("CR", words::cr);
         dict.add_primitive("DROP", words::drop);
+        dict.add_primitive("DEPTH", words::depth);
         // OVER now defined in core.fth
         dict.add_primitive("/MOD", words::slash_modulo);
         dict.add_primitive("I", words::loop_i);
@@ -77,6 +84,56 @@ impl Dictionary {
         dict.add_primitive("ALLOT", words::allot);
         dict.add_primitive(",", words::comma);
 
+        // LLVM primitives for self-hosting compiler
+        dict.add_primitive("LLVM-CREATE-CONTEXT", words::llvm_create_context_word);
+        dict.add_primitive("LLVM-CREATE-MODULE", words::llvm_create_module_word);
+        dict.add_primitive("LLVM-DECLARE-EXTERNAL", words::llvm_declare_external_word);
+        dict.add_primitive("LLVM-CREATE-BUILDER", words::llvm_create_builder_word);
+        dict.add_primitive("LLVM-CREATE-FUNCTION", words::llvm_create_function_word);
+        dict.add_primitive("LLVM-MODULE-GET-FUNCTION", words::llvm_module_get_function_word);
+        dict.add_primitive("LLVM-CREATE-BLOCK", words::llvm_create_block_word);
+        dict.add_primitive("LLVM-POSITION-AT-END", words::llvm_position_at_end_word);
+        dict.add_primitive("LLVM-BUILD-RET-VOID", words::llvm_build_ret_void_word);
+        dict.add_primitive("LLVM-BUILD-RET", words::llvm_build_ret_word);
+        dict.add_primitive("LLVM-CREATE-JIT", words::llvm_create_jit_word);
+        dict.add_primitive("LLVM-GET-FUNCTION", words::llvm_get_function_word);
+
+        // LLVM IR builder primitives
+        dict.add_primitive("LLVM-BUILD-CONST-INT", words::llvm_build_const_int_word);
+        dict.add_primitive("LLVM-BUILD-LOAD", words::llvm_build_load_word);
+        dict.add_primitive("LLVM-BUILD-STORE", words::llvm_build_store_word);
+        dict.add_primitive("LLVM-BUILD-GEP", words::llvm_build_gep_word);
+        dict.add_primitive("LLVM-BUILD-ADD", words::llvm_build_add_word);
+        dict.add_primitive("LLVM-BUILD-SUB", words::llvm_build_sub_word);
+        dict.add_primitive("LLVM-BUILD-MUL", words::llvm_build_mul_word);
+        dict.add_primitive("LLVM-BUILD-BR", words::llvm_build_br_word);
+        dict.add_primitive("LLVM-BUILD-COND-BR", words::llvm_build_cond_br_word);
+        dict.add_primitive("LLVM-BUILD-ICMP", words::llvm_build_icmp_word);
+        dict.add_primitive("LLVM-BUILD-CALL", words::llvm_build_call_word);
+        dict.add_primitive("LLVM-GET-PARAM", words::llvm_get_param_word);
+        dict.add_primitive("LLVM-BUILD-PHI", words::llvm_build_phi_word);
+        dict.add_primitive("LLVM-PHI-ADD-INCOMING", words::llvm_phi_add_incoming_word);
+        dict.add_primitive("LLVM-GET-INSERT-BLOCK", words::llvm_get_insert_block_word);
+
+        // AST inspection primitives
+        dict.add_primitive("AST-TYPE", words::ast_get_type_word);
+        dict.add_primitive("AST-GET-NUMBER", words::ast_get_number_word);
+        dict.add_primitive("AST-GET-WORD", words::ast_get_word_word);
+        dict.add_primitive("AST-GET-STRING", words::ast_get_string_word);
+        dict.add_primitive("AST-SEQ-LENGTH", words::ast_seq_length_word);
+        dict.add_primitive("AST-SEQ-CHILD", words::ast_seq_child_word);
+        dict.add_primitive("AST-IF-THEN", words::ast_if_then_word);
+        dict.add_primitive("AST-IF-ELSE", words::ast_if_else_word);
+        dict.add_primitive("AST-LOOP-BODY", words::ast_loop_body_word);
+        dict.add_primitive("AST-LOOP-CONDITION", words::ast_loop_condition_word);
+        dict.add_primitive("AST-LOOP-INCREMENT", words::ast_loop_increment_word);
+
+        // Test primitives for compiler development
+        dict.add_primitive("TEST-AST-CREATE", words::test_ast_create_word);
+
+        // JIT word registration
+        dict.add_primitive("REGISTER-JIT-WORD", words::register_jit_word);
+
         dict
     }
 
@@ -96,9 +153,20 @@ impl Dictionary {
         self.words.insert(name, Word::JITCompiled(func));
     }
 
-    pub fn add_jit_compiled_with_compiler(&mut self, name: String, func: JITFunction, compiler: Box<crate::llvm_codegen::Compiler<'static>>) {
+    pub fn add_jit_compiled_with_compiler(&mut self, name: String, func: JITFunction, boxed_context: Box<inkwell::context::Context>, compiler: Box<crate::llvm_codegen::Compiler>) {
+        // SAFETY: We're extending the lifetime of the compiler reference to 'static.
+        // This is safe because:
+        // 1. The Context is in a Box, so it won't move even if the Vec resizes
+        // 2. We store the Box in self.jit_contexts, so it lives as long as Dictionary
+        // 3. The Compiler references this Context and is stored in self.jit_compilers
+        // 4. Both are dropped together when Dictionary drops, so no dangling references
+        let static_compiler: Box<crate::llvm_codegen::Compiler<'static>> = unsafe {
+            std::mem::transmute(compiler)
+        };
+
+        self.jit_contexts.push(boxed_context);
+        self.jit_compilers.push(static_compiler);
         self.words.insert(name, Word::JITCompiled(func));
-        self.jit_compilers.push(compiler);
     }
 
     pub fn has_word(&self, word: &str) -> bool {

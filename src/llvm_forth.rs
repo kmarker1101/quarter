@@ -1,0 +1,834 @@
+// LLVM primitives exposed to Forth for self-hosting compiler
+//
+// This module provides a handle-based API for LLVM that Forth code can use.
+// Forth manipulates integer handles (IDs) and Rust maintains the actual LLVM objects.
+
+use inkwell::context::Context;
+use inkwell::module::Module;
+use inkwell::builder::Builder;
+use inkwell::execution_engine::ExecutionEngine;
+use inkwell::values::{FunctionValue, BasicValueEnum, PhiValue};
+use inkwell::basic_block::BasicBlock;
+use inkwell::OptimizationLevel;
+use inkwell::AddressSpace;
+use std::collections::HashMap;
+use std::cell::RefCell;
+
+thread_local! {
+    /// Thread-local registry of LLVM objects accessible from Forth
+    /// Using thread_local because LLVM types are not Send/Sync
+    static LLVM_REGISTRY: RefCell<LLVMRegistry> = RefCell::new(LLVMRegistry::new());
+}
+
+/// Handle types for different LLVM objects
+pub type ContextHandle = i32;
+pub type ModuleHandle = i32;
+pub type BuilderHandle = i32;
+pub type FunctionHandle = i32;
+pub type BlockHandle = i32;
+pub type ValueHandle = i32;
+pub type EngineHandle = i32;
+
+/// Registry storing all LLVM objects with handles
+pub struct LLVMRegistry {
+    next_id: i32,
+
+    // LLVM objects stored with their handles
+    contexts: HashMap<ContextHandle, &'static Context>,
+    modules: HashMap<ModuleHandle, Box<Module<'static>>>,
+    builders: HashMap<BuilderHandle, Box<Builder<'static>>>,
+    functions: HashMap<FunctionHandle, FunctionValue<'static>>,
+    blocks: HashMap<BlockHandle, BasicBlock<'static>>,
+    values: HashMap<ValueHandle, BasicValueEnum<'static>>,
+    engines: HashMap<EngineHandle, Box<ExecutionEngine<'static>>>,
+    phis: HashMap<ValueHandle, PhiValue<'static>>,
+}
+
+impl LLVMRegistry {
+    fn new() -> Self {
+        LLVMRegistry {
+            next_id: 1,
+            contexts: HashMap::new(),
+            modules: HashMap::new(),
+            builders: HashMap::new(),
+            functions: HashMap::new(),
+            blocks: HashMap::new(),
+            values: HashMap::new(),
+            engines: HashMap::new(),
+            phis: HashMap::new(),
+        }
+    }
+
+    fn next_handle(&mut self) -> i32 {
+        let id = self.next_id;
+        self.next_id += 1;
+        id
+    }
+
+    /// Create a new LLVM context and return its handle
+    pub fn create_context(&mut self) -> ContextHandle {
+        let context = Box::leak(Box::new(Context::create()));
+        let handle = self.next_handle();
+        self.contexts.insert(handle, context);
+        handle
+    }
+
+    /// Create a new module in the given context
+    pub fn create_module(&mut self, ctx_handle: ContextHandle, name: &str) -> Result<ModuleHandle, String> {
+        let context = self.contexts.get(&ctx_handle)
+            .ok_or_else(|| format!("Invalid context handle: {}", ctx_handle))?;
+
+        let module = context.create_module(name);
+        let handle = self.next_handle();
+        self.modules.insert(handle, Box::new(module));
+        Ok(handle)
+    }
+
+    /// Create a new builder in the given context
+    pub fn create_builder(&mut self, ctx_handle: ContextHandle) -> Result<BuilderHandle, String> {
+        let context = self.contexts.get(&ctx_handle)
+            .ok_or_else(|| format!("Invalid context handle: {}", ctx_handle))?;
+
+        let builder = context.create_builder();
+        let handle = self.next_handle();
+        self.builders.insert(handle, Box::new(builder));
+        Ok(handle)
+    }
+
+    /// Declare an external function (for calling primitives)
+    /// All primitives have signature: void fn(u8* memory, usize* sp, usize* rp)
+    pub fn declare_external_function(&mut self,
+                                     module_handle: ModuleHandle,
+                                     ctx_handle: ContextHandle,
+                                     name: &str) -> Result<(), String> {
+        let context = self.contexts.get(&ctx_handle)
+            .ok_or_else(|| format!("Invalid context handle: {}", ctx_handle))?;
+        let module = self.modules.get_mut(&module_handle)
+            .ok_or_else(|| format!("Invalid module handle: {}", module_handle))?;
+
+        // Create function type: void(i8*, i64*, i64*)
+        // Note: LLVM 15+ doesn't differentiate between pointer types
+        let void_type = context.void_type();
+        let ptr_type = context.ptr_type(inkwell::AddressSpace::default());
+
+        let param_types = &[
+            ptr_type.into(),   // memory pointer
+            ptr_type.into(),   // sp pointer
+            ptr_type.into(),   // rp pointer
+        ];
+
+        let fn_type = void_type.fn_type(param_types, false);
+
+        // Add function declaration to module
+        module.add_function(name, fn_type, None);
+
+        Ok(())
+    }
+
+    /// Create a new function in the given module
+    pub fn create_function(&mut self,
+                          module_handle: ModuleHandle,
+                          ctx_handle: ContextHandle,
+                          name: &str) -> Result<FunctionHandle, String> {
+        let context = self.contexts.get(&ctx_handle)
+            .ok_or_else(|| format!("Invalid context handle: {}", ctx_handle))?;
+
+        let module = self.modules.get(&module_handle)
+            .ok_or_else(|| format!("Invalid module handle: {}", module_handle))?;
+
+        // Create function signature: void fn(u8* memory, usize* sp, usize* rp)
+        let ptr_type = context.ptr_type(AddressSpace::default());
+        let void_type = context.void_type();
+        let fn_type = void_type.fn_type(&[ptr_type.into(), ptr_type.into(), ptr_type.into()], false);
+
+        let function = module.add_function(name, fn_type, None);
+        let handle = self.next_handle();
+        self.functions.insert(handle, function);
+        Ok(handle)
+    }
+
+    /// Get an existing function from the module by name
+    pub fn get_function(&mut self,
+                       module_handle: ModuleHandle,
+                       name: &str) -> Result<FunctionHandle, String> {
+        let module = self.modules.get(&module_handle)
+            .ok_or_else(|| format!("Invalid module handle: {}", module_handle))?;
+
+        let function = module.get_function(name)
+            .ok_or_else(|| format!("Function '{}' not found in module", name))?;
+
+        let handle = self.next_handle();
+        self.functions.insert(handle, function);
+        Ok(handle)
+    }
+
+    /// Create a basic block in the given function
+    pub fn create_block(&mut self,
+                        ctx_handle: ContextHandle,
+                        fn_handle: FunctionHandle,
+                        name: &str) -> Result<BlockHandle, String> {
+        let context = self.contexts.get(&ctx_handle)
+            .ok_or_else(|| format!("Invalid context handle: {}", ctx_handle))?;
+
+        let function = self.functions.get(&fn_handle)
+            .ok_or_else(|| format!("Invalid function handle: {}", fn_handle))?;
+
+        let block = context.append_basic_block(*function, name);
+        let handle = self.next_handle();
+        self.blocks.insert(handle, block);
+        Ok(handle)
+    }
+
+    /// Position builder at the end of a basic block
+    pub fn position_at_end(&mut self,
+                          builder_handle: BuilderHandle,
+                          block_handle: BlockHandle) -> Result<(), String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let block = self.blocks.get(&block_handle)
+            .ok_or_else(|| format!("Invalid block handle: {}", block_handle))?;
+
+        builder.position_at_end(*block);
+        Ok(())
+    }
+
+    /// Get a function parameter as a value
+    pub fn get_param(&mut self,
+                     fn_handle: FunctionHandle,
+                     index: u32) -> Result<ValueHandle, String> {
+        let function = self.functions.get(&fn_handle)
+            .ok_or_else(|| format!("Invalid function handle: {}", fn_handle))?;
+
+        let param = function.get_nth_param(index)
+            .ok_or_else(|| format!("Function has no parameter at index {}", index))?;
+
+        let handle = self.next_handle();
+        self.values.insert(handle, param);
+        Ok(handle)
+    }
+
+    /// Build a return void instruction
+    pub fn build_ret_void(&mut self, builder_handle: BuilderHandle) -> Result<(), String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        builder.build_return(None)
+            .map_err(|e| format!("Failed to build return: {}", e))?;
+        Ok(())
+    }
+
+    pub fn build_ret(&mut self, builder_handle: BuilderHandle, value_handle: ValueHandle) -> Result<(), String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+        let value = self.values.get(&value_handle)
+            .ok_or_else(|| format!("Invalid value handle: {}", value_handle))?;
+
+        builder.build_return(Some(value))
+            .map_err(|e| format!("Failed to build return: {}", e))?;
+        Ok(())
+    }
+
+    /// Create a JIT execution engine for the module
+    pub fn create_jit_engine(&mut self,
+                            module_handle: ModuleHandle) -> Result<EngineHandle, String> {
+        let module = self.modules.remove(&module_handle)
+            .ok_or_else(|| format!("Invalid module handle: {}", module_handle))?;
+
+        let engine = module.create_jit_execution_engine(OptimizationLevel::Aggressive)
+            .map_err(|e| format!("Failed to create JIT engine: {}", e))?;
+
+        let handle = self.next_handle();
+        self.engines.insert(handle, Box::new(engine));
+
+        // Put module back (engine owns it but we need to keep reference)
+        // Actually, ExecutionEngine takes ownership of module, so we can't put it back
+        Ok(handle)
+    }
+
+    /// Get a JIT-compiled function pointer
+    pub fn get_jit_function(&self,
+                           engine_handle: EngineHandle,
+                           name: &str) -> Result<usize, String> {
+        let engine = self.engines.get(&engine_handle)
+            .ok_or_else(|| format!("Invalid engine handle: {}", engine_handle))?;
+
+        unsafe {
+            let jit_fn = engine.get_function::<unsafe extern "C" fn(*mut u8, *mut usize, *mut usize)>(name)
+                .map_err(|e| format!("Failed to get JIT function: {}", e))?;
+            Ok(jit_fn.as_raw() as usize)
+        }
+    }
+
+    /// Build a constant integer
+    pub fn build_const_int(&mut self,
+                          ctx_handle: ContextHandle,
+                          value: i32) -> Result<ValueHandle, String> {
+        let context = self.contexts.get(&ctx_handle)
+            .ok_or_else(|| format!("Invalid context handle: {}", ctx_handle))?;
+
+        let i32_type = context.i32_type();
+        let const_val = i32_type.const_int(value as u64, true);
+
+        let handle = self.next_handle();
+        self.values.insert(handle, const_val.into());
+        Ok(handle)
+    }
+
+    /// Build load instruction
+    pub fn build_load(&mut self,
+                     builder_handle: BuilderHandle,
+                     ctx_handle: ContextHandle,
+                     ptr_handle: ValueHandle) -> Result<ValueHandle, String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let context = self.contexts.get(&ctx_handle)
+            .ok_or_else(|| format!("Invalid context handle: {}", ctx_handle))?;
+
+        let ptr_val = self.values.get(&ptr_handle)
+            .ok_or_else(|| format!("Invalid value handle: {}", ptr_handle))?;
+
+        let ptr = ptr_val.into_pointer_value();
+        let i32_type = context.i32_type();
+
+        let loaded = builder.build_load(i32_type, ptr, "loaded")
+            .map_err(|e| format!("Failed to build load: {}", e))?;
+
+        let handle = self.next_handle();
+        self.values.insert(handle, loaded);
+        Ok(handle)
+    }
+
+    /// Build store instruction
+    pub fn build_store(&mut self,
+                      builder_handle: BuilderHandle,
+                      value_handle: ValueHandle,
+                      ptr_handle: ValueHandle) -> Result<(), String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let value = self.values.get(&value_handle)
+            .ok_or_else(|| format!("Invalid value handle: {}", value_handle))?;
+
+        let ptr_val = self.values.get(&ptr_handle)
+            .ok_or_else(|| format!("Invalid pointer handle: {}", ptr_handle))?;
+
+        let ptr = ptr_val.into_pointer_value();
+
+        builder.build_store(ptr, *value)
+            .map_err(|e| format!("Failed to build store: {}", e))?;
+        Ok(())
+    }
+
+    /// Build GEP (GetElementPtr) instruction for pointer arithmetic
+    pub fn build_gep(&mut self,
+                    builder_handle: BuilderHandle,
+                    ctx_handle: ContextHandle,
+                    ptr_handle: ValueHandle,
+                    offset_handle: ValueHandle) -> Result<ValueHandle, String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let context = self.contexts.get(&ctx_handle)
+            .ok_or_else(|| format!("Invalid context handle: {}", ctx_handle))?;
+
+        let ptr_val = self.values.get(&ptr_handle)
+            .ok_or_else(|| format!("Invalid pointer handle: {}", ptr_handle))?;
+
+        let offset_val = self.values.get(&offset_handle)
+            .ok_or_else(|| format!("Invalid offset handle: {}", offset_handle))?;
+
+        let ptr = ptr_val.into_pointer_value();
+        let offset = offset_val.into_int_value();
+
+        let result = unsafe {
+            builder.build_gep(context.i8_type(), ptr, &[offset], "gep")
+                .map_err(|e| format!("Failed to build GEP: {}", e))?
+        };
+
+        let handle = self.next_handle();
+        self.values.insert(handle, result.into());
+        Ok(handle)
+    }
+
+    /// Build integer add instruction
+    pub fn build_add(&mut self,
+                    builder_handle: BuilderHandle,
+                    lhs_handle: ValueHandle,
+                    rhs_handle: ValueHandle) -> Result<ValueHandle, String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let lhs = self.values.get(&lhs_handle)
+            .ok_or_else(|| format!("Invalid LHS handle: {}", lhs_handle))?
+            .into_int_value();
+
+        let rhs = self.values.get(&rhs_handle)
+            .ok_or_else(|| format!("Invalid RHS handle: {}", rhs_handle))?
+            .into_int_value();
+
+        let result = builder.build_int_add(lhs, rhs, "add")
+            .map_err(|e| format!("Failed to build add: {}", e))?;
+
+        let handle = self.next_handle();
+        self.values.insert(handle, result.into());
+        Ok(handle)
+    }
+
+    /// Build integer sub instruction
+    pub fn build_sub(&mut self,
+                    builder_handle: BuilderHandle,
+                    lhs_handle: ValueHandle,
+                    rhs_handle: ValueHandle) -> Result<ValueHandle, String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let lhs = self.values.get(&lhs_handle)
+            .ok_or_else(|| format!("Invalid LHS handle: {}", lhs_handle))?
+            .into_int_value();
+
+        let rhs = self.values.get(&rhs_handle)
+            .ok_or_else(|| format!("Invalid RHS handle: {}", rhs_handle))?
+            .into_int_value();
+
+        let result = builder.build_int_sub(lhs, rhs, "sub")
+            .map_err(|e| format!("Failed to build sub: {}", e))?;
+
+        let handle = self.next_handle();
+        self.values.insert(handle, result.into());
+        Ok(handle)
+    }
+
+    /// Build integer mul instruction
+    pub fn build_mul(&mut self,
+                    builder_handle: BuilderHandle,
+                    lhs_handle: ValueHandle,
+                    rhs_handle: ValueHandle) -> Result<ValueHandle, String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let lhs = self.values.get(&lhs_handle)
+            .ok_or_else(|| format!("Invalid LHS handle: {}", lhs_handle))?
+            .into_int_value();
+
+        let rhs = self.values.get(&rhs_handle)
+            .ok_or_else(|| format!("Invalid RHS handle: {}", rhs_handle))?
+            .into_int_value();
+
+        let result = builder.build_int_mul(lhs, rhs, "mul")
+            .map_err(|e| format!("Failed to build mul: {}", e))?;
+
+        let handle = self.next_handle();
+        self.values.insert(handle, result.into());
+        Ok(handle)
+    }
+
+    /// Build unconditional branch
+    pub fn build_br(&mut self,
+                   builder_handle: BuilderHandle,
+                   block_handle: BlockHandle) -> Result<(), String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let block = self.blocks.get(&block_handle)
+            .ok_or_else(|| format!("Invalid block handle: {}", block_handle))?;
+
+        builder.build_unconditional_branch(*block)
+            .map_err(|e| format!("Failed to build branch: {}", e))?;
+        Ok(())
+    }
+
+    /// Build conditional branch
+    pub fn build_cond_br(&mut self,
+                        builder_handle: BuilderHandle,
+                        cond_handle: ValueHandle,
+                        then_block: BlockHandle,
+                        else_block: BlockHandle) -> Result<(), String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let cond = self.values.get(&cond_handle)
+            .ok_or_else(|| format!("Invalid condition handle: {}", cond_handle))?
+            .into_int_value();
+
+        let then_bb = self.blocks.get(&then_block)
+            .ok_or_else(|| format!("Invalid then block handle: {}", then_block))?;
+
+        let else_bb = self.blocks.get(&else_block)
+            .ok_or_else(|| format!("Invalid else block handle: {}", else_block))?;
+
+        builder.build_conditional_branch(cond, *then_bb, *else_bb)
+            .map_err(|e| format!("Failed to build conditional branch: {}", e))?;
+        Ok(())
+    }
+
+    /// Build integer comparison
+    pub fn build_icmp(&mut self,
+                     builder_handle: BuilderHandle,
+                     predicate: i32,  // 0=eq, 1=ne, 2=slt, 3=sle, 4=sgt, 5=sge
+                     lhs_handle: ValueHandle,
+                     rhs_handle: ValueHandle) -> Result<ValueHandle, String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let lhs = self.values.get(&lhs_handle)
+            .ok_or_else(|| format!("Invalid LHS handle: {}", lhs_handle))?
+            .into_int_value();
+
+        let rhs = self.values.get(&rhs_handle)
+            .ok_or_else(|| format!("Invalid RHS handle: {}", rhs_handle))?
+            .into_int_value();
+
+        use inkwell::IntPredicate;
+        let pred = match predicate {
+            0 => IntPredicate::EQ,
+            1 => IntPredicate::NE,
+            2 => IntPredicate::SLT,
+            3 => IntPredicate::SLE,
+            4 => IntPredicate::SGT,
+            5 => IntPredicate::SGE,
+            _ => return Err(format!("Invalid predicate: {}", predicate)),
+        };
+
+        let result = builder.build_int_compare(pred, lhs, rhs, "cmp")
+            .map_err(|e| format!("Failed to build comparison: {}", e))?;
+
+        let handle = self.next_handle();
+        self.values.insert(handle, result.into());
+        Ok(handle)
+    }
+
+    /// Build function call
+    pub fn build_call(&mut self,
+                     builder_handle: BuilderHandle,
+                     fn_handle: FunctionHandle,
+                     args: &[ValueHandle]) -> Result<(), String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let function = self.functions.get(&fn_handle)
+            .ok_or_else(|| format!("Invalid function handle: {}", fn_handle))?;
+
+        // Convert argument handles to BasicMetadataValueEnum
+        let mut arg_values = Vec::new();
+        for &arg_handle in args {
+            let val = self.values.get(&arg_handle)
+                .ok_or_else(|| format!("Invalid argument handle: {}", arg_handle))?;
+            arg_values.push((*val).into());
+        }
+
+        builder.build_call(*function, &arg_values, "call")
+            .map_err(|e| format!("Failed to build call: {}", e))?;
+        Ok(())
+    }
+
+    /// Build PHI node (for SSA merges in loops)
+    pub fn build_phi(&mut self,
+                    builder_handle: BuilderHandle,
+                    ctx_handle: ContextHandle,
+                    name: &str) -> Result<ValueHandle, String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let context = self.contexts.get(&ctx_handle)
+            .ok_or_else(|| format!("Invalid context handle: {}", ctx_handle))?;
+
+        let i32_type = context.i32_type();
+        let phi = builder.build_phi(i32_type, name)
+            .map_err(|e| format!("Failed to build phi: {}", e))?;
+
+        let handle = self.next_handle();
+        // Store PHI in both phis (for add_incoming) and values (for general use)
+        self.phis.insert(handle, phi);
+        self.values.insert(handle, phi.as_basic_value());
+        Ok(handle)
+    }
+
+    /// Add incoming value/block pair to PHI node
+    pub fn phi_add_incoming(&mut self,
+                           phi_handle: ValueHandle,
+                           value_handle: ValueHandle,
+                           block_handle: BlockHandle) -> Result<(), String> {
+        let phi = self.phis.get(&phi_handle)
+            .ok_or_else(|| format!("Invalid PHI handle: {}", phi_handle))?;
+
+        let value = self.values.get(&value_handle)
+            .ok_or_else(|| format!("Invalid value handle: {}", value_handle))?;
+
+        let block = self.blocks.get(&block_handle)
+            .ok_or_else(|| format!("Invalid block handle: {}", block_handle))?;
+
+        phi.add_incoming(&[(value, *block)]);
+        Ok(())
+    }
+
+    /// Get current insert block
+    pub fn get_insert_block(&mut self, builder_handle: BuilderHandle) -> Result<BlockHandle, String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let block = builder.get_insert_block()
+            .ok_or_else(|| format!("No insert block set"))?;
+
+        let handle = self.next_handle();
+        self.blocks.insert(handle, block);
+        Ok(handle)
+    }
+}
+
+// Public API functions that Forth will call
+
+/// Create a new LLVM context
+/// Stack: ( -- ctx-handle )
+pub fn llvm_create_context() -> Result<i32, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        Ok(registry.create_context())
+    })
+}
+
+/// Create a new module
+/// Stack: ( ctx-handle name-addr name-len -- module-handle )
+pub fn llvm_create_module(ctx_handle: i32, name: &str) -> Result<i32, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.create_module(ctx_handle, name)
+    })
+}
+
+/// Declare an external function in the module
+/// Stack: ( module-handle ctx-handle name-addr name-len -- )
+pub fn llvm_declare_external(module_handle: i32, ctx_handle: i32, name: &str) -> Result<(), String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.declare_external_function(module_handle, ctx_handle, name)
+    })
+}
+
+/// Create a new builder
+/// Stack: ( ctx-handle -- builder-handle )
+pub fn llvm_create_builder(ctx_handle: i32) -> Result<i32, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.create_builder(ctx_handle)
+    })
+}
+
+/// Create a new function
+/// Stack: ( module-handle ctx-handle name-addr name-len -- fn-handle )
+pub fn llvm_create_function(module_handle: i32, ctx_handle: i32, name: &str) -> Result<i32, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.create_function(module_handle, ctx_handle, name)
+    })
+}
+
+/// Get existing function from module by name
+/// Stack: ( module-handle name-addr name-len -- fn-handle )
+pub fn llvm_get_function(module_handle: i32, name: &str) -> Result<i32, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.get_function(module_handle, name)
+    })
+}
+
+/// Create a basic block
+/// Stack: ( ctx-handle fn-handle name-addr name-len -- block-handle )
+pub fn llvm_create_block(ctx_handle: i32, fn_handle: i32, name: &str) -> Result<i32, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.create_block(ctx_handle, fn_handle, name)
+    })
+}
+
+/// Position builder at end of block
+/// Stack: ( builder-handle block-handle -- )
+pub fn llvm_position_at_end(builder_handle: i32, block_handle: i32) -> Result<(), String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.position_at_end(builder_handle, block_handle)
+    })
+}
+
+/// Build return void instruction
+/// Stack: ( builder-handle -- )
+pub fn llvm_build_ret_void(builder_handle: i32) -> Result<(), String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_ret_void(builder_handle)
+    })
+}
+
+/// Build return instruction with value
+/// Stack: ( builder-handle value-handle -- )
+pub fn llvm_build_ret(builder_handle: i32, value_handle: i32) -> Result<(), String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_ret(builder_handle, value_handle)
+    })
+}
+
+/// Create JIT execution engine
+/// Stack: ( module-handle -- engine-handle )
+pub fn llvm_create_jit_engine(module_handle: i32) -> Result<i32, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.create_jit_engine(module_handle)
+    })
+}
+
+/// Get JIT function pointer
+/// Stack: ( engine-handle name-addr name-len -- fn-ptr )
+pub fn llvm_get_jit_function(engine_handle: i32, name: &str) -> Result<usize, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let registry = cell.borrow();
+        registry.get_jit_function(engine_handle, name)
+    })
+}
+
+// Additional IR builder primitives
+
+/// Build constant integer
+/// Stack: ( ctx-handle value -- value-handle )
+pub fn llvm_build_const_int(ctx_handle: i32, value: i32) -> Result<i32, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_const_int(ctx_handle, value)
+    })
+}
+
+/// Build load instruction
+/// Stack: ( builder-handle ctx-handle ptr-handle -- value-handle )
+pub fn llvm_build_load(builder_handle: i32, ctx_handle: i32, ptr_handle: i32) -> Result<i32, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_load(builder_handle, ctx_handle, ptr_handle)
+    })
+}
+
+/// Build store instruction
+/// Stack: ( builder-handle value-handle ptr-handle -- )
+pub fn llvm_build_store(builder_handle: i32, value_handle: i32, ptr_handle: i32) -> Result<(), String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_store(builder_handle, value_handle, ptr_handle)
+    })
+}
+
+/// Build GEP instruction
+/// Stack: ( builder-handle ctx-handle ptr-handle offset-handle -- result-handle )
+pub fn llvm_build_gep(builder_handle: i32, ctx_handle: i32, ptr_handle: i32, offset_handle: i32) -> Result<i32, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_gep(builder_handle, ctx_handle, ptr_handle, offset_handle)
+    })
+}
+
+/// Build add instruction
+/// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
+pub fn llvm_build_add(builder_handle: i32, lhs_handle: i32, rhs_handle: i32) -> Result<i32, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_add(builder_handle, lhs_handle, rhs_handle)
+    })
+}
+
+/// Build sub instruction
+/// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
+pub fn llvm_build_sub(builder_handle: i32, lhs_handle: i32, rhs_handle: i32) -> Result<i32, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_sub(builder_handle, lhs_handle, rhs_handle)
+    })
+}
+
+/// Build mul instruction
+/// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
+pub fn llvm_build_mul(builder_handle: i32, lhs_handle: i32, rhs_handle: i32) -> Result<i32, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_mul(builder_handle, lhs_handle, rhs_handle)
+    })
+}
+
+/// Build unconditional branch
+/// Stack: ( builder-handle block-handle -- )
+pub fn llvm_build_br(builder_handle: i32, block_handle: i32) -> Result<(), String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_br(builder_handle, block_handle)
+    })
+}
+
+/// Build conditional branch
+/// Stack: ( builder-handle cond-handle then-block else-block -- )
+pub fn llvm_build_cond_br(builder_handle: i32, cond_handle: i32, then_block: i32, else_block: i32) -> Result<(), String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_cond_br(builder_handle, cond_handle, then_block, else_block)
+    })
+}
+
+/// Build integer comparison
+/// Stack: ( builder-handle predicate lhs-handle rhs-handle -- result-handle )
+/// Predicates: 0=eq, 1=ne, 2=slt, 3=sle, 4=sgt, 5=sge
+pub fn llvm_build_icmp(builder_handle: i32, predicate: i32, lhs_handle: i32, rhs_handle: i32) -> Result<i32, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_icmp(builder_handle, predicate, lhs_handle, rhs_handle)
+    })
+}
+
+/// Build function call with up to 3 arguments (for now)
+/// Stack: ( builder-handle fn-handle arg1 arg2 arg3 nargs -- )
+pub fn llvm_build_call(builder_handle: i32, fn_handle: i32, arg1: i32, arg2: i32, arg3: i32, nargs: i32) -> Result<(), String> {
+    let args: Vec<i32> = match nargs {
+        0 => vec![],
+        1 => vec![arg1],
+        2 => vec![arg2, arg1],  // Reverse order due to stack
+        3 => vec![arg3, arg2, arg1],
+        _ => return Err(format!("Unsupported number of arguments: {}", nargs)),
+    };
+
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_call(builder_handle, fn_handle, &args)
+    })
+}
+
+/// Get function parameter as value
+/// Stack: ( fn-handle index -- value-handle )
+pub fn llvm_get_param(fn_handle: i32, index: i32) -> Result<i32, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.get_param(fn_handle, index as u32)
+    })
+}
+
+/// Build PHI node (for SSA merges in loops)
+/// Stack: ( builder-handle ctx-handle name-addr name-len -- phi-handle )
+pub fn llvm_build_phi(builder_handle: i32, ctx_handle: i32, name: &str) -> Result<i32, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_phi(builder_handle, ctx_handle, name)
+    })
+}
+
+/// Add incoming value/block pair to PHI node
+/// Stack: ( phi-handle value-handle block-handle -- )
+pub fn llvm_phi_add_incoming(phi_handle: i32, value_handle: i32, block_handle: i32) -> Result<(), String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.phi_add_incoming(phi_handle, value_handle, block_handle)
+    })
+}
+
+/// Get current insert block
+/// Stack: ( builder-handle -- block-handle )
+pub fn llvm_get_insert_block(builder_handle: i32) -> Result<i32, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.get_insert_block(builder_handle)
+    })
+}

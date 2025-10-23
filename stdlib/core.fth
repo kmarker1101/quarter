@@ -31,6 +31,7 @@
 
 \ Double-cell stack operations
 : ROT ( x1 x2 x3 -- x2 x3 x1 ) >R SWAP R> SWAP ;
+: -ROT ( x1 x2 x3 -- x3 x1 x2 ) ROT ROT ;
 : 2DUP ( a b -- a b a b ) OVER OVER ;
 : 2DROP ( a b -- ) DROP DROP ;
 : 2SWAP ( a b c d -- c d a b ) ROT >R ROT R> ;
@@ -46,6 +47,16 @@
 : +! ( n addr -- ) DUP @ ROT + SWAP ! ;
 : 1+ ( n -- n+1 ) 1 + ;
 : 1- ( n -- n-1 ) 1 - ;
+: 2+ ( n -- n+2 ) 2 + ;
+: 3+ ( n -- n+3 ) 3 + ;
+: 4+ ( n -- n+4 ) 4 + ;
+: 5+ ( n -- n+5 ) 5 + ;
+: 6+ ( n -- n+6 ) 6 + ;
+: 7+ ( n -- n+7 ) 7 + ;
+: 8+ ( n -- n+8 ) 8 + ;
+: 9+ ( n -- n+9 ) 9 + ;
+: 10+ ( n -- n+10 ) 10 + ;
+: 11+ ( n -- n+11 ) 11 + ;
 : 2* ( n -- n*2 ) 2 * ;
 : 2/ ( n -- n/2 ) 2 / ;
 

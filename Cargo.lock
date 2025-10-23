@@ -209,6 +209,7 @@ name = "quarter"
 version = "0.1.0"
 dependencies = [
  "inkwell",
+ "lazy_static",
  "rustyline",
 ]
 
