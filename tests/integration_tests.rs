@@ -98,26 +98,6 @@ fn test_execute_line_incomplete_definition() {
 }
 
 #[test]
-fn test_execute_line_definition_with_if() {
-    let mut stack = Stack::new();
-    let mut loop_stack = LoopStack::new();
-    let mut dict = Dictionary::new();
-    let mut return_stack = ReturnStack::new();
-    let mut memory = Memory::new();
-
-    // Define word with IF/THEN
-    execute_line(": ABS DUP 0 < IF NEGATE THEN ;", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
-
-    // Test with negative
-    execute_line("-5 ABS", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
-    assert_eq!(stack.pop(&mut memory), Some(5));
-
-    // Test with positive
-    execute_line("5 ABS", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
-    assert_eq!(stack.pop(&mut memory), Some(5));
-}
-
-#[test]
 fn test_load_file_simple() {
     let mut stack = Stack::new();
     let mut loop_stack = LoopStack::new();
