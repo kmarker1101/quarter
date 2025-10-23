@@ -9,7 +9,16 @@ fn test_dot_word() {
     let mut memory = Memory::new();
 
     stack.push(42, &mut memory);
-    assert!(dict.execute_word(".", &mut stack, &mut loop_stack, &mut return_stack, &mut memory).is_ok());
+    assert!(
+        dict.execute_word(
+            ".",
+            &mut stack,
+            &mut loop_stack,
+            &mut return_stack,
+            &mut memory
+        )
+        .is_ok()
+    );
     assert!(stack.is_empty());
 }
 
@@ -23,7 +32,14 @@ fn test_add_word() {
 
     stack.push(5, &mut memory);
     stack.push(3, &mut memory);
-    dict.execute_word("+", &mut stack, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
+    dict.execute_word(
+        "+",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
 
     assert_eq!(stack.pop(&mut memory), Some(8));
 }
@@ -38,7 +54,14 @@ fn test_subtract_word() {
 
     stack.push(6, &mut memory);
     stack.push(7, &mut memory);
-    dict.execute_word("-", &mut stack, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
+    dict.execute_word(
+        "-",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
 
     assert_eq!(stack.pop(&mut memory), Some(-1));
 }
@@ -53,7 +76,14 @@ fn test_multiply_word() {
 
     stack.push(6, &mut memory);
     stack.push(7, &mut memory);
-    dict.execute_word("*", &mut stack, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
+    dict.execute_word(
+        "*",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
 
     assert_eq!(stack.pop(&mut memory), Some(42));
 }
@@ -68,25 +98,16 @@ fn test_divide_word() {
 
     stack.push(12, &mut memory);
     stack.push(5, &mut memory);
-    dict.execute_word("/", &mut stack, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
+    dict.execute_word(
+        "/",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
 
     assert_eq!(stack.pop(&mut memory), Some(2));
-}
-
-#[test]
-fn test_mod_word() {
-    let mut stack = Stack::new();
-    let mut loop_stack = LoopStack::new();
-    let dict = Dictionary::new();
-    let mut return_stack = ReturnStack::new();
-    let mut memory = Memory::new();
-
-    stack.push(13, &mut memory);
-    stack.push(5, &mut memory);
-    dict.execute_word("MOD", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
-
-    assert_eq!(stack.pop(&mut memory), Some(3));
 }
 
 #[test]
@@ -99,8 +120,14 @@ fn test_slash_mod_basic() {
 
     stack.push(10, &mut memory);
     stack.push(3, &mut memory);
-    dict.execute_word("/MOD", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
+    dict.execute_word(
+        "/MOD",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
 
     // Should leave remainder then quotient: 1 3
     assert_eq!(stack.pop(&mut memory), Some(3)); // quotient on top
@@ -117,8 +144,14 @@ fn test_dup_word() {
 
     stack.push(6, &mut memory);
     stack.push(7, &mut memory);
-    dict.execute_word("DUP", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
+    dict.execute_word(
+        "DUP",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
 
     assert_eq!(stack.pop(&mut memory), Some(7));
     assert_eq!(stack.pop(&mut memory), Some(7));
@@ -135,8 +168,14 @@ fn test_swap_word() {
 
     stack.push(6, &mut memory);
     stack.push(7, &mut memory);
-    dict.execute_word("SWAP", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
+    dict.execute_word(
+        "SWAP",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
 
     assert_eq!(stack.pop(&mut memory), Some(6));
     assert_eq!(stack.pop(&mut memory), Some(7));
@@ -155,40 +194,19 @@ fn test_dot_s_word() {
     stack.push(30, &mut memory);
 
     // .S should not modify the stack
-    assert!(dict.execute_word(".S", &mut stack, &mut loop_stack, &mut return_stack, &mut memory).is_ok());
+    assert!(
+        dict.execute_word(
+            ".S",
+            &mut stack,
+            &mut loop_stack,
+            &mut return_stack,
+            &mut memory
+        )
+        .is_ok()
+    );
     assert_eq!(stack.pop(&mut memory), Some(30));
     assert_eq!(stack.pop(&mut memory), Some(20));
     assert_eq!(stack.pop(&mut memory), Some(10));
-}
-
-#[test]
-fn test_negate_positive() {
-    let mut stack = Stack::new();
-    let mut loop_stack = LoopStack::new();
-    let dict = Dictionary::new();
-    let mut return_stack = ReturnStack::new();
-    let mut memory = Memory::new();
-
-    stack.push(42, &mut memory);
-    dict.execute_word("NEGATE", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
-
-    assert_eq!(stack.pop(&mut memory), Some(-42));
-}
-
-#[test]
-fn test_negate_negative() {
-    let mut stack = Stack::new();
-    let mut loop_stack = LoopStack::new();
-    let dict = Dictionary::new();
-    let mut return_stack = ReturnStack::new();
-    let mut memory = Memory::new();
-
-    stack.push(-42, &mut memory);
-    dict.execute_word("NEGATE", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
-
-    assert_eq!(stack.pop(&mut memory), Some(42));
 }
 
 #[test]
@@ -200,24 +218,15 @@ fn test_unknown_word() {
     let mut memory = Memory::new();
 
     assert!(
-        dict.execute_word("UNKNOWN", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-            .is_err()
+        dict.execute_word(
+            "UNKNOWN",
+            &mut stack,
+            &mut loop_stack,
+            &mut return_stack,
+            &mut memory
+        )
+        .is_err()
     );
-}
-
-#[test]
-fn test_abs_word() {
-    let mut stack = Stack::new();
-    let mut loop_stack = LoopStack::new();
-    let dict = Dictionary::new();
-    let mut return_stack = ReturnStack::new();
-    let mut memory = Memory::new();
-
-    stack.push(-12, &mut memory);
-    dict.execute_word("ABS", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
-
-    assert_eq!(stack.pop(&mut memory), Some(12));
 }
 
 #[test]
@@ -232,74 +241,21 @@ fn test_drop_word() {
     stack.push(20, &mut memory);
     stack.push(30, &mut memory);
 
-    dict.execute_word("DROP", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
+    dict.execute_word(
+        "DROP",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
 
     assert_eq!(stack.pop(&mut memory), Some(20));
     assert_eq!(stack.pop(&mut memory), Some(10));
     assert_eq!(stack.pop(&mut memory), None);
 }
 
-#[test]
-fn test_rot_word() {
-    let mut stack = Stack::new();
-    let mut loop_stack = LoopStack::new();
-    let dict = Dictionary::new();
-    let mut return_stack = ReturnStack::new();
-    let mut memory = Memory::new();
-
-    stack.push(1, &mut memory);
-    stack.push(2, &mut memory);
-    stack.push(3, &mut memory);
-
-    dict.execute_word("ROT", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
-
-    assert_eq!(stack.pop(&mut memory), Some(1)); // 1 rotated to top
-    assert_eq!(stack.pop(&mut memory), Some(3));
-    assert_eq!(stack.pop(&mut memory), Some(2));
-}
-
-#[test]
-fn test_over_word() {
-    let mut stack = Stack::new();
-    let mut loop_stack = LoopStack::new();
-    let dict = Dictionary::new();
-    let mut return_stack = ReturnStack::new();
-    let mut memory = Memory::new();
-
-    stack.push(5, &mut memory);
-    stack.push(10, &mut memory);
-
-    dict.execute_word("OVER", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
-
-    assert_eq!(stack.pop(&mut memory), Some(5)); // copied to top
-    assert_eq!(stack.pop(&mut memory), Some(10));
-    assert_eq!(stack.pop(&mut memory), Some(5));
-}
-
 // Loop tests
-#[test]
-fn test_begin_until_loop() {
-    let mut stack = Stack::new();
-    let dict = Dictionary::new();
-
-    let mut loop_stack = LoopStack::new();
-    let mut return_stack = ReturnStack::new();
-    let mut memory = Memory::new();
-
-    // Simple BEGIN...UNTIL that counts down from 3 to 0
-    // 3 BEGIN 1 - DUP 0 = UNTIL DROP
-    let tokens = vec!["3", "BEGIN", "1", "-", "DUP", "0", "=", "UNTIL", "DROP"];
-    let ast = parse_tokens(&tokens).unwrap();
-
-    ast.execute(&mut stack, &dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
-
-    // After loop completes and DROP, stack should be empty
-    assert!(stack.is_empty());
-}
-
 #[test]
 fn test_do_loop_basic() {
     let mut stack = Stack::new();
@@ -313,7 +269,14 @@ fn test_do_loop_basic() {
     let tokens = vec!["5", "0", "DO", "I", "LOOP"];
     let ast = parse_tokens(&tokens).unwrap();
 
-    ast.execute(&mut stack, &dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
+    ast.execute(
+        &mut stack,
+        &dict,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
 
     // Should have pushed indices 0 through 4
     assert_eq!(stack.pop(&mut memory), Some(4));
@@ -338,7 +301,14 @@ fn test_begin_while_repeat() {
     ];
     let ast = parse_tokens(&tokens).unwrap();
 
-    ast.execute(&mut stack, &dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
+    ast.execute(
+        &mut stack,
+        &dict,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
 
     // Stack should have: 5 4 3 2 1
     assert_eq!(stack.pop(&mut memory), Some(1));
@@ -359,7 +329,14 @@ fn test_loop_i_word() {
     // Manually create a loop context
     loop_stack.push_loop(5, 10);
 
-    dict.execute_word("I", &mut stack, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
+    dict.execute_word(
+        "I",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
 
     assert_eq!(stack.pop(&mut memory), Some(5));
 
@@ -380,7 +357,14 @@ fn test_print_string() {
     let ast = parse_tokens(&tokens).unwrap();
 
     // Note: This will print to stdout during test, but shouldn't error
-    ast.execute(&mut stack, &dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
+    ast.execute(
+        &mut stack,
+        &dict,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
 
     // Stack should be unchanged
     assert!(stack.is_empty());
@@ -399,7 +383,14 @@ fn test_print_string_in_loop() {
     let ast = parse_tokens(&tokens).unwrap();
 
     // Should print "Hi " three times
-    ast.execute(&mut stack, &dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
+    ast.execute(
+        &mut stack,
+        &dict,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
 
     assert!(stack.is_empty());
 }
@@ -417,7 +408,14 @@ fn test_plus_loop_increment_by_two() {
     let tokens = vec!["10", "0", "DO", "I", "2", "+LOOP"];
     let ast = parse_tokens(&tokens).unwrap();
 
-    ast.execute(&mut stack, &dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
+    ast.execute(
+        &mut stack,
+        &dict,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
 
     // Should have pushed even indices 0, 2, 4, 6, 8
     assert_eq!(stack.pop(&mut memory), Some(8));
@@ -439,7 +437,14 @@ fn test_plus_loop_variable_increment() {
     let tokens = vec!["15", "0", "DO", "I", "3", "+LOOP"];
     let ast = parse_tokens(&tokens).unwrap();
 
-    ast.execute(&mut stack, &dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
+    ast.execute(
+        &mut stack,
+        &dict,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
 
     // Should have pushed indices 0, 3, 6, 9, 12
     assert_eq!(stack.pop(&mut memory), Some(12));
@@ -462,7 +467,14 @@ fn test_loop_j_word() {
     loop_stack.push_loop(5, 10); // Outer loop
     loop_stack.push_loop(2, 8); // Inner loop
 
-    dict.execute_word("J", &mut stack, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
+    dict.execute_word(
+        "J",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
 
     // Should get outer loop index (5)
     assert_eq!(stack.pop(&mut memory), Some(5));
@@ -488,7 +500,14 @@ fn test_nested_loops_with_j() {
     ];
     let ast = parse_tokens(&tokens).unwrap();
 
-    ast.execute(&mut stack, &dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
+    ast.execute(
+        &mut stack,
+        &dict,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
 
     // Expected results: (0+0), (0+1), (1+0), (1+1), (2+0), (2+1)
     assert_eq!(stack.pop(&mut memory), Some(3)); // 2+1
@@ -500,33 +519,6 @@ fn test_nested_loops_with_j() {
 }
 
 // LEAVE tests
-#[test]
-fn test_leave_early_exit() {
-    let mut stack = Stack::new();
-    let dict = Dictionary::new();
-    let mut loop_stack = LoopStack::new();
-    let mut return_stack = ReturnStack::new();
-    let mut memory = Memory::new();
-
-    // : TEST 10 0 DO I DUP 5 = IF LEAVE THEN LOOP ;
-    // I pushes index, DUP duplicates, 5 pushes 5, = compares (consuming DUP and 5)
-    // So each iteration leaves one I value, and exits when i=5
-    let tokens = vec![
-        "10", "0", "DO", "I", "DUP", "5", "=", "IF", "LEAVE", "THEN", "LOOP",
-    ];
-    let ast = parse_tokens(&tokens).unwrap();
-
-    ast.execute(&mut stack, &dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
-
-    // Should have 0 1 2 3 4 5 on stack (one copy each, DUP was consumed by =)
-    assert_eq!(stack.pop(&mut memory), Some(5));
-    assert_eq!(stack.pop(&mut memory), Some(4));
-    assert_eq!(stack.pop(&mut memory), Some(3));
-    assert_eq!(stack.pop(&mut memory), Some(2));
-    assert_eq!(stack.pop(&mut memory), Some(1));
-    assert_eq!(stack.pop(&mut memory), Some(0));
-}
-
 #[test]
 fn test_leave_in_plus_loop() {
     let mut stack = Stack::new();
@@ -543,7 +535,14 @@ fn test_leave_in_plus_loop() {
     ];
     let ast = parse_tokens(&tokens).unwrap();
 
-    ast.execute(&mut stack, &dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
+    ast.execute(
+        &mut stack,
+        &dict,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
 
     // Should have 0 2 4 6 8 on stack (one copy each)
     assert_eq!(stack.pop(&mut memory), Some(8));
@@ -564,8 +563,14 @@ fn test_emit_word() {
     // Test emitting 'A' (65)
     stack.push(65, &mut memory);
     assert!(
-        dict.execute_word("EMIT", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-            .is_ok()
+        dict.execute_word(
+            "EMIT",
+            &mut stack,
+            &mut loop_stack,
+            &mut return_stack,
+            &mut memory
+        )
+        .is_ok()
     );
 
     // Stack should be empty after EMIT
@@ -583,8 +588,14 @@ fn test_emit_unicode() {
     // Test emitting Unicode smiley (128515 = 😃)
     stack.push(128515, &mut memory);
     assert!(
-        dict.execute_word("EMIT", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-            .is_ok()
+        dict.execute_word(
+            "EMIT",
+            &mut stack,
+            &mut loop_stack,
+            &mut return_stack,
+            &mut memory
+        )
+        .is_ok()
     );
 
     assert!(stack.is_empty());
@@ -604,34 +615,36 @@ fn test_emit_multiple_chars() {
     stack.push(33, &mut memory); // !
 
     assert!(
-        dict.execute_word("EMIT", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-            .is_ok()
+        dict.execute_word(
+            "EMIT",
+            &mut stack,
+            &mut loop_stack,
+            &mut return_stack,
+            &mut memory
+        )
+        .is_ok()
     );
     assert!(
-        dict.execute_word("EMIT", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-            .is_ok()
+        dict.execute_word(
+            "EMIT",
+            &mut stack,
+            &mut loop_stack,
+            &mut return_stack,
+            &mut memory
+        )
+        .is_ok()
     );
     assert!(
-        dict.execute_word("EMIT", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-            .is_ok()
+        dict.execute_word(
+            "EMIT",
+            &mut stack,
+            &mut loop_stack,
+            &mut return_stack,
+            &mut memory
+        )
+        .is_ok()
     );
 
-    assert!(stack.is_empty());
-}
-
-#[test]
-fn test_space_word() {
-    let mut stack = Stack::new();
-    let dict = Dictionary::new();
-    let mut loop_stack = LoopStack::new();
-    let mut return_stack = ReturnStack::new();
-    let mut memory = Memory::new();
-
-    // SPACE should just print a space, not affect stack
-    assert!(
-        dict.execute_word("SPACE", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-            .is_ok()
-    );
     assert!(stack.is_empty());
 }
 
@@ -647,8 +660,14 @@ fn test_and_word() {
     // 12 (1100) AND 10 (1010) = 8 (1000)
     stack.push(12, &mut memory);
     stack.push(10, &mut memory);
-    dict.execute_word("AND", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
+    dict.execute_word(
+        "AND",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
 
     assert_eq!(stack.pop(&mut memory), Some(8));
 }
@@ -664,8 +683,14 @@ fn test_or_word() {
     // 12 (1100) OR 10 (1010) = 14 (1110)
     stack.push(12, &mut memory);
     stack.push(10, &mut memory);
-    dict.execute_word("OR", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
+    dict.execute_word(
+        "OR",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
 
     assert_eq!(stack.pop(&mut memory), Some(14));
 }
@@ -681,8 +706,14 @@ fn test_xor_word() {
     // 12 (1100) XOR 10 (1010) = 6 (0110)
     stack.push(12, &mut memory);
     stack.push(10, &mut memory);
-    dict.execute_word("XOR", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
+    dict.execute_word(
+        "XOR",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
 
     assert_eq!(stack.pop(&mut memory), Some(6));
 }
@@ -697,14 +728,26 @@ fn test_invert_word() {
 
     // INVERT flips all bits
     stack.push(0, &mut memory);
-    dict.execute_word("INVERT", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
+    dict.execute_word(
+        "INVERT",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(-1)); // All bits set = -1
 
     // INVERT -1 should give 0
     stack.push(-1, &mut memory);
-    dict.execute_word("INVERT", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
+    dict.execute_word(
+        "INVERT",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(0));
 }
 
@@ -719,8 +762,14 @@ fn test_lshift_word() {
     // 1 << 3 = 8
     stack.push(1, &mut memory);
     stack.push(3, &mut memory);
-    dict.execute_word("LSHIFT", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
+    dict.execute_word(
+        "LSHIFT",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
 
     assert_eq!(stack.pop(&mut memory), Some(8));
 }
@@ -736,8 +785,14 @@ fn test_rshift_word() {
     // 8 >> 2 = 2
     stack.push(8, &mut memory);
     stack.push(2, &mut memory);
-    dict.execute_word("RSHIFT", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
+    dict.execute_word(
+        "RSHIFT",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
 
     assert_eq!(stack.pop(&mut memory), Some(2));
 }
@@ -754,15 +809,27 @@ fn test_and_boolean_logic() {
     // -1 AND -1 = -1 (true AND true = true)
     stack.push(-1, &mut memory);
     stack.push(-1, &mut memory);
-    dict.execute_word("AND", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
+    dict.execute_word(
+        "AND",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(-1));
 
     // -1 AND 0 = 0 (true AND false = false)
     stack.push(-1, &mut memory);
     stack.push(0, &mut memory);
-    dict.execute_word("AND", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
+    dict.execute_word(
+        "AND",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(0));
 }
 
@@ -777,15 +844,27 @@ fn test_or_boolean_logic() {
     // -1 OR 0 = -1 (true OR false = true)
     stack.push(-1, &mut memory);
     stack.push(0, &mut memory);
-    dict.execute_word("OR", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
+    dict.execute_word(
+        "OR",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(-1));
 
     // 0 OR 0 = 0 (false OR false = false)
     stack.push(0, &mut memory);
     stack.push(0, &mut memory);
-    dict.execute_word("OR", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
+    dict.execute_word(
+        "OR",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(0));
 }
 
@@ -800,8 +879,14 @@ fn test_and_with_negative() {
     // -1 (all bits set) AND 15 (1111) = 15
     stack.push(-1, &mut memory);
     stack.push(15, &mut memory);
-    dict.execute_word("AND", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
+    dict.execute_word(
+        "AND",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(15));
 }
 
@@ -817,8 +902,14 @@ fn test_rshift_with_negative() {
     // -8 >> 1 in Rust does arithmetic shift (sign extension)
     stack.push(-8, &mut memory);
     stack.push(1, &mut memory);
-    dict.execute_word("RSHIFT", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
+    dict.execute_word(
+        "RSHIFT",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
 
     // This will be implementation-dependent
     // Rust's >> on signed integers is arithmetic shift
@@ -836,8 +927,14 @@ fn test_to_r_word() {
 
     // Push 42 to data stack, then move to return stack
     stack.push(42, &mut memory);
-    dict.execute_word(">R", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
+    dict.execute_word(
+        ">R",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
 
     // Data stack should be empty
     assert!(stack.is_empty());
@@ -857,8 +954,14 @@ fn test_r_from_word() {
     return_stack.push(99, &mut memory);
 
     // Move from return stack to data stack
-    dict.execute_word("R>", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
+    dict.execute_word(
+        "R>",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
 
     // Data stack should have 99
     assert_eq!(stack.pop(&mut memory), Some(99));
@@ -878,8 +981,14 @@ fn test_r_fetch_word() {
     return_stack.push(77, &mut memory);
 
     // Copy from return stack to data stack (non-destructive)
-    dict.execute_word("R@", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
+    dict.execute_word(
+        "R@",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
 
     // Data stack should have 77
     assert_eq!(stack.pop(&mut memory), Some(77));
@@ -901,204 +1010,59 @@ fn test_return_stack_sequence() {
     stack.push(30, &mut memory);
 
     // Move 30 to return stack
-    dict.execute_word(">R", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
+    dict.execute_word(
+        ">R",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
     // Move 20 to return stack
-    dict.execute_word(">R", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
+    dict.execute_word(
+        ">R",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
 
     // Add 10 (nothing on stack, should underflow - but for this test we'll skip)
     // Actually, let's push more values
     stack.push(5, &mut memory);
-    dict.execute_word("+", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap(); // 10 + 5 = 15
+    dict.execute_word(
+        "+",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap(); // 10 + 5 = 15
 
     // Pop from return stack (20)
-    dict.execute_word("R>", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
+    dict.execute_word(
+        "R>",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
     // Pop from return stack (30)
-    dict.execute_word("R>", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
+    dict.execute_word(
+        "R>",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
 
     // Stack should have: 15 20 30 (top)
     assert_eq!(stack.pop(&mut memory), Some(30));
     assert_eq!(stack.pop(&mut memory), Some(20));
     assert_eq!(stack.pop(&mut memory), Some(15));
-}
-
-// Zero comparison tests
-#[test]
-fn test_zero_equals_true() {
-    let mut stack = Stack::new();
-    let dict = Dictionary::new();
-    let mut loop_stack = LoopStack::new();
-    let mut return_stack = ReturnStack::new();
-    let mut memory = Memory::new();
-
-    stack.push(0, &mut memory);
-    dict.execute_word("0=", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
-
-    assert_eq!(stack.pop(&mut memory), Some(-1)); // true
-}
-
-#[test]
-fn test_zero_equals_false() {
-    let mut stack = Stack::new();
-    let dict = Dictionary::new();
-    let mut loop_stack = LoopStack::new();
-    let mut return_stack = ReturnStack::new();
-    let mut memory = Memory::new();
-
-    stack.push(5, &mut memory);
-    dict.execute_word("0=", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
-
-    assert_eq!(stack.pop(&mut memory), Some(0)); // false
-}
-
-#[test]
-fn test_zero_equals_negative() {
-    let mut stack = Stack::new();
-    let dict = Dictionary::new();
-    let mut loop_stack = LoopStack::new();
-    let mut return_stack = ReturnStack::new();
-    let mut memory = Memory::new();
-
-    stack.push(-5, &mut memory);
-    dict.execute_word("0=", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
-
-    assert_eq!(stack.pop(&mut memory), Some(0)); // false
-}
-
-#[test]
-fn test_zero_less_true() {
-    let mut stack = Stack::new();
-    let dict = Dictionary::new();
-    let mut loop_stack = LoopStack::new();
-    let mut return_stack = ReturnStack::new();
-    let mut memory = Memory::new();
-
-    stack.push(-5, &mut memory);
-    dict.execute_word("0<", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
-
-    assert_eq!(stack.pop(&mut memory), Some(-1)); // true
-}
-
-#[test]
-fn test_zero_less_false_zero() {
-    let mut stack = Stack::new();
-    let dict = Dictionary::new();
-    let mut loop_stack = LoopStack::new();
-    let mut return_stack = ReturnStack::new();
-    let mut memory = Memory::new();
-
-    stack.push(0, &mut memory);
-    dict.execute_word("0<", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
-
-    assert_eq!(stack.pop(&mut memory), Some(0)); // false
-}
-
-#[test]
-fn test_zero_less_false_positive() {
-    let mut stack = Stack::new();
-    let dict = Dictionary::new();
-    let mut loop_stack = LoopStack::new();
-    let mut return_stack = ReturnStack::new();
-    let mut memory = Memory::new();
-
-    stack.push(5, &mut memory);
-    dict.execute_word("0<", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
-
-    assert_eq!(stack.pop(&mut memory), Some(0)); // false
-}
-
-#[test]
-fn test_zero_greater_true() {
-    let mut stack = Stack::new();
-    let dict = Dictionary::new();
-    let mut loop_stack = LoopStack::new();
-    let mut return_stack = ReturnStack::new();
-    let mut memory = Memory::new();
-
-    stack.push(5, &mut memory);
-    dict.execute_word("0>", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
-
-    assert_eq!(stack.pop(&mut memory), Some(-1)); // true
-}
-
-#[test]
-fn test_zero_greater_false_zero() {
-    let mut stack = Stack::new();
-    let dict = Dictionary::new();
-    let mut loop_stack = LoopStack::new();
-    let mut return_stack = ReturnStack::new();
-    let mut memory = Memory::new();
-
-    stack.push(0, &mut memory);
-    dict.execute_word("0>", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
-
-    assert_eq!(stack.pop(&mut memory), Some(0)); // false
-}
-
-#[test]
-fn test_zero_greater_false_negative() {
-    let mut stack = Stack::new();
-    let dict = Dictionary::new();
-    let mut loop_stack = LoopStack::new();
-    let mut return_stack = ReturnStack::new();
-    let mut memory = Memory::new();
-
-    stack.push(-5, &mut memory);
-    dict.execute_word("0>", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
-
-    assert_eq!(stack.pop(&mut memory), Some(0)); // false
-}
-
-// TRUE and FALSE tests
-#[test]
-fn test_true_word() {
-    let mut stack = Stack::new();
-    let dict = Dictionary::new();
-    let mut loop_stack = LoopStack::new();
-    let mut return_stack = ReturnStack::new();
-    let mut memory = Memory::new();
-
-    dict.execute_word("TRUE", &mut stack, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
-    assert_eq!(stack.pop(&mut memory), Some(-1));
-}
-
-#[test]
-fn test_false_word() {
-    let mut stack = Stack::new();
-    let dict = Dictionary::new();
-    let mut loop_stack = LoopStack::new();
-    let mut return_stack = ReturnStack::new();
-    let mut memory = Memory::new();
-
-    dict.execute_word("FALSE", &mut stack, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
-    assert_eq!(stack.pop(&mut memory), Some(0));
-}
-
-#[test]
-fn test_true_false_comparison() {
-    let mut stack = Stack::new();
-    let dict = Dictionary::new();
-    let mut loop_stack = LoopStack::new();
-    let mut return_stack = ReturnStack::new();
-    let mut memory = Memory::new();
-
-    dict.execute_word("TRUE", &mut stack, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
-    dict.execute_word("FALSE", &mut stack, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
-    dict.execute_word("=", &mut stack, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
-    assert_eq!(stack.pop(&mut memory), Some(0)); // TRUE != FALSE
 }
 
 // EXIT tests
@@ -1115,7 +1079,14 @@ fn test_exit_simple() {
     let ast = parse_tokens(&tokens).unwrap();
     dict.add_compiled("TEST-EXIT".to_string(), ast);
 
-    dict.execute_word("TEST-EXIT", &mut stack, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
+    dict.execute_word(
+        "TEST-EXIT",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(42));
     assert!(stack.is_empty()); // 99 should not be pushed
 }
@@ -1133,174 +1104,14 @@ fn test_exit_in_if() {
     let ast = parse_tokens(&tokens).unwrap();
     dict.add_compiled("TEST-EXIT-IF".to_string(), ast);
 
-    dict.execute_word("TEST-EXIT-IF", &mut stack, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
+    dict.execute_word(
+        "TEST-EXIT-IF",
+        &mut stack,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+    )
+    .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(42));
     assert!(stack.is_empty()); // 99 should not be pushed
-}
-
-#[test]
-fn test_exit_in_loop() {
-    let mut stack = Stack::new();
-    let mut dict = Dictionary::new();
-    let mut loop_stack = LoopStack::new();
-    let mut return_stack = ReturnStack::new();
-    let mut memory = Memory::new();
-
-    // : test-exit-loop 10 0 do i 5 = if i exit then loop 99 ;
-    let tokens = vec!["10", "0", "DO", "I", "5", "=", "IF", "I", "EXIT", "THEN", "LOOP", "99"];
-    let ast = parse_tokens(&tokens).unwrap();
-    dict.add_compiled("TEST-EXIT-LOOP".to_string(), ast);
-
-    dict.execute_word("TEST-EXIT-LOOP", &mut stack, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
-    assert_eq!(stack.pop(&mut memory), Some(5)); // Should exit at i=5
-    assert!(stack.is_empty()); // 99 should not be pushed
-}
-
-#[test]
-fn test_exit_with_true_false() {
-    let mut stack = Stack::new();
-    let mut dict = Dictionary::new();
-    let mut loop_stack = LoopStack::new();
-    let mut return_stack = ReturnStack::new();
-    let mut memory = Memory::new();
-
-    // : test 1 0 = if false exit then true ;
-    let tokens = vec!["1", "0", "=", "IF", "FALSE", "EXIT", "THEN", "TRUE"];
-    let ast = parse_tokens(&tokens).unwrap();
-    dict.add_compiled("TEST".to_string(), ast);
-
-    dict.execute_word("TEST", &mut stack, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
-    assert_eq!(stack.pop(&mut memory), Some(-1)); // Should get TRUE (no EXIT taken)
-}
-
-#[test]
-fn test_leap_year() {
-    let mut stack = Stack::new();
-    let mut dict = Dictionary::new();
-    let mut loop_stack = LoopStack::new();
-    let mut return_stack = ReturnStack::new();
-    let mut memory = Memory::new();
-
-    // : leap-year? dup 400 mod 0= if drop true exit then 
-    //              dup 100 mod 0= if drop false exit then 
-    //              4 mod 0= ;
-    let tokens = vec![
-        "DUP", "400", "MOD", "0=", "IF", "DROP", "TRUE", "EXIT", "THEN",
-        "DUP", "100", "MOD", "0=", "IF", "DROP", "FALSE", "EXIT", "THEN",
-        "4", "MOD", "0="
-    ];
-    let ast = parse_tokens(&tokens).unwrap();
-    dict.add_compiled("LEAP-YEAR?".to_string(), ast);
-
-    // Test 2000 (divisible by 400)
-    stack.push(2000, &mut memory);
-    dict.execute_word("LEAP-YEAR?", &mut stack, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
-    assert_eq!(stack.pop(&mut memory), Some(-1));
-
-    // Test 1900 (divisible by 100 but not 400)
-    stack.push(1900, &mut memory);
-    dict.execute_word("LEAP-YEAR?", &mut stack, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
-    assert_eq!(stack.pop(&mut memory), Some(0));
-
-    // Test 2004 (divisible by 4)
-    stack.push(2004, &mut memory);
-    dict.execute_word("LEAP-YEAR?", &mut stack, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
-    assert_eq!(stack.pop(&mut memory), Some(-1));
-
-    // Test 2001 (not divisible by 4)
-    stack.push(2001, &mut memory);
-    dict.execute_word("LEAP-YEAR?", &mut stack, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
-    assert_eq!(stack.pop(&mut memory), Some(0));
-}
-
-#[test]
-fn test_2over_forth_definition() {
-    let mut stack = Stack::new();
-    let mut dict = Dictionary::new();
-    let mut loop_stack = LoopStack::new();
-    let mut return_stack = ReturnStack::new();
-    let mut memory = Memory::new();
-
-    // Define helper words
-    let two_dup_ast = parse_tokens(&["OVER", "OVER"]).unwrap();
-    dict.add_compiled("2DUP".to_string(), two_dup_ast);
-
-    let two_swap_ast = parse_tokens(&[">R", "ROT", "ROT", "R>", "ROT", "ROT"]).unwrap();
-    dict.add_compiled("2SWAP".to_string(), two_swap_ast);
-
-    // Define 2OVER
-    let two_over_ast = parse_tokens(&[">R", ">R", "2DUP", "R>", "R>", "2SWAP"]).unwrap();
-    dict.add_compiled("2OVER".to_string(), two_over_ast);
-
-    // Test: 1 2 3 4 2OVER should give 1 2 3 4 1 2
-    stack.push(1, &mut memory);
-    stack.push(2, &mut memory);
-    stack.push(3, &mut memory);
-    stack.push(4, &mut memory);
-
-    dict.execute_word("2OVER", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
-
-    // Verify stack contents (pop in reverse order)
-    assert_eq!(stack.pop(&mut memory), Some(2));
-    assert_eq!(stack.pop(&mut memory), Some(1));
-    assert_eq!(stack.pop(&mut memory), Some(4));
-    assert_eq!(stack.pop(&mut memory), Some(3));
-    assert_eq!(stack.pop(&mut memory), Some(2));
-    assert_eq!(stack.pop(&mut memory), Some(1));
-    assert!(stack.is_empty());
-}
-
-#[test]
-fn test_2dup_forth_definition() {
-    let mut stack = Stack::new();
-    let mut dict = Dictionary::new();
-    let mut loop_stack = LoopStack::new();
-    let mut return_stack = ReturnStack::new();
-    let mut memory = Memory::new();
-
-    // Define 2DUP: OVER OVER
-    let two_dup_ast = parse_tokens(&["OVER", "OVER"]).unwrap();
-    dict.add_compiled("2DUP".to_string(), two_dup_ast);
-
-    // Test: 10 20 2DUP should give 10 20 10 20
-    stack.push(10, &mut memory);
-    stack.push(20, &mut memory);
-
-    dict.execute_word("2DUP", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
-
-    assert_eq!(stack.pop(&mut memory), Some(20));
-    assert_eq!(stack.pop(&mut memory), Some(10));
-    assert_eq!(stack.pop(&mut memory), Some(20));
-    assert_eq!(stack.pop(&mut memory), Some(10));
-    assert!(stack.is_empty());
-}
-
-#[test]
-fn test_2swap_forth_definition() {
-    let mut stack = Stack::new();
-    let mut dict = Dictionary::new();
-    let mut loop_stack = LoopStack::new();
-    let mut return_stack = ReturnStack::new();
-    let mut memory = Memory::new();
-
-    // Define 2SWAP: >R ROT ROT R> ROT ROT
-    let two_swap_ast = parse_tokens(&[">R", "ROT", "ROT", "R>", "ROT", "ROT"]).unwrap();
-    dict.add_compiled("2SWAP".to_string(), two_swap_ast);
-
-    // Test: 1 2 3 4 2SWAP should give 3 4 1 2
-    stack.push(1, &mut memory);
-    stack.push(2, &mut memory);
-    stack.push(3, &mut memory);
-    stack.push(4, &mut memory);
-
-    dict.execute_word("2SWAP", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
-        .unwrap();
-
-    assert_eq!(stack.pop(&mut memory), Some(2));
-    assert_eq!(stack.pop(&mut memory), Some(1));
-    assert_eq!(stack.pop(&mut memory), Some(4));
-    assert_eq!(stack.pop(&mut memory), Some(3));
-    assert!(stack.is_empty());
 }

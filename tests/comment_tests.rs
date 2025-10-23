@@ -1,4 +1,4 @@
-use quarter::{execute_line, strip_comments, Dictionary, LoopStack, Memory, ReturnStack, Stack};
+use quarter::{execute_line, load_stdlib, strip_comments, Dictionary, LoopStack, Memory, ReturnStack, Stack};
 
 #[test]
 fn test_strip_comments_backslash() {
@@ -103,6 +103,9 @@ fn test_mixed_comments_in_definition() {
     let mut loop_stack = LoopStack::new();
     let mut return_stack = ReturnStack::new();
     let mut memory = Memory::new();
+
+    // Load stdlib to get NEGATE
+    load_stdlib(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
 
     // Define with both comment types
     execute_line(

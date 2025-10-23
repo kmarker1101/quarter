@@ -2,7 +2,12 @@ use crate::LoopStack;
 use crate::stack::Stack;
 
 // Built-in word definitions
-pub fn dot(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack, memory: &mut crate::Memory) {
+pub fn dot(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
     if let Some(value) = stack.pop(memory) {
         print!("{} ", value);
     } else {
@@ -10,8 +15,12 @@ pub fn dot(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate
     }
 }
 
-pub fn dot_s(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack,
- memory: &mut crate::Memory) {
+pub fn dot_s(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
     stack.print_stack(memory);
 }
 
@@ -77,8 +86,12 @@ pub fn u_dot_r(
 }
 
 // Arithmetic Operations
-pub fn add(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack,
- memory: &mut crate::Memory) {
+pub fn add(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
     if let (Some(b), Some(a)) = (stack.pop(memory), stack.pop(memory)) {
         stack.push(a + b, memory);
     } else {
@@ -114,8 +127,12 @@ pub fn multiply(
     }
 }
 
-pub fn divide(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack,
- memory: &mut crate::Memory) {
+pub fn divide(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
     if let (Some(b), Some(a)) = (stack.pop(memory), stack.pop(memory)) {
         if b == 0 {
             print!("Division by zero!");
@@ -123,21 +140,6 @@ pub fn divide(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut cr
             stack.push(b, memory);
         } else {
             stack.push(a / b, memory);
-        }
-    } else {
-        print!("Stack underflow!");
-    }
-}
-
-pub fn modulo(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack,
- memory: &mut crate::Memory) {
-    if let (Some(b), Some(a)) = (stack.pop(memory), stack.pop(memory)) {
-        if b == 0 {
-            print!("Division by zero!");
-            stack.push(a, memory);
-            stack.push(b, memory);
-        } else {
-            stack.push(a % b, memory);
         }
     } else {
         print!("Stack underflow!");
@@ -165,18 +167,13 @@ pub fn slash_modulo(
     }
 }
 
-pub fn negate(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack,
- memory: &mut crate::Memory) {
-    if let Some(value) = stack.pop(memory) {
-        stack.push(-value, memory);
-    } else {
-        println!("Stack underflow!");
-    }
-}
-
 // Stack manipulation
-pub fn dup(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack,
- memory: &mut crate::Memory) {
+pub fn dup(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
     if let Some(value) = stack.peek(memory) {
         stack.push(value, memory);
     } else {
@@ -184,8 +181,12 @@ pub fn dup(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate
     }
 }
 
-pub fn swap(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack,
- memory: &mut crate::Memory) {
+pub fn swap(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
     if let (Some(a), Some(b)) = (stack.pop(memory), stack.pop(memory)) {
         stack.push(a, memory);
         stack.push(b, memory);
@@ -223,59 +224,12 @@ pub fn greater_than(
     }
 }
 
-pub fn equals(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack,
- memory: &mut crate::Memory) {
-    if let (Some(b), Some(a)) = (stack.pop(memory), stack.pop(memory)) {
-        stack.push(if a == b { -1 } else { 0 }, memory);
-    } else {
-        println!("Stack underflow!");
-    }
-}
-
-pub fn not_equals(
+pub fn abs(
     stack: &mut Stack,
     _loop_stack: &LoopStack,
     _return_stack: &mut crate::ReturnStack,
-
     memory: &mut crate::Memory,
 ) {
-    if let (Some(b), Some(a)) = (stack.pop(memory), stack.pop(memory)) {
-        stack.push(if a != b { -1 } else { 0 }, memory);
-    } else {
-        println!("Stack underflow!");
-    }
-}
-
-pub fn less_or_equal(
-    stack: &mut Stack,
-    _loop_stack: &LoopStack,
-    _return_stack: &mut crate::ReturnStack,
-
-    memory: &mut crate::Memory,
-) {
-    if let (Some(b), Some(a)) = (stack.pop(memory), stack.pop(memory)) {
-        stack.push(if a <= b { -1 } else { 0 }, memory);
-    } else {
-        println!("Stack underflow!");
-    }
-}
-
-pub fn greater_or_equal(
-    stack: &mut Stack,
-    _loop_stack: &LoopStack,
-    _return_stack: &mut crate::ReturnStack,
-
-    memory: &mut crate::Memory,
-) {
-    if let (Some(b), Some(a)) = (stack.pop(memory), stack.pop(memory)) {
-        stack.push(if a >= b { -1 } else { 0 }, memory);
-    } else {
-        println!("Stack underflow!");
-    }
-}
-
-pub fn abs(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack,
- memory: &mut crate::Memory) {
     if let Some(value) = stack.pop(memory) {
         stack.push(value.abs(), memory);
     } else {
@@ -283,43 +237,33 @@ pub fn abs(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate
     }
 }
 
-pub fn cr(_stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack,
- _memory: &mut crate::Memory) {
+pub fn cr(
+    _stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    _memory: &mut crate::Memory,
+) {
     println!();
 }
 
-pub fn drop(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack,
- memory: &mut crate::Memory) {
+pub fn drop(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
     if stack.pop(memory).is_none() {
         println!("Stack underflow!");
     }
 }
 
-pub fn rot(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack,
- memory: &mut crate::Memory) {
-    if let (Some(a), Some(b), Some(c)) = (stack.pop(memory), stack.pop(memory), stack.pop(memory)) {
-        stack.push(b, memory);
-        stack.push(a, memory);
-        stack.push(c, memory);
-    } else {
-        println!("Stack underflow!");
-    }
-}
-
-pub fn over(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack,
- memory: &mut crate::Memory) {
-    if let (Some(b), Some(a)) = (stack.pop(memory), stack.pop(memory)) {
-        stack.push(a, memory);
-        stack.push(b, memory);
-        stack.push(a, memory);
-    } else {
-        println!("Stack underflow!");
-    }
-}
-
 // Loop index words
-pub fn loop_i(stack: &mut Stack, loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack,
- memory: &mut crate::Memory) {
+pub fn loop_i(
+    stack: &mut Stack,
+    loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
     if let Some(index) = loop_stack.get_index() {
         stack.push(index, memory);
     } else {
@@ -327,8 +271,12 @@ pub fn loop_i(stack: &mut Stack, loop_stack: &LoopStack, _return_stack: &mut cra
     }
 }
 
-pub fn loop_j(stack: &mut Stack, loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack,
- memory: &mut crate::Memory) {
+pub fn loop_j(
+    stack: &mut Stack,
+    loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
     if let Some(index) = loop_stack.get_outer_index() {
         stack.push(index, memory);
     } else {
@@ -336,8 +284,12 @@ pub fn loop_j(stack: &mut Stack, loop_stack: &LoopStack, _return_stack: &mut cra
     }
 }
 
-pub fn emit(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack,
- memory: &mut crate::Memory) {
+pub fn emit(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
     if let Some(value) = stack.pop(memory) {
         if let Some(ch) = char::from_u32(value as u32) {
             print!("{}", ch);
@@ -349,8 +301,12 @@ pub fn emit(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crat
     }
 }
 
-pub fn key(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack,
- memory: &mut crate::Memory) {
+pub fn key(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
     use std::io::Read;
 
     let mut buffer = [0; 1];
@@ -363,13 +319,12 @@ pub fn key(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate
     }
 }
 
-pub fn space(_stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack,
- _memory: &mut crate::Memory) {
-    print!(" ");
-}
-
-pub fn and(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack,
- memory: &mut crate::Memory) {
+pub fn and(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
     if let (Some(b), Some(a)) = (stack.pop(memory), stack.pop(memory)) {
         stack.push(a & b, memory);
     } else {
@@ -377,8 +332,12 @@ pub fn and(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate
     }
 }
 
-pub fn or(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack,
- memory: &mut crate::Memory) {
+pub fn or(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
     if let (Some(b), Some(a)) = (stack.pop(memory), stack.pop(memory)) {
         stack.push(a | b, memory);
     } else {
@@ -386,8 +345,12 @@ pub fn or(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate:
     }
 }
 
-pub fn xor(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack,
- memory: &mut crate::Memory) {
+pub fn xor(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
     if let (Some(b), Some(a)) = (stack.pop(memory), stack.pop(memory)) {
         stack.push(a ^ b, memory);
     } else {
@@ -395,8 +358,12 @@ pub fn xor(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate
     }
 }
 
-pub fn invert(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack,
- memory: &mut crate::Memory) {
+pub fn invert(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
     if let Some(n) = stack.pop(memory) {
         stack.push(!n, memory);
     } else {
@@ -404,8 +371,12 @@ pub fn invert(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut cr
     }
 }
 
-pub fn lshift(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack,
- memory: &mut crate::Memory) {
+pub fn lshift(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
     if let (Some(u), Some(n)) = (stack.pop(memory), stack.pop(memory)) {
         stack.push(n << u, memory);
     } else {
@@ -413,8 +384,12 @@ pub fn lshift(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut cr
     }
 }
 
-pub fn rshift(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut crate::ReturnStack,
- memory: &mut crate::Memory) {
+pub fn rshift(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
     if let (Some(u), Some(n)) = (stack.pop(memory), stack.pop(memory)) {
         stack.push(n >> u, memory);
     } else {
@@ -423,7 +398,12 @@ pub fn rshift(stack: &mut Stack, _loop_stack: &LoopStack, _return_stack: &mut cr
 }
 
 // Return stack words
-pub fn to_r(stack: &mut Stack, _loop_stack: &LoopStack, return_stack: &mut crate::ReturnStack, memory: &mut crate::Memory) {
+pub fn to_r(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
     if let Some(n) = stack.pop(memory) {
         return_stack.push(n, memory);
     } else {
@@ -431,7 +411,12 @@ pub fn to_r(stack: &mut Stack, _loop_stack: &LoopStack, return_stack: &mut crate
     }
 }
 
-pub fn r_from(stack: &mut Stack, _loop_stack: &LoopStack, return_stack: &mut crate::ReturnStack, memory: &mut crate::Memory) {
+pub fn r_from(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
     if let Some(n) = return_stack.pop(memory) {
         stack.push(n, memory);
     } else {
@@ -439,53 +424,16 @@ pub fn r_from(stack: &mut Stack, _loop_stack: &LoopStack, return_stack: &mut cra
     }
 }
 
-pub fn r_fetch(stack: &mut Stack, _loop_stack: &LoopStack, return_stack: &mut crate::ReturnStack, memory: &mut crate::Memory) {
+pub fn r_fetch(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
     if let Some(n) = return_stack.peek(memory) {
         stack.push(n, memory);
     } else {
         println!("Return stack underflow!");
-    }
-}
-
-pub fn zero_equals(
-    stack: &mut Stack,
-    _loop_stack: &LoopStack,
-    _return_stack: &mut crate::ReturnStack,
-
-    memory: &mut crate::Memory,
-) {
-    if let Some(n) = stack.pop(memory) {
-        stack.push(if n == 0 { -1 } else { 0 }, memory);
-    } else {
-        println!("Stack underflow!");
-    }
-}
-
-pub fn zero_less(
-    stack: &mut Stack,
-    _loop_stack: &LoopStack,
-    _return_stack: &mut crate::ReturnStack,
-
-    memory: &mut crate::Memory,
-) {
-    if let Some(n) = stack.pop(memory) {
-        stack.push(if n < 0 { -1 } else { 0 }, memory);
-    } else {
-        println!("Stack underflow!");
-    }
-}
-
-pub fn zero_greater(
-    stack: &mut Stack,
-    _loop_stack: &LoopStack,
-    _return_stack: &mut crate::ReturnStack,
-
-    memory: &mut crate::Memory,
-) {
-    if let Some(n) = stack.pop(memory) {
-        stack.push(if n > 0 { -1 } else { 0 }, memory);
-    } else {
-        println!("Stack underflow!");
     }
 }
 
@@ -629,60 +577,6 @@ pub fn rp_store(
     // Set return stack pointer from top of data stack
     if let Some(addr) = stack.pop(memory) {
         return_stack.set_rp(addr as usize);
-    } else {
-        println!("Stack underflow!");
-    }
-}
-
-// Memory arithmetic helpers
-pub fn cells(
-    stack: &mut Stack,
-    _loop_stack: &LoopStack,
-    _return_stack: &mut crate::ReturnStack,
-    memory: &mut crate::Memory,
-) {
-    // CELLS ( n -- n*4 )
-    // Convert cell count to byte count
-    if let Some(n) = stack.pop(memory) {
-        stack.push(n * 4, memory);
-    } else {
-        println!("Stack underflow!");
-    }
-}
-
-pub fn cell_plus(
-    stack: &mut Stack,
-    _loop_stack: &LoopStack,
-    _return_stack: &mut crate::ReturnStack,
-    memory: &mut crate::Memory,
-) {
-    // CELL+ ( addr -- addr+4 )
-    // Add one cell size to address
-    if let Some(addr) = stack.pop(memory) {
-        stack.push(addr + 4, memory);
-    } else {
-        println!("Stack underflow!");
-    }
-}
-
-pub fn plus_store(
-    stack: &mut Stack,
-    _loop_stack: &LoopStack,
-    _return_stack: &mut crate::ReturnStack,
-    memory: &mut crate::Memory,
-) {
-    // +! ( n addr -- )
-    // Add n to value at addr
-    if let (Some(addr), Some(n)) = (stack.pop(memory), stack.pop(memory)) {
-        match memory.fetch(addr as usize) {
-            Ok(old_value) => {
-                match memory.store(addr as usize, old_value + n) {
-                    Ok(_) => {}
-                    Err(e) => println!("{}", e),
-                }
-            }
-            Err(e) => println!("{}", e),
-        }
     } else {
         println!("Stack underflow!");
     }

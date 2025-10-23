@@ -25,29 +25,23 @@ impl Dictionary {
         dict.add_primitive("/", words::divide);
         dict.add_primitive("DUP", words::dup);
         dict.add_primitive("SWAP", words::swap);
-        dict.add_primitive("MOD", words::modulo);
         dict.add_primitive(".S", words::dot_s);
         dict.add_primitive("U.", words::u_dot);
         dict.add_primitive(".R", words::dot_r);
         dict.add_primitive("U.R", words::u_dot_r);
         dict.add_primitive("<", words::less_than);
         dict.add_primitive(">", words::greater_than);
-        dict.add_primitive("=", words::equals);
-        dict.add_primitive("<>", words::not_equals);
-        dict.add_primitive("<=", words::less_or_equal);
-        dict.add_primitive(">=", words::greater_or_equal);
-        dict.add_primitive("NEGATE", words::negate);
-        dict.add_primitive("ABS", words::abs);
+        // =, <>, <=, >= now defined in comparison.fth
+        // NEGATE, ABS now defined in core.fth
         dict.add_primitive("CR", words::cr);
         dict.add_primitive("DROP", words::drop);
-        dict.add_primitive("ROT", words::rot);
-        dict.add_primitive("OVER", words::over);
+        // OVER now defined in core.fth
         dict.add_primitive("/MOD", words::slash_modulo);
         dict.add_primitive("I", words::loop_i);
         dict.add_primitive("J", words::loop_j);
         dict.add_primitive("EMIT", words::emit);
         dict.add_primitive("KEY", words::key);
-        dict.add_primitive("SPACE", words::space);
+        // SPACE now defined in io.fth
         dict.add_primitive("AND", words::and);
         dict.add_primitive("OR", words::or);
         dict.add_primitive("XOR", words::xor);
@@ -57,11 +51,8 @@ impl Dictionary {
         dict.add_primitive(">R", words::to_r);
         dict.add_primitive("R>", words::r_from);
         dict.add_primitive("R@", words::r_fetch);
-        dict.add_primitive("0=", words::zero_equals);
-        dict.add_primitive("0<", words::zero_less);
-        dict.add_primitive("0>", words::zero_greater);
-        dict.add_primitive("TRUE", words::forth_true);
-        dict.add_primitive("FALSE", words::forth_false);
+        // 0=, 0<, 0> now defined in comparison.fth
+        // TRUE, FALSE now defined in core.fth as constants
         dict.add_primitive("!", words::store);
         dict.add_primitive("@", words::fetch);
         dict.add_primitive("C!", words::c_store);
@@ -70,9 +61,7 @@ impl Dictionary {
         dict.add_primitive("SP!", words::sp_store);
         dict.add_primitive("RP@", words::rp_fetch);
         dict.add_primitive("RP!", words::rp_store);
-        dict.add_primitive("CELLS", words::cells);
-        dict.add_primitive("CELL+", words::cell_plus);
-        dict.add_primitive("+!", words::plus_store);
+        // CELLS now defined in core.fth
         dict.add_primitive("HERE", words::here);
         dict.add_primitive("ALLOT", words::allot);
         dict.add_primitive(",", words::comma);
@@ -80,7 +69,11 @@ impl Dictionary {
         dict
     }
 
-    pub fn add_primitive(&mut self, name: &str, func: fn(&mut Stack, &crate::LoopStack, &mut crate::ReturnStack, &mut crate::Memory)) {
+    pub fn add_primitive(
+        &mut self,
+        name: &str,
+        func: fn(&mut Stack, &crate::LoopStack, &mut crate::ReturnStack, &mut crate::Memory),
+    ) {
         self.words.insert(name.to_string(), Word::Primitive(func));
     }
 
