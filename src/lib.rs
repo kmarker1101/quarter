@@ -552,6 +552,8 @@ pub fn load_file(
     return_stack: &mut ReturnStack,
     memory: &mut Memory,
     no_jit: bool,
+    dump_ir: bool,
+    verify_ir: bool,
 ) -> Result<(), String> {
     let contents = fs::read_to_string(filename).map_err(|e| format!("Cannot read file: {}", e))?;
 
@@ -569,14 +571,14 @@ pub fn load_file(
     }
 
     // Now execute the entire file as one token stream
-    execute_line(&processed, stack, dict, loop_stack, return_stack, memory, no_jit)?;
+    execute_line(&processed, stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir)?;
 
     Ok(())
 }
 
 /// Attempt to JIT compile an AST to native code and store in dictionary
 /// Returns true if successful, false otherwise
-fn try_jit_compile(name: String, ast: &AstNode, dict: &mut dictionary::Dictionary, no_jit: bool) -> bool {
+fn try_jit_compile(name: String, ast: &AstNode, dict: &mut dictionary::Dictionary, no_jit: bool, dump_ir: bool, verify_ir: bool) -> bool {
     if no_jit {
         return false;
     }
@@ -594,6 +596,21 @@ fn try_jit_compile(name: String, ast: &AstNode, dict: &mut dictionary::Dictionar
     // Try to compile the AST
     match compiler.compile_word(&name, ast) {
         Ok(jit_fn) => {
+            // Dump IR if requested
+            if dump_ir {
+                println!("\n=== IR for {} ===", name);
+                println!("{}", compiler.get_ir());
+                println!("==================\n");
+            }
+
+            // Verify IR if requested
+            if verify_ir {
+                if let Err(e) = compiler.verify() {
+                    eprintln!("IR verification failed for {}: {}", name, e);
+                    return false;
+                }
+            }
+
             // Add the JIT function to the dictionary
             dict.add_jit_compiled_with_compiler(name, jit_fn, Box::new(compiler));
             true
@@ -610,6 +627,8 @@ pub fn execute_line(
     return_stack: &mut ReturnStack,
     memory: &mut Memory,
     no_jit: bool,
+    dump_ir: bool,
+    verify_ir: bool,
 ) -> Result<(), String> {
     // Strip comments from input
     let input = strip_comments(input);
@@ -630,7 +649,7 @@ pub fn execute_line(
             }
 
             let filename = tokens[i + 1];
-            load_file(filename, stack, dict, loop_stack, return_stack, memory, no_jit)?;
+            load_file(filename, stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir)?;
             i += 2;
         } else if token_upper == ":" {
             // Find matching semicolon for definition
@@ -652,11 +671,11 @@ pub fn execute_line(
                 let word_tokens = &tokens[i + 2..end];
 
                 let ast = parse_tokens(word_tokens)?;
-                // Validate that all words in the AST exist
-                ast.validate(dict)?;
+                // Validate that all words in the AST exist (allow forward reference for recursion)
+                ast.validate_with_name(dict, Some(&word_name))?;
 
                 // Try to JIT compile to native code, fall back to interpreter if it fails
-                if !try_jit_compile(word_name.clone(), &ast, dict, no_jit) {
+                if !try_jit_compile(word_name.clone(), &ast, dict, no_jit, dump_ir, verify_ir) {
                     dict.add_compiled(word_name, ast);
                 }
                 i = end + 1;
@@ -724,7 +743,7 @@ pub fn execute_line(
                 .map_err(|_| "Invalid UTF-8 in filename")?;
 
             // Load the file
-            load_file(&filename, stack, dict, loop_stack, return_stack, memory, no_jit)?;
+            load_file(&filename, stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir)?;
             i += 1;
         } else {
             // Collect tokens until we hit : or INCLUDE or INCLUDED or VARIABLE or CONSTANT or CREATE or end
@@ -795,14 +814,16 @@ pub fn load_stdlib(
     return_stack: &mut ReturnStack,
     memory: &mut Memory,
     no_jit: bool,
+    dump_ir: bool,
+    verify_ir: bool,
 ) -> Result<(), String> {
     // Load core definitions
     let core_processed = process_stdlib_content(CORE_FTH);
-    execute_line(&core_processed, stack, dict, loop_stack, return_stack, memory, no_jit)?;
+    execute_line(&core_processed, stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir)?;
 
     // Load test suite
     let tests_processed = process_stdlib_content(TESTS_FTH);
-    execute_line(&tests_processed, stack, dict, loop_stack, return_stack, memory, no_jit)?;
+    execute_line(&tests_processed, stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir)?;
 
     Ok(())
 }

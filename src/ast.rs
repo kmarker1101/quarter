@@ -29,6 +29,10 @@ pub enum AstNode {
 impl AstNode {
     /// Validate that all words referenced in this AST exist in the dictionary
     pub fn validate(&self, dict: &crate::dictionary::Dictionary) -> Result<(), String> {
+        self.validate_with_name(dict, None)
+    }
+
+    pub fn validate_with_name(&self, dict: &crate::dictionary::Dictionary, defining_word: Option<&str>) -> Result<(), String> {
         match self {
             AstNode::PushNumber(_) => Ok(()),
             AstNode::PrintString(_) => Ok(()),
@@ -36,6 +40,12 @@ impl AstNode {
             AstNode::Leave => Ok(()),
             AstNode::Exit => Ok(()),
             AstNode::CallWord(name) => {
+                // Allow forward reference if this is the word being defined (for recursion)
+                if let Some(def_name) = defining_word {
+                    if name.to_uppercase() == def_name.to_uppercase() {
+                        return Ok(());
+                    }
+                }
                 if dict.has_word(name) {
                     Ok(())
                 } else {
@@ -44,7 +54,7 @@ impl AstNode {
             }
             AstNode::Sequence(nodes) => {
                 for node in nodes {
-                    node.validate(dict)?;
+                    node.validate_with_name(dict, defining_word)?;
                 }
                 Ok(())
             }
@@ -53,33 +63,33 @@ impl AstNode {
                 else_branch,
             } => {
                 for node in then_branch {
-                    node.validate(dict)?;
+                    node.validate_with_name(dict, defining_word)?;
                 }
                 if let Some(else_nodes) = else_branch {
                     for node in else_nodes {
-                        node.validate(dict)?;
+                        node.validate_with_name(dict, defining_word)?;
                     }
                 }
                 Ok(())
             }
             AstNode::BeginUntil { body } => {
                 for node in body {
-                    node.validate(dict)?;
+                    node.validate_with_name(dict, defining_word)?;
                 }
                 Ok(())
             }
             AstNode::BeginWhileRepeat { condition, body } => {
                 for node in condition {
-                    node.validate(dict)?;
+                    node.validate_with_name(dict, defining_word)?;
                 }
                 for node in body {
-                    node.validate(dict)?;
+                    node.validate_with_name(dict, defining_word)?;
                 }
                 Ok(())
             }
             AstNode::DoLoop { body, .. } => {
                 for node in body {
-                    node.validate(dict)?;
+                    node.validate_with_name(dict, defining_word)?;
                 }
                 Ok(())
             }

@@ -644,6 +644,7 @@ pub fn comma(
 // Signature: void primitive(u8* memory, usize* sp, usize* rp)
 // =============================================================================
 
+#[inline(always)]
 #[unsafe(no_mangle)]
 pub extern "C" fn quarter_dup(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
@@ -659,6 +660,7 @@ pub extern "C" fn quarter_dup(memory: *mut u8, sp: *mut usize, _rp: *mut usize) 
     }
 }
 
+#[inline(always)]
 #[unsafe(no_mangle)]
 pub extern "C" fn quarter_drop(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
@@ -669,6 +671,7 @@ pub extern "C" fn quarter_drop(memory: *mut u8, sp: *mut usize, _rp: *mut usize)
     }
 }
 
+#[inline(always)]
 #[unsafe(no_mangle)]
 pub extern "C" fn quarter_swap(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
@@ -684,6 +687,7 @@ pub extern "C" fn quarter_swap(memory: *mut u8, sp: *mut usize, _rp: *mut usize)
     }
 }
 
+#[inline(always)]
 #[unsafe(no_mangle)]
 pub extern "C" fn quarter_add(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
@@ -700,6 +704,7 @@ pub extern "C" fn quarter_add(memory: *mut u8, sp: *mut usize, _rp: *mut usize) 
     }
 }
 
+#[inline(always)]
 #[unsafe(no_mangle)]
 pub extern "C" fn quarter_sub(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
@@ -716,6 +721,7 @@ pub extern "C" fn quarter_sub(memory: *mut u8, sp: *mut usize, _rp: *mut usize) 
     }
 }
 
+#[inline(always)]
 #[unsafe(no_mangle)]
 pub extern "C" fn quarter_mul(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
@@ -732,6 +738,7 @@ pub extern "C" fn quarter_mul(memory: *mut u8, sp: *mut usize, _rp: *mut usize) 
     }
 }
 
+#[inline(always)]
 #[unsafe(no_mangle)]
 pub extern "C" fn quarter_div(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
@@ -745,6 +752,25 @@ pub extern "C" fn quarter_div(memory: *mut u8, sp: *mut usize, _rp: *mut usize) 
         if b != 0 {
             *addr_a = a / b;
         }
+        // Decrement sp by 4
+        *sp = sp_val - 4;
+    }
+}
+
+/// JIT-callable less than comparison: ( a b -- flag )
+/// Pops two values, pushes -1 if a < b, 0 otherwise
+#[inline(always)]
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_less_than(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        // Pop b from sp-4, a from sp-8
+        let addr_a = memory.add(sp_val - 8) as *mut i32;
+        let addr_b = memory.add(sp_val - 4) as *const i32;
+        let a = *addr_a;
+        let b = *addr_b;
+        // Store result at sp-8: -1 if a < b, 0 otherwise
+        *addr_a = if a < b { -1 } else { 0 };
         // Decrement sp by 4
         *sp = sp_val - 4;
     }
