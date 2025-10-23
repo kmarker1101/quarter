@@ -4,7 +4,7 @@ use rustyline::error::ReadlineError;
 
 /// Attempt to JIT compile an AST to native code and store in dictionary
 /// Returns true if successful, false otherwise
-fn try_jit_compile(name: String, ast: &quarter::AstNode, dict: &mut quarter::Dictionary, no_jit: bool) -> bool {
+fn try_jit_compile(name: String, ast: &quarter::AstNode, dict: &mut quarter::Dictionary, no_jit: bool, dump_ir: bool, verify_ir: bool) -> bool {
     if no_jit {
         return false;
     }
@@ -22,6 +22,21 @@ fn try_jit_compile(name: String, ast: &quarter::AstNode, dict: &mut quarter::Dic
     // Try to compile the AST
     match compiler.compile_word(&name, ast) {
         Ok(jit_fn) => {
+            // Dump IR if requested
+            if dump_ir {
+                println!("\n=== IR for {} ===", name);
+                println!("{}", compiler.get_ir());
+                println!("==================\n");
+            }
+
+            // Verify IR if requested
+            if verify_ir {
+                if let Err(e) = compiler.verify() {
+                    eprintln!("IR verification failed for {}: {}", name, e);
+                    return false;
+                }
+            }
+
             // Add the JIT function to the dictionary
             dict.add_jit_compiled_with_compiler(name, jit_fn, Box::new(compiler));
             true
@@ -40,11 +55,17 @@ fn main() {
     // Parse command line arguments
     let args: Vec<String> = std::env::args().collect();
     let mut no_jit = false;
+    let mut dump_ir = false;
+    let mut verify_ir = false;
     let mut filename: Option<String> = None;
 
     for arg in args.iter().skip(1) {
         if arg == "--no-jit" {
             no_jit = true;
+        } else if arg == "--dump-ir" {
+            dump_ir = true;
+        } else if arg == "--verify-ir" {
+            verify_ir = true;
         } else if !arg.starts_with("--") {
             filename = Some(arg.clone());
         }
@@ -53,9 +74,15 @@ fn main() {
     if no_jit {
         println!("JIT compilation disabled");
     }
+    if dump_ir {
+        println!("IR dump enabled");
+    }
+    if verify_ir {
+        println!("IR verification enabled");
+    }
 
     // Load standard library
-    if let Err(e) = load_stdlib(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, no_jit) {
+    if let Err(e) = load_stdlib(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, no_jit, dump_ir, verify_ir) {
         eprintln!("Error loading stdlib: {}", e);
         std::process::exit(1);
     }
@@ -66,7 +93,7 @@ fn main() {
     // Supported extensions: .qtr, .fth, .forth, .quarter
     if let Some(file) = filename {
         println!("Loading {}", file);
-        match load_file(&file, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, no_jit) {
+        match load_file(&file, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, no_jit, dump_ir, verify_ir) {
             Ok(_) => {
                 return;
             }
@@ -134,12 +161,12 @@ fn main() {
 
                         match parse_tokens(word_tokens) {
                             Ok(ast) => {
-                                // Validate that all words in the AST exist
-                                if let Err(e) = ast.validate(&dict) {
+                                // Validate that all words in the AST exist (allow forward reference for recursion)
+                                if let Err(e) = ast.validate_with_name(&dict, Some(&word_name)) {
                                     println!("{}", e);
                                 } else {
                                     // Try JIT compilation, fall back to interpreter
-                                    if !try_jit_compile(word_name.clone(), &ast, &mut dict, no_jit) {
+                                    if !try_jit_compile(word_name.clone(), &ast, &mut dict, no_jit, dump_ir, verify_ir) {
                                         dict.add_compiled(word_name, ast);
                                     }
                                     println!("ok");
@@ -165,7 +192,7 @@ fn main() {
                     }
 
                     let filename = tokens[1];
-                    match load_file(filename, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, no_jit) {
+                    match load_file(filename, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, no_jit, dump_ir, verify_ir) {
                         Ok(_) => {
                             println!("ok");
                         }
@@ -187,12 +214,12 @@ fn main() {
 
                         match parse_tokens(word_tokens) {
                             Ok(ast) => {
-                                // Validate that all words in the AST exist
-                                if let Err(e) = ast.validate(&dict) {
+                                // Validate that all words in the AST exist (allow forward reference for recursion)
+                                if let Err(e) = ast.validate_with_name(&dict, Some(&word_name)) {
                                     println!("{}", e);
                                 } else {
                                     // Try JIT compilation, fall back to interpreter
-                                    if !try_jit_compile(word_name.clone(), &ast, &mut dict, no_jit) {
+                                    if !try_jit_compile(word_name.clone(), &ast, &mut dict, no_jit, dump_ir, verify_ir) {
                                         dict.add_compiled(word_name, ast);
                                     }
                                     println!("ok");
@@ -283,7 +310,7 @@ fn main() {
                     let s_quote_end = tokens.iter().position(|&t| t.ends_with('"') && t != "S\"");
                     if let Some(_end_idx) = s_quote_end {
                         let all_tokens_str = tokens.join(" ");
-                        match quarter::execute_line(&all_tokens_str, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, no_jit) {
+                        match quarter::execute_line(&all_tokens_str, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, no_jit, dump_ir, verify_ir) {
                             Ok(_) => println!("ok"),
                             Err(e) => println!("{}", e),
                         }

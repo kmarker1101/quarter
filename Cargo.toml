@@ -6,3 +6,11 @@ edition = "2024"
 [dependencies]
 rustyline = "14.0"
 inkwell = { version = "0.6.0", features = ["llvm18-1"] }
+
+[profile.release]
+lto = "thin"         # Thin LTO - faster compilation, less memory than full LTO
+codegen-units = 1    # Better optimization with single codegen unit
+opt-level = 3        # Maximum optimization
+
+[profile.dev]
+# No LTO for dev builds - keep them fast

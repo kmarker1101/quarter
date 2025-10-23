@@ -37,6 +37,8 @@ fn test_backslash_comment_in_execution() {
         &mut return_stack,
         &mut memory,
         false,
+        false,
+        false,
     )
     .unwrap();
 
@@ -58,6 +60,8 @@ fn test_parenthesis_comment_in_execution() {
         &mut loop_stack,
         &mut return_stack,
         &mut memory,
+        false,
+        false,
         false,
     )
     .unwrap();
@@ -82,6 +86,8 @@ fn test_stack_effect_notation() {
         &mut return_stack,
         &mut memory,
         false,
+        false,
+        false,
     )
     .unwrap();
 
@@ -93,6 +99,8 @@ fn test_stack_effect_notation() {
         &mut loop_stack,
         &mut return_stack,
         &mut memory,
+        false,
+        false,
         false,
     )
     .unwrap();
@@ -109,7 +117,7 @@ fn test_mixed_comments_in_definition() {
     let mut memory = Memory::new();
 
     // Load stdlib to get NEGATE
-    load_stdlib(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false).unwrap();
+    load_stdlib(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false).unwrap();
 
     // Define with both comment types
     execute_line(
@@ -119,6 +127,8 @@ fn test_mixed_comments_in_definition() {
         &mut loop_stack,
         &mut return_stack,
         &mut memory,
+        false,
+        false,
         false,
     )
     .unwrap();
@@ -133,6 +143,8 @@ fn test_mixed_comments_in_definition() {
         &mut return_stack,
         &mut memory,
         false,
+        false,
+        false,
     )
     .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(42));
@@ -146,6 +158,8 @@ fn test_mixed_comments_in_definition() {
         &mut loop_stack,
         &mut return_stack,
         &mut memory,
+        false,
+        false,
         false,
     )
     .unwrap();
@@ -167,6 +181,8 @@ fn test_multiple_parenthesis_comments() {
         &mut loop_stack,
         &mut return_stack,
         &mut memory,
+        false,
+        false,
         false,
     )
     .unwrap();
@@ -192,6 +208,8 @@ fn test_comment_only_line() {
         &mut return_stack,
         &mut memory,
         false,
+        false,
+        false,
     )
     .unwrap();
 
@@ -202,6 +220,8 @@ fn test_comment_only_line() {
         &mut loop_stack,
         &mut return_stack,
         &mut memory,
+        false,
+        false,
         false,
     )
     .unwrap();
