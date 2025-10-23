@@ -41,6 +41,10 @@ impl Stack {
         self.sp == 0x000000
     }
 
+    pub fn depth(&self) -> usize {
+        self.sp / 4
+    }
+
     pub fn print_stack(&self, memory: &crate::Memory) {
         let depth = self.sp / 4;
         if depth == 0 {

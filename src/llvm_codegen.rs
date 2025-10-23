@@ -7,6 +7,8 @@ use inkwell::AddressSpace;
 use crate::ast::AstNode;
 use crate::dictionary::JITFunction;
 use std::cell::RefCell;
+use std::collections::HashMap;
+use std::sync::Mutex;
 
 pub struct Compiler<'ctx> {
     context: &'ctx Context,
@@ -17,6 +19,15 @@ pub struct Compiler<'ctx> {
     loop_index_stack: RefCell<Vec<inkwell::values::IntValue<'ctx>>>,
     // Name of the function currently being compiled (for recursion support)
     current_function_name: RefCell<Option<String>>,
+}
+
+// Global registry of JIT-compiled function pointers
+// Maps word names (uppercase) to their JIT function pointers
+// This allows different compiled words to call each other
+lazy_static::lazy_static! {
+    static ref JIT_FUNCTION_REGISTRY: Mutex<HashMap<String, JITFunction>> = {
+        Mutex::new(HashMap::new())
+    };
 }
 
 impl<'ctx> Compiler<'ctx> {
@@ -79,6 +90,32 @@ impl<'ctx> Compiler<'ctx> {
         }
     }
 
+    /// Register existing JIT-compiled words as external symbols
+    /// This allows the current word being compiled to call other JIT-compiled words
+    fn register_jit_symbols(&mut self) -> Result<(), String> {
+        let registry = JIT_FUNCTION_REGISTRY.lock()
+            .map_err(|e| format!("Failed to lock JIT registry: {}", e))?;
+
+        let ptr_type = self.context.ptr_type(AddressSpace::default());
+        let void_type = self.context.void_type();
+        let fn_type = void_type.fn_type(&[ptr_type.into(), ptr_type.into(), ptr_type.into()], false);
+
+        for (name, jit_fn) in registry.iter() {
+            // Declare the function in this module
+            self.module.add_function(name, fn_type, None);
+
+            // Register the function pointer with the execution engine
+            // This allows LLVM to resolve calls to this function
+            let fn_ptr = *jit_fn as usize;
+            self.execution_engine.add_global_mapping(
+                &self.module.get_function(name).unwrap(),
+                fn_ptr
+            );
+        }
+
+        Ok(())
+    }
+
     /// Create a function signature for a Forth word
     /// Function signature: void @word_name(u8* memory, usize* sp, usize* rp)
     fn create_function_signature(&self, name: &str) -> inkwell::values::FunctionValue<'ctx> {
@@ -91,6 +128,9 @@ impl<'ctx> Compiler<'ctx> {
 
     /// Compile a Forth word's AST to LLVM IR and return executable function
     pub fn compile_word(&mut self, name: &str, ast: &AstNode) -> Result<JITFunction, String> {
+        // Register existing JIT-compiled words so this word can call them
+        self.register_jit_symbols()?;
+
         // Set the current function name for recursion support
         *self.current_function_name.borrow_mut() = Some(name.to_uppercase());
 
@@ -148,6 +188,21 @@ impl<'ctx> Compiler<'ctx> {
                     }
                 }
                 drop(current_fn_name);  // Release the borrow
+
+                // Check if this word has been JIT-compiled already
+                // If so, call it directly instead of using primitives or interpreter
+                let word_upper = word.to_uppercase();
+                let is_jit_compiled = {
+                    let registry = JIT_FUNCTION_REGISTRY.lock()
+                        .map_err(|e| format!("Failed to lock JIT registry: {}", e))?;
+                    registry.contains_key(&word_upper)
+                };
+
+                if is_jit_compiled {
+                    // This word has been JIT-compiled - call it directly
+                    self.compile_jit_word_call(function, &word_upper)?;
+                    return Ok(());
+                }
 
                 match word.as_str() {
                     "*" => self.compile_multiply(function)?,
@@ -540,6 +595,28 @@ impl<'ctx> Compiler<'ctx> {
         Ok(())
     }
 
+    /// Compile a call to another JIT-compiled word
+    /// This allows JIT-compiled words to call each other directly
+    fn compile_jit_word_call(&self, function: inkwell::values::FunctionValue<'ctx>, word_name: &str) -> Result<(), String> {
+        // Get the JIT-compiled function from the module
+        let jit_fn = self.module.get_function(word_name)
+            .ok_or_else(|| format!("JIT-compiled function {} not found in module", word_name))?;
+
+        // Get the function parameters (memory, sp, rp)
+        let memory_ptr = function.get_nth_param(0).unwrap().into_pointer_value();
+        let sp_ptr = function.get_nth_param(1).unwrap().into_pointer_value();
+        let rp_ptr = function.get_nth_param(2).unwrap().into_pointer_value();
+
+        // Call the JIT-compiled function
+        self.builder.build_call(
+            jit_fn,
+            &[memory_ptr.into(), sp_ptr.into(), rp_ptr.into()],
+            "jit_word_call"
+        ).map_err(|e| format!("Failed to build JIT word call: {}", e))?;
+
+        Ok(())
+    }
+
     /// Compile a multiply operation
     /// Just calls the external quarter_mul function
     fn compile_multiply(&self, function: inkwell::values::FunctionValue<'ctx>) -> Result<(), String> {
@@ -566,6 +643,45 @@ impl<'ctx> Compiler<'ctx> {
         self.module
             .verify()
             .map_err(|e| format!("Module verification failed: {}", e))
+    }
+}
+
+// Public API for JIT compilation with symbol registry
+
+/// Register a JIT-compiled function in the global registry
+/// This allows other words to call it
+pub fn register_jit_function(name: String, jit_fn: JITFunction) -> Result<(), String> {
+    let mut registry = JIT_FUNCTION_REGISTRY.lock()
+        .map_err(|e| format!("Failed to lock JIT registry: {}", e))?;
+
+    registry.insert(name.to_uppercase(), jit_fn);
+    Ok(())
+}
+
+/// Check if a word has been JIT-compiled
+pub fn is_jit_compiled(name: &str) -> bool {
+    if let Ok(registry) = JIT_FUNCTION_REGISTRY.lock() {
+        registry.contains_key(&name.to_uppercase())
+    } else {
+        false
+    }
+}
+
+/// Clear all JIT function registrations
+/// IMPORTANT: Only call this when you're sure no JIT functions are still in use
+/// (e.g., between tests or when shutting down)
+pub fn clear_jit_registry() {
+    if let Ok(mut registry) = JIT_FUNCTION_REGISTRY.lock() {
+        registry.clear();
+    }
+}
+
+/// Get a JIT-compiled function by name from the registry
+pub fn get_jit_function(name: &str) -> Option<JITFunction> {
+    if let Ok(registry) = JIT_FUNCTION_REGISTRY.lock() {
+        registry.get(&name.to_uppercase()).copied()
+    } else {
+        None
     }
 }
 

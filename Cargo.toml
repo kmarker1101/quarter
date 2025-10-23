@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 rustyline = "14.0"
 inkwell = { version = "0.6.0", features = ["llvm18-1"] }
+lazy_static = "1.5"
 
 [profile.release]
 lto = "thin"         # Thin LTO - faster compilation, less memory than full LTO
