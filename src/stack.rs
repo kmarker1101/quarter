@@ -69,4 +69,9 @@ impl Stack {
     pub fn as_mut_ptr(&mut self) -> usize {
         self.sp
     }
+
+    // Get mutable pointer to stack pointer (for JIT)
+    pub fn sp_mut_ptr(&mut self) -> *mut usize {
+        &mut self.sp as *mut usize
+    }
 }

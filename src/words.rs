@@ -637,3 +637,115 @@ pub fn comma(
         println!("Stack underflow!");
     }
 }
+
+// =============================================================================
+// JIT-callable wrappers for primitives
+// These functions have C calling convention and can be called from LLVM IR
+// Signature: void primitive(u8* memory, usize* sp, usize* rp)
+// =============================================================================
+
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_dup(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        // Read value from top of stack (sp - 4)
+        let addr = memory.add(sp_val - 4) as *const i32;
+        let val = *addr;
+        // Write value to next position (sp)
+        let dest = memory.add(sp_val) as *mut i32;
+        *dest = val;
+        // Increment sp by 4
+        *sp = sp_val + 4;
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_drop(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        // Decrement sp by 4
+        *sp = sp_val - 4;
+        let _ = memory; // Suppress warning
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_swap(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        // Read a from sp-8, b from sp-4
+        let addr_a = memory.add(sp_val - 8) as *mut i32;
+        let addr_b = memory.add(sp_val - 4) as *mut i32;
+        let a = *addr_a;
+        let b = *addr_b;
+        // Swap them
+        *addr_a = b;
+        *addr_b = a;
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_add(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        // Pop b from sp-4, a from sp-8
+        let addr_a = memory.add(sp_val - 8) as *mut i32;
+        let addr_b = memory.add(sp_val - 4) as *const i32;
+        let a = *addr_a;
+        let b = *addr_b;
+        // Store result at sp-8
+        *addr_a = a + b;
+        // Decrement sp by 4
+        *sp = sp_val - 4;
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_sub(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        // Pop b from sp-4, a from sp-8
+        let addr_a = memory.add(sp_val - 8) as *mut i32;
+        let addr_b = memory.add(sp_val - 4) as *const i32;
+        let a = *addr_a;
+        let b = *addr_b;
+        // Store result at sp-8
+        *addr_a = a - b;
+        // Decrement sp by 4
+        *sp = sp_val - 4;
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_mul(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        // Pop b from sp-4, a from sp-8
+        let addr_a = memory.add(sp_val.wrapping_sub(8)) as *mut i32;
+        let addr_b = memory.add(sp_val.wrapping_sub(4)) as *const i32;
+        let a = *addr_a;
+        let b = *addr_b;
+        // Store result at sp-8
+        *addr_a = a * b;
+        // Decrement sp by 4
+        *sp = sp_val - 4;
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_div(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        // Pop b from sp-4, a from sp-8
+        let addr_a = memory.add(sp_val - 8) as *mut i32;
+        let addr_b = memory.add(sp_val - 4) as *const i32;
+        let a = *addr_a;
+        let b = *addr_b;
+        // Store result at sp-8 (with division by zero check)
+        if b != 0 {
+            *addr_a = a / b;
+        }
+        // Decrement sp by 4
+        *sp = sp_val - 4;
+    }
+}

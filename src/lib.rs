@@ -108,6 +108,15 @@ impl ReturnStack {
     pub fn set_rp(&mut self, rp: usize) {
         self.rp = rp;
     }
+
+    pub fn as_mut_ptr(&mut self) -> usize {
+        self.rp
+    }
+
+    // Get mutable pointer to return stack pointer (for JIT)
+    pub fn rp_mut_ptr(&mut self) -> *mut usize {
+        &mut self.rp as *mut usize
+    }
 }
 
 // Memory for @, !, C@, C!
@@ -186,6 +195,19 @@ impl Memory {
         }
         self.bytes[addr] = (value & 0xFF) as u8;
         Ok(())
+    }
+
+    // Get a mutable pointer to memory at a given address
+    // Used for JIT-compiled functions
+    pub fn get_ptr_at(&mut self, addr: usize) -> *mut i32 {
+        unsafe {
+            self.bytes.as_mut_ptr().add(addr) as *mut i32
+        }
+    }
+
+    // Get mutable pointer to start of memory buffer (for JIT)
+    pub fn as_mut_ptr(&mut self) -> *mut u8 {
+        self.bytes.as_mut_ptr()
     }
 }
 
@@ -529,6 +551,7 @@ pub fn load_file(
     loop_stack: &mut LoopStack,
     return_stack: &mut ReturnStack,
     memory: &mut Memory,
+    no_jit: bool,
 ) -> Result<(), String> {
     let contents = fs::read_to_string(filename).map_err(|e| format!("Cannot read file: {}", e))?;
 
@@ -546,9 +569,37 @@ pub fn load_file(
     }
 
     // Now execute the entire file as one token stream
-    execute_line(&processed, stack, dict, loop_stack, return_stack, memory)?;
+    execute_line(&processed, stack, dict, loop_stack, return_stack, memory, no_jit)?;
 
     Ok(())
+}
+
+/// Attempt to JIT compile an AST to native code and store in dictionary
+/// Returns true if successful, false otherwise
+fn try_jit_compile(name: String, ast: &AstNode, dict: &mut dictionary::Dictionary, no_jit: bool) -> bool {
+    if no_jit {
+        return false;
+    }
+
+    use inkwell::context::Context;
+    use llvm_codegen::Compiler;
+
+    // Create LLVM context - leak it to make it 'static
+    let context = Box::leak(Box::new(Context::create()));
+    let mut compiler = match Compiler::new(context) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+
+    // Try to compile the AST
+    match compiler.compile_word(&name, ast) {
+        Ok(jit_fn) => {
+            // Add the JIT function to the dictionary
+            dict.add_jit_compiled_with_compiler(name, jit_fn, Box::new(compiler));
+            true
+        },
+        Err(_) => false,
+    }
 }
 
 pub fn execute_line(
@@ -558,6 +609,7 @@ pub fn execute_line(
     loop_stack: &mut LoopStack,
     return_stack: &mut ReturnStack,
     memory: &mut Memory,
+    no_jit: bool,
 ) -> Result<(), String> {
     // Strip comments from input
     let input = strip_comments(input);
@@ -578,7 +630,7 @@ pub fn execute_line(
             }
 
             let filename = tokens[i + 1];
-            load_file(filename, stack, dict, loop_stack, return_stack, memory)?;
+            load_file(filename, stack, dict, loop_stack, return_stack, memory, no_jit)?;
             i += 2;
         } else if token_upper == ":" {
             // Find matching semicolon for definition
@@ -602,7 +654,11 @@ pub fn execute_line(
                 let ast = parse_tokens(word_tokens)?;
                 // Validate that all words in the AST exist
                 ast.validate(dict)?;
-                dict.add_compiled(word_name, ast);
+
+                // Try to JIT compile to native code, fall back to interpreter if it fails
+                if !try_jit_compile(word_name.clone(), &ast, dict, no_jit) {
+                    dict.add_compiled(word_name, ast);
+                }
                 i = end + 1;
             } else {
                 return Err("Missing ; in word definition".to_string());
@@ -668,7 +724,7 @@ pub fn execute_line(
                 .map_err(|_| "Invalid UTF-8 in filename")?;
 
             // Load the file
-            load_file(&filename, stack, dict, loop_stack, return_stack, memory)?;
+            load_file(&filename, stack, dict, loop_stack, return_stack, memory, no_jit)?;
             i += 1;
         } else {
             // Collect tokens until we hit : or INCLUDE or INCLUDED or VARIABLE or CONSTANT or CREATE or end
@@ -738,14 +794,15 @@ pub fn load_stdlib(
     loop_stack: &mut LoopStack,
     return_stack: &mut ReturnStack,
     memory: &mut Memory,
+    no_jit: bool,
 ) -> Result<(), String> {
     // Load core definitions
     let core_processed = process_stdlib_content(CORE_FTH);
-    execute_line(&core_processed, stack, dict, loop_stack, return_stack, memory)?;
+    execute_line(&core_processed, stack, dict, loop_stack, return_stack, memory, no_jit)?;
 
     // Load test suite
     let tests_processed = process_stdlib_content(TESTS_FTH);
-    execute_line(&tests_processed, stack, dict, loop_stack, return_stack, memory)?;
+    execute_line(&tests_processed, stack, dict, loop_stack, return_stack, memory, no_jit)?;
 
     Ok(())
 }

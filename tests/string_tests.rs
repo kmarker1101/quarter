@@ -16,6 +16,7 @@ fn test_s_quote_basic() {
         &mut loop_stack,
         &mut return_stack,
         &mut memory,
+        false,
     )
     .unwrap();
 
@@ -27,6 +28,7 @@ fn test_s_quote_basic() {
         &mut loop_stack,
         &mut return_stack,
         &mut memory,
+        false,
     )
     .unwrap();
 
@@ -54,6 +56,7 @@ fn test_s_quote_fetch_string() {
         &mut loop_stack,
         &mut return_stack,
         &mut memory,
+        false,
     )
     .unwrap();
 
@@ -64,6 +67,7 @@ fn test_s_quote_fetch_string() {
         &mut loop_stack,
         &mut return_stack,
         &mut memory,
+        false,
     )
     .unwrap();
 
@@ -93,6 +97,7 @@ fn test_s_quote_multiple_strings() {
         &mut loop_stack,
         &mut return_stack,
         &mut memory,
+        false,
     )
     .unwrap();
 
@@ -103,6 +108,7 @@ fn test_s_quote_multiple_strings() {
         &mut loop_stack,
         &mut return_stack,
         &mut memory,
+        false,
     )
     .unwrap();
 
@@ -114,6 +120,7 @@ fn test_s_quote_multiple_strings() {
         &mut loop_stack,
         &mut return_stack,
         &mut memory,
+        false,
     )
     .unwrap();
 
@@ -128,6 +135,7 @@ fn test_s_quote_multiple_strings() {
         &mut loop_stack,
         &mut return_stack,
         &mut memory,
+        false,
     )
     .unwrap();
 
@@ -155,6 +163,7 @@ fn test_s_quote_empty_string() {
         &mut loop_stack,
         &mut return_stack,
         &mut memory,
+        false,
     )
     .unwrap();
 
@@ -165,6 +174,7 @@ fn test_s_quote_empty_string() {
         &mut loop_stack,
         &mut return_stack,
         &mut memory,
+        false,
     )
     .unwrap();
 
@@ -189,6 +199,7 @@ fn test_s_quote_with_spaces() {
         &mut loop_stack,
         &mut return_stack,
         &mut memory,
+        false,
     )
     .unwrap();
 
@@ -199,6 +210,7 @@ fn test_s_quote_with_spaces() {
         &mut loop_stack,
         &mut return_stack,
         &mut memory,
+        false,
     )
     .unwrap();
 
@@ -230,6 +242,7 @@ fn test_s_quote_advances_here() {
         &mut loop_stack,
         &mut return_stack,
         &mut memory,
+        false,
     )
     .unwrap();
 
@@ -244,6 +257,7 @@ fn test_s_quote_advances_here() {
         &mut loop_stack,
         &mut return_stack,
         &mut memory,
+        false,
     )
     .unwrap();
 
@@ -270,6 +284,7 @@ fn test_s_quote_with_special_chars() {
         &mut loop_stack,
         &mut return_stack,
         &mut memory,
+        false,
     )
     .unwrap();
 
@@ -280,6 +295,7 @@ fn test_s_quote_with_special_chars() {
         &mut loop_stack,
         &mut return_stack,
         &mut memory,
+        false,
     )
     .unwrap();
 
