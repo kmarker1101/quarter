@@ -19,7 +19,7 @@ fn test_sp_fetch() {
     .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(0));
 
-    // Push 3 values - SP should be 12 (3 cells * 4 bytes)
+    // Push 3 values - SP should be 24 (3 cells * 8 bytes)
     stack.push(10, &mut memory);
     stack.push(20, &mut memory);
     stack.push(30, &mut memory);
@@ -31,7 +31,7 @@ fn test_sp_fetch() {
         &mut memory,
     )
     .unwrap();
-    assert_eq!(stack.pop(&mut memory), Some(12)); // SP was 12 before SP@ pushed the value
+    assert_eq!(stack.pop(&mut memory), Some(24)); // SP was 24 before SP@ pushed the value
 }
 
 #[test]
@@ -47,8 +47,8 @@ fn test_sp_store() {
     stack.push(20, &mut memory);
     stack.push(30, &mut memory);
 
-    // Reset SP to 4 (1 cell)
-    stack.push(4, &mut memory);
+    // Reset SP to 8 (1 cell)
+    stack.push(8, &mut memory);
     dict.execute_word(
         "SP!",
         &mut stack,
@@ -67,7 +67,7 @@ fn test_sp_store() {
         &mut memory,
     )
     .unwrap();
-    assert_eq!(stack.pop(&mut memory), Some(4)); // SP is now 4
+    assert_eq!(stack.pop(&mut memory), Some(8)); // SP is now 8
 }
 
 #[test]
@@ -89,7 +89,7 @@ fn test_rp_fetch() {
     .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(65536));
 
-    // Push 2 values to return stack - RP should be 0x010008 (65544)
+    // Push 2 values to return stack - RP should be 0x010010 (65552)
     stack.push(100, &mut memory);
     dict.execute_word(
         ">R",
@@ -117,7 +117,7 @@ fn test_rp_fetch() {
         &mut memory,
     )
     .unwrap();
-    assert_eq!(stack.pop(&mut memory), Some(65544)); // 65536 + 8
+    assert_eq!(stack.pop(&mut memory), Some(65552)); // 65536 + 16
 }
 
 #[test]

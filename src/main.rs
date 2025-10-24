@@ -48,15 +48,15 @@ fn try_forth_compile(
     let name_addr = 302000;
     for (i, ch) in name.bytes().enumerate() {
         // Store each character as a byte
-        if let Err(_) = memory.store_byte(name_addr + i, ch as i32) {
+        if let Err(_) = memory.store_byte(name_addr + i, ch as i64) {
             return false;
         }
     }
 
     // Push arguments for COMPILE-WORD: ( ast-handle name-addr name-len -- fn-ptr )
     stack.push(ast_handle, memory);
-    stack.push(name_addr as i32, memory);
-    stack.push(name.len() as i32, memory);
+    stack.push(name_addr as i64, memory);
+    stack.push(name.len() as i64, memory);
 
     // Execute COMPILE-WORD
     if let Err(e) = dict.execute_word("COMPILE-WORD", stack, loop_stack, return_stack, memory) {

@@ -42,8 +42,8 @@
 
 : NEGATE ( n1 -- n2 ) 0 SWAP - ;
 : ABS ( n -- +n ) DUP 0 < IF NEGATE THEN ;
-: CELLS ( n -- n ) 4 * ;
-: CELL+ ( a-addr1 -- a-addr2 ) 4 + ;
+: CELLS ( n -- n ) 8 * ;
+: CELL+ ( a-addr1 -- a-addr2 ) 8 + ;
 : +! ( n addr -- ) DUP @ ROT + SWAP ! ;
 : 1+ ( n -- n+1 ) 1 + ;
 : 1- ( n -- n-1 ) 1 - ;

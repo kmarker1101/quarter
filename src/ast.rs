@@ -2,7 +2,7 @@ use crate::stack::Stack;
 
 #[derive(Debug, Clone)]
 pub enum AstNode {
-    PushNumber(i32),
+    PushNumber(i64),
     CallWord(String),
     Sequence(Vec<AstNode>),
     IfThenElse {
@@ -18,7 +18,7 @@ pub enum AstNode {
     },
     DoLoop {
         body: Vec<AstNode>,
-        increment: i32,  // 1 for LOOP, variable for +LOOP
+        increment: i64,  // 1 for LOOP, variable for +LOOP
     },
     PrintString(String),
     StackString(String),  // S" - push address and length
@@ -270,11 +270,11 @@ impl AstNode {
                 // S" - Store string in memory and push address and length
                 let addr = memory.here();
                 let bytes = s.as_bytes();
-                let len = bytes.len() as i32;
+                let len = bytes.len() as i64;
 
                 // Store each byte in memory
                 for (i, &byte) in bytes.iter().enumerate() {
-                    if let Err(e) = memory.store_byte((addr as usize) + i, byte as i32) {
+                    if let Err(e) = memory.store_byte((addr as usize) + i, byte as i64) {
                         return Err(e);
                     }
                 }

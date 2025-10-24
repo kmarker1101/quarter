@@ -28,7 +28,7 @@ pub fn clear_test_state() {
 // Loop stack for DO...LOOP counters
 #[derive(Debug, Clone)]
 pub struct LoopStack {
-    stack: Vec<(i32, i32)>, // (index, limit) pairs
+    stack: Vec<(i64, i64)>, // (index, limit) pairs
 }
 
 impl LoopStack {
@@ -36,19 +36,19 @@ impl LoopStack {
         LoopStack { stack: Vec::new() }
     }
 
-    pub fn push_loop(&mut self, start: i32, limit: i32) {
+    pub fn push_loop(&mut self, start: i64, limit: i64) {
         self.stack.push((start, limit));
     }
 
-    pub fn pop_loop(&mut self) -> Option<(i32, i32)> {
+    pub fn pop_loop(&mut self) -> Option<(i64, i64)> {
         self.stack.pop()
     }
 
-    pub fn get_index(&self) -> Option<i32> {
+    pub fn get_index(&self) -> Option<i64> {
         self.stack.last().map(|(index, _)| *index)
     }
 
-    pub fn get_outer_index(&self) -> Option<i32> {
+    pub fn get_outer_index(&self) -> Option<i64> {
         // Get the second-to-last loop index (for J word)
         if self.stack.len() >= 2 {
             self.stack[self.stack.len() - 2].0.into()
@@ -57,7 +57,7 @@ impl LoopStack {
         }
     }
 
-    pub fn increment(&mut self, amount: i32) -> bool {
+    pub fn increment(&mut self, amount: i64) -> bool {
         if let Some((index, limit)) = self.stack.last_mut() {
             *index += amount;
             *index < *limit // Continue if index < limit
@@ -82,29 +82,29 @@ impl ReturnStack {
         }
     }
 
-    pub fn push(&mut self, value: i32, memory: &mut Memory) {
+    pub fn push(&mut self, value: i64, memory: &mut Memory) {
         // Store value at current RP
         memory.store(self.rp, value).expect("Return stack overflow");
-        // Move RP to next cell (4 bytes)
-        self.rp += 4;
+        // Move RP to next cell (8 bytes)
+        self.rp += 8;
     }
 
-    pub fn pop(&mut self, memory: &mut Memory) -> Option<i32> {
+    pub fn pop(&mut self, memory: &mut Memory) -> Option<i64> {
         if self.rp == 0x010000 {
             return None; // Return stack underflow
         }
         // Move RP back one cell
-        self.rp -= 4;
+        self.rp -= 8;
         // Fetch value at new RP
         memory.fetch(self.rp).ok()
     }
 
-    pub fn peek(&self, memory: &Memory) -> Option<i32> {
+    pub fn peek(&self, memory: &Memory) -> Option<i64> {
         if self.rp == 0x010000 {
             return None; // Return stack empty
         }
-        // Peek at top of return stack (RP - 4)
-        memory.fetch(self.rp - 4).ok()
+        // Peek at top of return stack (RP - 8)
+        memory.fetch(self.rp - 8).ok()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -150,13 +150,13 @@ impl Memory {
     }
 
     // HERE - return current dictionary pointer
-    pub fn here(&self) -> i32 {
-        self.dp as i32
+    pub fn here(&self) -> i64 {
+        self.dp as i64
     }
 
     // ALLOT - allocate n bytes in dictionary space
-    pub fn allot(&mut self, n: i32) -> Result<(), String> {
-        let new_dp = (self.dp as i32 + n) as usize;
+    pub fn allot(&mut self, n: i64) -> Result<(), String> {
+        let new_dp = (self.dp as i64 + n) as usize;
         if new_dp >= self.bytes.len() {
             return Err("Dictionary overflow".to_string());
         }
@@ -164,9 +164,9 @@ impl Memory {
         Ok(())
     }
 
-    // @ - fetch cell (4 bytes as i32, little-endian)
-    pub fn fetch(&self, addr: usize) -> Result<i32, String> {
-        if addr + 4 > self.bytes.len() {
+    // @ - fetch cell (8 bytes as i64, little-endian)
+    pub fn fetch(&self, addr: usize) -> Result<i64, String> {
+        if addr + 8 > self.bytes.len() {
             return Err(format!("Memory fetch out of bounds: address {}", addr));
         }
         let bytes = [
@@ -174,13 +174,17 @@ impl Memory {
             self.bytes[addr + 1],
             self.bytes[addr + 2],
             self.bytes[addr + 3],
+            self.bytes[addr + 4],
+            self.bytes[addr + 5],
+            self.bytes[addr + 6],
+            self.bytes[addr + 7],
         ];
-        Ok(i32::from_le_bytes(bytes))
+        Ok(i64::from_le_bytes(bytes))
     }
 
-    // ! - store cell (i32 as 4 bytes, little-endian)
-    pub fn store(&mut self, addr: usize, value: i32) -> Result<(), String> {
-        if addr + 4 > self.bytes.len() {
+    // ! - store cell (i64 as 8 bytes, little-endian)
+    pub fn store(&mut self, addr: usize, value: i64) -> Result<(), String> {
+        if addr + 8 > self.bytes.len() {
             return Err(format!("Memory store out of bounds: address {}", addr));
         }
         let bytes = value.to_le_bytes();
@@ -188,19 +192,23 @@ impl Memory {
         self.bytes[addr + 1] = bytes[1];
         self.bytes[addr + 2] = bytes[2];
         self.bytes[addr + 3] = bytes[3];
+        self.bytes[addr + 4] = bytes[4];
+        self.bytes[addr + 5] = bytes[5];
+        self.bytes[addr + 6] = bytes[6];
+        self.bytes[addr + 7] = bytes[7];
         Ok(())
     }
 
-    // C@ - fetch byte (return as i32)
-    pub fn fetch_byte(&self, addr: usize) -> Result<i32, String> {
+    // C@ - fetch byte (return as i64)
+    pub fn fetch_byte(&self, addr: usize) -> Result<i64, String> {
         if addr >= self.bytes.len() {
             return Err(format!("Memory byte fetch out of bounds: address {}", addr));
         }
-        Ok(self.bytes[addr] as i32)
+        Ok(self.bytes[addr] as i64)
     }
 
-    // C! - store byte (store low byte of i32)
-    pub fn store_byte(&mut self, addr: usize, value: i32) -> Result<(), String> {
+    // C! - store byte (store low byte of i64)
+    pub fn store_byte(&mut self, addr: usize, value: i64) -> Result<(), String> {
         if addr >= self.bytes.len() {
             return Err(format!("Memory byte store out of bounds: address {}", addr));
         }
@@ -210,8 +218,8 @@ impl Memory {
 
     // Get a mutable pointer to memory at a given address
     // Used for JIT-compiled functions
-    pub fn get_ptr_at(&mut self, addr: usize) -> *mut i32 {
-        unsafe { self.bytes.as_mut_ptr().add(addr) as *mut i32 }
+    pub fn get_ptr_at(&mut self, addr: usize) -> *mut i64 {
+        unsafe { self.bytes.as_mut_ptr().add(addr) as *mut i64 }
     }
 
     // Get mutable pointer to start of memory buffer (for JIT)
@@ -432,7 +440,7 @@ pub fn parse_tokens(tokens: &[&str]) -> Result<AstNode, String> {
             }
             _ => {
                 // Try to parse as number, otherwise it's a word
-                if let Ok(num) = token.parse::<i32>() {
+                if let Ok(num) = token.parse::<i64>() {
                     nodes.push(AstNode::PushNumber(num));
                 } else {
                     // Store word names in uppercase for case-insensitive lookup
@@ -756,8 +764,8 @@ pub fn execute_line(
             let var_name = tokens[i + 1].to_uppercase();
             let addr = memory.here();
 
-            // Allocate 1 cell (4 bytes) for the variable
-            memory.allot(4)?;
+            // Allocate 1 cell (8 bytes) for the variable
+            memory.allot(8)?;
 
             // Create a word that pushes the variable's address
             let var_ast = AstNode::PushNumber(addr);

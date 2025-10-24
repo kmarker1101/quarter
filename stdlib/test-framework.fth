@@ -14,10 +14,12 @@ VARIABLE #TEST
 VARIABLE ACTUAL-DEPTH
 VARIABLE TEST-NAME-ADDR
 VARIABLE TEST-NAME-LEN
-
-131072 CONSTANT TEST-STORAGE
 VARIABLE TEST-PTR
-131072 256 + CONSTANT EXPECTED-STORAGE
+
+HERE CONSTANT TEST-STORAGE
+256 ALLOT
+HERE CONSTANT EXPECTED-STORAGE
+256 ALLOT
 
 \ Initialize testing
 : TESTING
@@ -45,7 +47,7 @@ VARIABLE TEST-PTR
     DUP >R
     0 DO
         TEST-PTR @ !
-        TEST-PTR @ 4 + TEST-PTR !
+        TEST-PTR @ CELL+ TEST-PTR !
     LOOP
     R> DROP ;
 
@@ -62,16 +64,16 @@ VARIABLE TEST-PTR
     DEPTH ACTUAL-DEPTH @ = IF
         \ Save expected values to EXPECTED-STORAGE (pops from stack)
         ACTUAL-DEPTH @ 0 DO
-            EXPECTED-STORAGE I 4 * + !
+            EXPECTED-STORAGE I CELLS + !
         LOOP
 
         \ Now compare with stored actuals
         TRUE
         ACTUAL-DEPTH @ 0 DO
             \ Get stored actual
-            TEST-STORAGE I 4 * + @
+            TEST-STORAGE I CELLS + @
             \ Get expected from storage
-            EXPECTED-STORAGE I 4 * + @
+            EXPECTED-STORAGE I CELLS + @
             \ Compare
             = AND
         LOOP
@@ -85,11 +87,11 @@ VARIABLE TEST-PTR
             ." FAIL: " .TEST-ID CR
             ."   Expected: "
             ACTUAL-DEPTH @ 0 DO
-                EXPECTED-STORAGE I 4 * + @ .
+                EXPECTED-STORAGE I CELLS + @ .
             LOOP CR
             ."   Actual:   "
             ACTUAL-DEPTH @ 0 DO
-                TEST-STORAGE I 4 * + @ .
+                TEST-STORAGE I CELLS + @ .
             LOOP CR
         THEN
     ELSE

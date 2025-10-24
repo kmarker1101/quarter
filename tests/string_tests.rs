@@ -83,9 +83,9 @@ fn test_s_quote_fetch_string() {
     let addr = stack.pop(&mut memory).unwrap();
 
     // Fetch characters from memory
-    assert_eq!(memory.fetch_byte(addr as usize).unwrap(), 'H' as i32);
-    assert_eq!(memory.fetch_byte((addr + 1) as usize).unwrap(), 'i' as i32);
-    assert_eq!(memory.fetch_byte((addr + 2) as usize).unwrap(), '!' as i32);
+    assert_eq!(memory.fetch_byte(addr as usize).unwrap(), 'H' as i64);
+    assert_eq!(memory.fetch_byte((addr + 1) as usize).unwrap(), 'i' as i64);
+    assert_eq!(memory.fetch_byte((addr + 2) as usize).unwrap(), '!' as i64);
     assert_eq!(len, 3);
 }
 
@@ -244,7 +244,7 @@ fn test_s_quote_with_spaces() {
     assert_eq!(len, 11); // "Hello World"
 
     // Verify the space is there
-    assert_eq!(memory.fetch_byte((addr + 5) as usize).unwrap(), ' ' as i32);
+    assert_eq!(memory.fetch_byte((addr + 5) as usize).unwrap(), ' ' as i64);
 }
 
 #[test]
@@ -335,6 +335,6 @@ fn test_s_quote_with_special_chars() {
     let addr = stack.pop(&mut memory).unwrap();
 
     assert_eq!(len, 5);
-    assert_eq!(memory.fetch_byte(addr as usize).unwrap(), '!' as i32);
-    assert_eq!(memory.fetch_byte((addr + 1) as usize).unwrap(), '@' as i32);
+    assert_eq!(memory.fetch_byte(addr as usize).unwrap(), '!' as i64);
+    assert_eq!(memory.fetch_byte((addr + 1) as usize).unwrap(), '@' as i64);
 }

@@ -59,22 +59,22 @@ fn test_store_fetch_multiple_locations() {
         .unwrap();
 
     stack.push(222, &mut memory);
-    stack.push(0x020004, &mut memory);
+    stack.push(0x020008, &mut memory);
     dict.execute_word("!", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
         .unwrap();
 
     stack.push(333, &mut memory);
-    stack.push(0x020008, &mut memory);
+    stack.push(0x020010, &mut memory);
     dict.execute_word("!", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
         .unwrap();
 
     // Fetch them back
-    stack.push(0x020008, &mut memory);
+    stack.push(0x020010, &mut memory);
     dict.execute_word("@", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
         .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(333));
 
-    stack.push(0x020004, &mut memory);
+    stack.push(0x020008, &mut memory);
     dict.execute_word("@", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
         .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(222));
@@ -119,7 +119,7 @@ fn test_c_store_fetch_multiple_bytes() {
     let hello_bytes = vec![72, 101, 108, 108, 111]; // "Hello"
     for (i, byte) in hello_bytes.iter().enumerate() {
         stack.push(*byte, &mut memory);
-        stack.push(0x020000 + i as i32, &mut memory);
+        stack.push(0x020000 + i as i64, &mut memory);
         dict.execute_word("C!", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
             .unwrap();
     }
@@ -289,8 +289,8 @@ fn test_max_valid_address() {
     let mut memory = Memory::new();
 
     // 8MB = 8*1024*1024 bytes
-    // Max valid address for i32 store is 8*1024*1024 - 4
-    let max_addr = 8 * 1024 * 1024 - 4;
+    // Max valid address for i64 store is 8*1024*1024 - 8
+    let max_addr = 8 * 1024 * 1024 - 8;
 
     stack.push(12345, &mut memory);
     stack.push(max_addr, &mut memory);

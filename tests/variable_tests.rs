@@ -178,14 +178,14 @@ fn test_here_after_variables() {
         .unwrap();
     let initial = stack.pop(&mut memory).unwrap();
 
-    // Create a variable (allocates 4 bytes)
+    // Create a variable (allocates 8 bytes)
     execute_line("VARIABLE X", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false)
         .unwrap();
 
-    // HERE should be 4 bytes higher
+    // HERE should be 8 bytes higher
     execute_line("HERE", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false)
         .unwrap();
-    assert_eq!(stack.pop(&mut memory), Some(initial + 4));
+    assert_eq!(stack.pop(&mut memory), Some(initial + 8));
 }
 
 #[test]
@@ -214,15 +214,15 @@ fn test_comma_basic() {
     dict.execute_word(",", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
         .unwrap();
 
-    // HERE should have advanced by 12 (3 cells * 4 bytes)
+    // HERE should have advanced by 24 (3 cells * 8 bytes)
     dict.execute_word("HERE", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
         .unwrap();
-    assert_eq!(stack.pop(&mut memory), Some(addr + 12));
+    assert_eq!(stack.pop(&mut memory), Some(addr + 24));
 
     // Fetch the values back
     assert_eq!(memory.fetch(addr as usize).unwrap(), 42);
-    assert_eq!(memory.fetch((addr + 4) as usize).unwrap(), 43);
-    assert_eq!(memory.fetch((addr + 8) as usize).unwrap(), 44);
+    assert_eq!(memory.fetch((addr + 8) as usize).unwrap(), 43);
+    assert_eq!(memory.fetch((addr + 16) as usize).unwrap(), 44);
 }
 
 #[test]
@@ -348,12 +348,12 @@ fn test_comma_and_fetch() {
         .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(10));
 
-    stack.push(start_addr + 4, &mut memory);
+    stack.push(start_addr + 8, &mut memory);
     dict.execute_word("@", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
         .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(20));
 
-    stack.push(start_addr + 8, &mut memory);
+    stack.push(start_addr + 16, &mut memory);
     dict.execute_word("@", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
         .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(30));

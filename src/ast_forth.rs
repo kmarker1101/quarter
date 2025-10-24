@@ -8,7 +8,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 /// AST node handle type
-pub type AstHandle = i32;
+pub type AstHandle = i64;
 
 // Thread-local AST registry
 thread_local! {
@@ -17,7 +17,7 @@ thread_local! {
 
 /// Registry for AST nodes
 struct AstRegistry {
-    next_id: i32,
+    next_id: i64,
     nodes: HashMap<AstHandle, AstNode>,
 }
 
@@ -40,7 +40,7 @@ impl AstRegistry {
     /// Get node type as integer
     /// 1=PushNumber, 2=CallWord, 3=Sequence, 4=IfThenElse, 5=BeginUntil,
     /// 6=BeginWhileRepeat, 7=DoLoop, 8=PrintString, 9=StackString, 10=Leave, 11=Exit, 12=InlineInstruction
-    fn get_node_type(&self, handle: AstHandle) -> Result<i32, String> {
+    fn get_node_type(&self, handle: AstHandle) -> Result<i64, String> {
         let node = self.nodes.get(&handle)
             .ok_or_else(|| format!("Invalid AST handle: {}", handle))?;
 
@@ -61,7 +61,7 @@ impl AstRegistry {
     }
 
     /// Get number value from PushNumber node
-    fn get_number(&self, handle: AstHandle) -> Result<i32, String> {
+    fn get_number(&self, handle: AstHandle) -> Result<i64, String> {
         let node = self.nodes.get(&handle)
             .ok_or_else(|| format!("Invalid AST handle: {}", handle))?;
 
@@ -73,7 +73,7 @@ impl AstRegistry {
 
     /// Get word name from CallWord node (stores in memory at given address)
     /// Returns length of string
-    fn get_word_name(&self, handle: AstHandle, memory: &mut crate::Memory, addr: usize) -> Result<i32, String> {
+    fn get_word_name(&self, handle: AstHandle, memory: &mut crate::Memory, addr: usize) -> Result<i64, String> {
         let node = self.nodes.get(&handle)
             .ok_or_else(|| format!("Invalid AST handle: {}", handle))?;
 
@@ -81,10 +81,10 @@ impl AstRegistry {
             AstNode::CallWord(name) => {
                 // Store string bytes in memory
                 for (i, byte) in name.as_bytes().iter().enumerate() {
-                    memory.store_byte(addr + i, *byte as i32)
+                    memory.store_byte(addr + i, *byte as i64)
                         .map_err(|e| format!("Failed to store string: {}", e))?;
                 }
-                Ok(name.len() as i32)
+                Ok(name.len() as i64)
             }
             _ => Err(format!("AST node is not a CallWord")),
         }
@@ -92,7 +92,7 @@ impl AstRegistry {
 
     /// Get instruction name from InlineInstruction node (stores in memory at given address)
     /// Returns length of string
-    fn get_inline_instruction(&self, handle: AstHandle, memory: &mut crate::Memory, addr: usize) -> Result<i32, String> {
+    fn get_inline_instruction(&self, handle: AstHandle, memory: &mut crate::Memory, addr: usize) -> Result<i64, String> {
         let node = self.nodes.get(&handle)
             .ok_or_else(|| format!("Invalid AST handle: {}", handle))?;
 
@@ -100,17 +100,17 @@ impl AstRegistry {
             AstNode::InlineInstruction(instruction) => {
                 // Store string bytes in memory
                 for (i, byte) in instruction.as_bytes().iter().enumerate() {
-                    memory.store_byte(addr + i, *byte as i32)
+                    memory.store_byte(addr + i, *byte as i64)
                         .map_err(|e| format!("Failed to store string: {}", e))?;
                 }
-                Ok(instruction.len() as i32)
+                Ok(instruction.len() as i64)
             }
             _ => Err(format!("AST node is not an InlineInstruction")),
         }
     }
 
     /// Get string value from PrintString or StackString node
-    fn get_string(&self, handle: AstHandle, memory: &mut crate::Memory, addr: usize) -> Result<i32, String> {
+    fn get_string(&self, handle: AstHandle, memory: &mut crate::Memory, addr: usize) -> Result<i64, String> {
         let node = self.nodes.get(&handle)
             .ok_or_else(|| format!("Invalid AST handle: {}", handle))?;
 
@@ -122,31 +122,31 @@ impl AstRegistry {
 
         // Store string bytes in memory
         for (i, byte) in string.as_bytes().iter().enumerate() {
-            memory.store_byte(addr + i, *byte as i32)
+            memory.store_byte(addr + i, *byte as i64)
                 .map_err(|e| format!("Failed to store string: {}", e))?;
         }
-        Ok(string.len() as i32)
+        Ok(string.len() as i64)
     }
 
     /// Get number of children in a Sequence node
-    fn get_sequence_length(&self, handle: AstHandle) -> Result<i32, String> {
+    fn get_sequence_length(&self, handle: AstHandle) -> Result<i64, String> {
         let node = self.nodes.get(&handle)
             .ok_or_else(|| format!("Invalid AST handle: {}", handle))?;
 
         match node {
-            AstNode::Sequence(nodes) => Ok(nodes.len() as i32),
+            AstNode::Sequence(nodes) => Ok(nodes.len() as i64),
             _ => Err(format!("AST node is not a Sequence")),
         }
     }
 
     /// Get nth child from Sequence node (0-indexed)
-    fn get_sequence_child(&mut self, handle: AstHandle, index: i32) -> Result<AstHandle, String> {
+    fn get_sequence_child(&mut self, handle: AstHandle, index: i64) -> Result<AstHandle, String> {
         let node = self.nodes.get(&handle)
             .ok_or_else(|| format!("Invalid AST handle: {}", handle))?;
 
         match node {
             AstNode::Sequence(nodes) => {
-                if index < 0 || index >= nodes.len() as i32 {
+                if index < 0 || index >= nodes.len() as i64 {
                     return Err(format!("Sequence index out of bounds: {}", index));
                 }
                 let child = nodes[index as usize].clone();
@@ -220,7 +220,7 @@ impl AstRegistry {
     }
 
     /// Get loop increment (for DoLoop)
-    fn get_loop_increment(&self, handle: AstHandle) -> Result<i32, String> {
+    fn get_loop_increment(&self, handle: AstHandle) -> Result<i64, String> {
         let node = self.nodes.get(&handle)
             .ok_or_else(|| format!("Invalid AST handle: {}", handle))?;
 
@@ -254,7 +254,7 @@ pub fn ast_clear_registry() {
 
 /// Get AST node type
 /// Stack: ( ast-handle -- type )
-pub fn ast_get_type(handle: i32) -> Result<i32, String> {
+pub fn ast_get_type(handle: i64) -> Result<i64, String> {
     AST_REGISTRY.with(|cell| {
         let registry = cell.borrow();
         registry.get_node_type(handle)
@@ -263,7 +263,7 @@ pub fn ast_get_type(handle: i32) -> Result<i32, String> {
 
 /// Get number from PushNumber node
 /// Stack: ( ast-handle -- number )
-pub fn ast_get_number(handle: i32) -> Result<i32, String> {
+pub fn ast_get_number(handle: i64) -> Result<i64, String> {
     AST_REGISTRY.with(|cell| {
         let registry = cell.borrow();
         registry.get_number(handle)
@@ -272,7 +272,7 @@ pub fn ast_get_number(handle: i32) -> Result<i32, String> {
 
 /// Get word name from CallWord node
 /// Stack: ( ast-handle addr -- length )
-pub fn ast_get_word_name(handle: i32, memory: &mut crate::Memory, addr: usize) -> Result<i32, String> {
+pub fn ast_get_word_name(handle: i64, memory: &mut crate::Memory, addr: usize) -> Result<i64, String> {
     AST_REGISTRY.with(|cell| {
         let registry = cell.borrow();
         registry.get_word_name(handle, memory, addr)
@@ -281,7 +281,7 @@ pub fn ast_get_word_name(handle: i32, memory: &mut crate::Memory, addr: usize) -
 
 /// Get instruction name from InlineInstruction
 /// Stack: ( ast-handle addr -- length )
-pub fn ast_get_inline_instruction(handle: i32, memory: &mut crate::Memory, addr: usize) -> Result<i32, String> {
+pub fn ast_get_inline_instruction(handle: i64, memory: &mut crate::Memory, addr: usize) -> Result<i64, String> {
     AST_REGISTRY.with(|cell| {
         let registry = cell.borrow();
         registry.get_inline_instruction(handle, memory, addr)
@@ -290,7 +290,7 @@ pub fn ast_get_inline_instruction(handle: i32, memory: &mut crate::Memory, addr:
 
 /// Get string from PrintString or StackString
 /// Stack: ( ast-handle addr -- length )
-pub fn ast_get_string(handle: i32, memory: &mut crate::Memory, addr: usize) -> Result<i32, String> {
+pub fn ast_get_string(handle: i64, memory: &mut crate::Memory, addr: usize) -> Result<i64, String> {
     AST_REGISTRY.with(|cell| {
         let registry = cell.borrow();
         registry.get_string(handle, memory, addr)
@@ -299,7 +299,7 @@ pub fn ast_get_string(handle: i32, memory: &mut crate::Memory, addr: usize) -> R
 
 /// Get sequence length
 /// Stack: ( ast-handle -- length )
-pub fn ast_get_sequence_length(handle: i32) -> Result<i32, String> {
+pub fn ast_get_sequence_length(handle: i64) -> Result<i64, String> {
     AST_REGISTRY.with(|cell| {
         let registry = cell.borrow();
         registry.get_sequence_length(handle)
@@ -308,7 +308,7 @@ pub fn ast_get_sequence_length(handle: i32) -> Result<i32, String> {
 
 /// Get sequence child
 /// Stack: ( ast-handle index -- child-handle )
-pub fn ast_get_sequence_child(handle: i32, index: i32) -> Result<i32, String> {
+pub fn ast_get_sequence_child(handle: i64, index: i64) -> Result<i64, String> {
     AST_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.get_sequence_child(handle, index)
@@ -317,7 +317,7 @@ pub fn ast_get_sequence_child(handle: i32, index: i32) -> Result<i32, String> {
 
 /// Get IF then branch
 /// Stack: ( ast-handle -- then-handle )
-pub fn ast_get_if_then(handle: i32) -> Result<i32, String> {
+pub fn ast_get_if_then(handle: i64) -> Result<i64, String> {
     AST_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.get_if_then_branch(handle)
@@ -326,7 +326,7 @@ pub fn ast_get_if_then(handle: i32) -> Result<i32, String> {
 
 /// Get IF else branch
 /// Stack: ( ast-handle -- else-handle-or-0 )
-pub fn ast_get_if_else(handle: i32) -> Result<i32, String> {
+pub fn ast_get_if_else(handle: i64) -> Result<i64, String> {
     AST_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.get_if_else_branch(handle)
@@ -335,7 +335,7 @@ pub fn ast_get_if_else(handle: i32) -> Result<i32, String> {
 
 /// Get loop body
 /// Stack: ( ast-handle -- body-handle )
-pub fn ast_get_loop_body(handle: i32) -> Result<i32, String> {
+pub fn ast_get_loop_body(handle: i64) -> Result<i64, String> {
     AST_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.get_loop_body(handle)
@@ -344,7 +344,7 @@ pub fn ast_get_loop_body(handle: i32) -> Result<i32, String> {
 
 /// Get loop condition (BeginWhileRepeat only)
 /// Stack: ( ast-handle -- condition-handle )
-pub fn ast_get_loop_condition(handle: i32) -> Result<i32, String> {
+pub fn ast_get_loop_condition(handle: i64) -> Result<i64, String> {
     AST_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.get_loop_condition(handle)
@@ -353,7 +353,7 @@ pub fn ast_get_loop_condition(handle: i32) -> Result<i32, String> {
 
 /// Get loop increment (DoLoop only)
 /// Stack: ( ast-handle -- increment )
-pub fn ast_get_loop_increment(handle: i32) -> Result<i32, String> {
+pub fn ast_get_loop_increment(handle: i64) -> Result<i64, String> {
     AST_REGISTRY.with(|cell| {
         let registry = cell.borrow();
         registry.get_loop_increment(handle)
