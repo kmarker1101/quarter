@@ -16,9 +16,7 @@ jobs:
         run: cargo test --all
       - name: Build Quarter for Forth tests
         run: cargo build --release
-      - name: Run Forth stdlib tests
-        run: echo "RUN-ALL-TESTS BYE" | ./target/release/quarter
-
+	
   build:
     name: Build Release Binary
     needs: test

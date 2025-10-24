@@ -4,58 +4,111 @@
 \ Usage:
 \   TESTING
 \   T{ 5 3 + -> 8 }T
+\   S" Addition with DUP" TEST:
 \   T{ 5 DUP -> 5 5 }T
 \   REPORT
 
 VARIABLE #PASS
 VARIABLE #FAIL
+VARIABLE #TEST
 VARIABLE ACTUAL-DEPTH
+VARIABLE TEST-NAME-ADDR
+VARIABLE TEST-NAME-LEN
 
 131072 CONSTANT TEST-STORAGE
 VARIABLE TEST-PTR
+131072 256 + CONSTANT EXPECTED-STORAGE
 
 \ Initialize testing
-: TESTING 0 #PASS ! 0 #FAIL ! ;
+: TESTING
+    CR
+    ." Running tests..." CR
+    0 #PASS !
+    0 #FAIL !
+    0 #TEST !
+    0 TEST-NAME-LEN ! ;
+
+\ Set name for next test
+: TEST: ( addr len -- )
+    TEST-NAME-LEN !
+    TEST-NAME-ADDR ! ;
 
 \ Start test - reset storage pointer
-: T{ TEST-STORAGE TEST-PTR ! ;
+: T{
+    TEST-STORAGE TEST-PTR !
+    1 #TEST +! ;
 
 \ Separator - save actual values to memory
 : -> ( actuals... --  )
     DEPTH DUP ACTUAL-DEPTH !
-    \ Store each value
+    \ Save count on return stack, then store values in reverse order
+    DUP >R
     0 DO
         TEST-PTR @ !
         TEST-PTR @ 4 + TEST-PTR !
-    LOOP ;
+    LOOP
+    R> DROP ;
+
+\ Print test identifier (name or number)
+: .TEST-ID
+    TEST-NAME-LEN @ 0 > IF
+        TEST-NAME-ADDR @ TEST-NAME-LEN @ TYPE
+    ELSE
+        ." Test " #TEST @ .
+    THEN ;
 
 \ End test - compare expected with actual
 : }T ( expecteds... -- )
     DEPTH ACTUAL-DEPTH @ = IF
-        \ Right number of values
+        \ Save expected values to EXPECTED-STORAGE (pops from stack)
+        ACTUAL-DEPTH @ 0 DO
+            EXPECTED-STORAGE I 4 * + !
+        LOOP
+
+        \ Now compare with stored actuals
         TRUE
         ACTUAL-DEPTH @ 0 DO
-            \ Get stored actual (in reverse)
-            TEST-STORAGE ACTUAL-DEPTH @ I - 1 - 4 * + @
-            \ Compare with expected
+            \ Get stored actual
+            TEST-STORAGE I 4 * + @
+            \ Get expected from storage
+            EXPECTED-STORAGE I 4 * + @
+            \ Compare
             = AND
         LOOP
         IF
+            \ Test passed - just increment counter
             1 #PASS +!
         ELSE
+            \ Test failed - show expected vs actual
             1 #FAIL +!
+            CR
+            ." FAIL: " .TEST-ID CR
+            ."   Expected: "
+            ACTUAL-DEPTH @ 0 DO
+                EXPECTED-STORAGE I 4 * + @ .
+            LOOP CR
+            ."   Actual:   "
+            ACTUAL-DEPTH @ 0 DO
+                TEST-STORAGE I 4 * + @ .
+            LOOP CR
         THEN
     ELSE
-        \ Wrong number
+        \ Wrong number of values
         1 #FAIL +!
+        CR
+        ." FAIL: " .TEST-ID ."  (wrong number of values)" CR
+        ."   Expected " ACTUAL-DEPTH @ . ." values, got " DEPTH . CR
         \ Clean stack
         DEPTH 0 DO DROP LOOP
-    THEN ;
+    THEN
+    \ Clear test name for next test
+    0 TEST-NAME-LEN ! ;
 
 \ Print summary
 : REPORT
     CR
-    #PASS @ #FAIL @ + .
-    #PASS @ .
-    #FAIL @ .
-    CR ;
+    ." ================================" CR
+    ." Total:  " #PASS @ #FAIL @ + . CR
+    ." Passed: " #PASS @ . CR
+    ." Failed: " #FAIL @ . CR
+    ." ================================" CR ;

@@ -345,6 +345,43 @@ pub fn emit(
     }
 }
 
+/// TYPE: Print string from memory
+/// Stack: ( addr len -- )
+pub fn type_word(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(len), Some(addr)) = (stack.pop(memory), stack.pop(memory)) {
+        if len < 0 {
+            eprintln!("TYPE: negative length");
+            return;
+        }
+        let addr = addr as usize;
+        let len = len as usize;
+
+        // Print each character from memory
+        for i in 0..len {
+            match memory.fetch_byte(addr + i) {
+                Ok(byte) => {
+                    if let Some(ch) = char::from_u32(byte as u32) {
+                        print!("{}", ch);
+                    } else {
+                        print!("?");
+                    }
+                }
+                Err(e) => {
+                    eprintln!("\nTYPE: {}", e);
+                    return;
+                }
+            }
+        }
+    } else {
+        eprintln!("TYPE: stack underflow");
+    }
+}
+
 pub fn key(
     stack: &mut Stack,
     _loop_stack: &LoopStack,
