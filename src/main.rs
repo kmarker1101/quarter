@@ -67,7 +67,7 @@ fn try_forth_compile(
     // Get function pointer from stack (two 32-bit values: high, then low)
     if let (Some(fn_ptr_high), Some(fn_ptr_low)) = (stack.pop(memory), stack.pop(memory)) {
         // Reconstruct 64-bit pointer from two 32-bit values
-        let fn_ptr = ((fn_ptr_high as u64) << 32) | (fn_ptr_low as u32 as u64);
+        let fn_ptr = ((fn_ptr_high as u64) << 32) | ((fn_ptr_low as u64) & 0xFFFFFFFF);
 
         // Validate pointer is not null
         if fn_ptr == 0 {

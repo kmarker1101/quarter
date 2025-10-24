@@ -19,6 +19,12 @@ pub struct Dictionary {
     words: HashMap<String, Word>,
 }
 
+impl Default for Dictionary {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Dictionary {
     pub fn new() -> Self {
         let mut dict = Dictionary {

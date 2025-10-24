@@ -5,6 +5,12 @@ pub struct Stack {
     sp: usize,  // Stack pointer (byte address in memory)
 }
 
+impl Default for Stack {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Stack {
     pub fn new() -> Self {
         Stack {

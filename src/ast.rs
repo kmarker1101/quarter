@@ -43,11 +43,10 @@ impl AstNode {
             AstNode::InlineInstruction(_) => Ok(()),  // Inline instructions are validated at JIT time
             AstNode::CallWord(name) => {
                 // Allow forward reference if this is the word being defined (for recursion)
-                if let Some(def_name) = defining_word {
-                    if name.to_uppercase() == def_name.to_uppercase() {
+                if let Some(def_name) = defining_word
+                    && name.to_uppercase() == def_name.to_uppercase() {
                         return Ok(());
                     }
-                }
                 if dict.has_word(name) {
                     Ok(())
                 } else {
@@ -274,15 +273,11 @@ impl AstNode {
 
                 // Store each byte in memory
                 for (i, &byte) in bytes.iter().enumerate() {
-                    if let Err(e) = memory.store_byte((addr as usize) + i, byte as i64) {
-                        return Err(e);
-                    }
+                    memory.store_byte((addr as usize) + i, byte as i64)?;
                 }
 
                 // Advance HERE by string length
-                if let Err(e) = memory.allot(len) {
-                    return Err(e);
-                }
+                memory.allot(len)?;
 
                 // Push address and length onto stack
                 stack.push(addr, memory);
