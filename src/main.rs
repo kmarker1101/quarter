@@ -89,64 +89,6 @@ fn try_forth_compile(
     false
 }
 
-/// Attempt to JIT compile an AST to native code using Rust LLVM codegen
-/// Returns true if successful, false otherwise
-fn try_jit_compile(name: String, ast: &quarter::AstNode, dict: &mut quarter::Dictionary, no_jit: bool, dump_ir: bool, verify_ir: bool) -> bool {
-    if no_jit {
-        return false;
-    }
-
-    use inkwell::context::Context;
-    use quarter::llvm_codegen::{Compiler, register_jit_function};
-
-    // Create LLVM context in a Box so it has a stable memory location
-    let boxed_context = Box::new(Context::create());
-
-    // SAFETY: Create a 'static reference to the boxed context.
-    // This is safe because the Box will be stored in Dictionary.jit_contexts
-    // and won't be dropped until Dictionary is dropped.
-    let context_ref: &'static Context = unsafe {
-        &*(boxed_context.as_ref() as *const Context)
-    };
-
-    let mut compiler = match Compiler::new(context_ref) {
-        Ok(c) => c,
-        Err(_) => return false,
-    };
-
-    // Try to compile the AST
-    match compiler.compile_word(&name, ast, dict) {
-        Ok(jit_fn) => {
-            // Dump IR if requested
-            if dump_ir {
-                println!("\n=== IR for {} ===", name);
-                println!("{}", compiler.get_ir());
-                println!("==================\n");
-            }
-
-            // Verify IR if requested
-            if verify_ir {
-                if let Err(e) = compiler.verify() {
-                    eprintln!("IR verification failed for {}: {}", name, e);
-                    return false;
-                }
-            }
-
-            // Register the JIT function in the global registry
-            // This allows other words being compiled later to call this word
-            if let Err(e) = register_jit_function(name.clone(), jit_fn) {
-                eprintln!("Failed to register JIT function {}: {}", name, e);
-                return false;
-            }
-
-            // Add the JIT function to the dictionary
-            // IMPORTANT: We must keep both context and compiler alive so the JIT code memory stays valid
-            dict.add_jit_compiled_with_compiler(name, jit_fn, boxed_context, Box::new(compiler));
-            true
-        },
-        Err(_) => false,
-    }
-}
 
 fn main() {
     let mut stack = Stack::new();
@@ -278,7 +220,7 @@ fn main() {
                                     // When redefining, always use interpreted mode
                                     let is_redefinition = dict.has_word(&word_name);
                                     if !is_redefinition {
-                                        // Try Forth compiler first, fall back to Rust compiler
+                                        // Try Forth compiler
                                         let compiled = try_forth_compile(
                                             word_name.clone(),
                                             &ast,
@@ -291,7 +233,7 @@ fn main() {
                                             no_jit,
                                             dump_ir,
                                             verify_ir,
-                                        ) || try_jit_compile(word_name.clone(), &ast, &mut dict, no_jit, dump_ir, verify_ir);
+                                        );
 
                                         if !compiled {
                                             dict.add_compiled(word_name, ast);
@@ -352,7 +294,7 @@ fn main() {
                                     // When redefining, always use interpreted mode
                                     let is_redefinition = dict.has_word(&word_name);
                                     if !is_redefinition {
-                                        // Try Forth compiler first, fall back to Rust compiler
+                                        // Try Forth compiler
                                         let compiled = try_forth_compile(
                                             word_name.clone(),
                                             &ast,
@@ -365,7 +307,7 @@ fn main() {
                                             no_jit,
                                             dump_ir,
                                             verify_ir,
-                                        ) || try_jit_compile(word_name.clone(), &ast, &mut dict, no_jit, dump_ir, verify_ir);
+                                        );
 
                                         if !compiled {
                                             dict.add_compiled(word_name, ast);
