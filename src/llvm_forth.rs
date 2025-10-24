@@ -7,8 +7,9 @@ use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::builder::Builder;
 use inkwell::execution_engine::ExecutionEngine;
-use inkwell::values::{FunctionValue, BasicValueEnum, PhiValue};
+use inkwell::values::{FunctionValue, BasicValueEnum, PhiValue, BasicValue};
 use inkwell::basic_block::BasicBlock;
+use inkwell::types::BasicType;
 use inkwell::OptimizationLevel;
 use inkwell::AddressSpace;
 use std::collections::HashMap;
@@ -229,6 +230,14 @@ impl LLVMRegistry {
         Ok(())
     }
 
+    /// Dump module IR to string
+    pub fn dump_module_ir(&self, module_handle: ModuleHandle) -> Result<String, String> {
+        let module = self.modules.get(&module_handle)
+            .ok_or_else(|| format!("Invalid module handle: {}", module_handle))?;
+
+        Ok(module.print_to_string().to_string())
+    }
+
     /// Create a JIT execution engine for the module
     pub fn create_jit_engine(&mut self,
                             module_handle: ModuleHandle) -> Result<EngineHandle, String> {
@@ -263,15 +272,26 @@ impl LLVMRegistry {
     /// Build a constant integer
     pub fn build_const_int(&mut self,
                           ctx_handle: ContextHandle,
-                          value: i32) -> Result<ValueHandle, String> {
+                          value: i32,
+                          bit_width: i32) -> Result<ValueHandle, String> {
         let context = self.contexts.get(&ctx_handle)
             .ok_or_else(|| format!("Invalid context handle: {}", ctx_handle))?;
 
-        let i32_type = context.i32_type();
-        let const_val = i32_type.const_int(value as u64, true);
+        // Select type based on bit width
+        let const_val = match bit_width {
+            32 => {
+                let i32_type = context.i32_type();
+                i32_type.const_int(value as u64, true).into()
+            },
+            64 => {
+                let i64_type = context.i64_type();
+                i64_type.const_int(value as u64, true).into()
+            },
+            _ => return Err(format!("Unsupported bit width for const int: {}", bit_width)),
+        };
 
         let handle = self.next_handle();
-        self.values.insert(handle, const_val.into());
+        self.values.insert(handle, const_val);
         Ok(handle)
     }
 
@@ -279,7 +299,8 @@ impl LLVMRegistry {
     pub fn build_load(&mut self,
                      builder_handle: BuilderHandle,
                      ctx_handle: ContextHandle,
-                     ptr_handle: ValueHandle) -> Result<ValueHandle, String> {
+                     ptr_handle: ValueHandle,
+                     bit_width: i32) -> Result<ValueHandle, String> {
         let builder = self.builders.get(&builder_handle)
             .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
 
@@ -290,10 +311,23 @@ impl LLVMRegistry {
             .ok_or_else(|| format!("Invalid value handle: {}", ptr_handle))?;
 
         let ptr = ptr_val.into_pointer_value();
-        let i32_type = context.i32_type();
 
-        let loaded = builder.build_load(i32_type, ptr, "loaded")
+        // Select type based on bit width
+        let load_type = match bit_width {
+            32 => context.i32_type().as_basic_type_enum(),
+            64 => context.i64_type().as_basic_type_enum(),
+            _ => return Err(format!("Unsupported bit width for load: {}", bit_width)),
+        };
+
+        let loaded = builder.build_load(load_type, ptr, "loaded")
             .map_err(|e| format!("Failed to build load: {}", e))?;
+
+        // Set alignment based on bit width (i32 = 4 bytes, i64 = 8 bytes)
+        let alignment = (bit_width / 8) as u32;
+        if let Some(instruction) = loaded.as_instruction_value() {
+            instruction.set_alignment(alignment)
+                .map_err(|e| format!("Failed to set load alignment: {}", e))?;
+        }
 
         let handle = self.next_handle();
         self.values.insert(handle, loaded);
@@ -316,8 +350,18 @@ impl LLVMRegistry {
 
         let ptr = ptr_val.into_pointer_value();
 
-        builder.build_store(ptr, *value)
+        let store_inst = builder.build_store(ptr, *value)
             .map_err(|e| format!("Failed to build store: {}", e))?;
+
+        // Set alignment based on value type
+        if value.is_int_value() {
+            let int_val = value.into_int_value();
+            let bit_width = int_val.get_type().get_bit_width();
+            let alignment = (bit_width / 8) as u32;
+            store_inst.set_alignment(alignment)
+                .map_err(|e| format!("Failed to set store alignment: {}", e))?;
+        }
+
         Ok(())
     }
 
@@ -669,6 +713,19 @@ pub fn llvm_build_ret(builder_handle: i32, value_handle: i32) -> Result<(), Stri
     })
 }
 
+/// Dump module IR to stdout
+/// Stack: ( module-handle -- )
+pub fn llvm_dump_module(module_handle: i32) -> Result<(), String> {
+    LLVM_REGISTRY.with(|cell| {
+        let registry = cell.borrow();
+        let ir = registry.dump_module_ir(module_handle)?;
+        println!("\n=== LLVM IR from Forth Compiler ===");
+        println!("{}", ir);
+        println!("====================================\n");
+        Ok(())
+    })
+}
+
 /// Create JIT execution engine
 /// Stack: ( module-handle -- engine-handle )
 pub fn llvm_create_jit_engine(module_handle: i32) -> Result<i32, String> {
@@ -690,20 +747,20 @@ pub fn llvm_get_jit_function(engine_handle: i32, name: &str) -> Result<usize, St
 // Additional IR builder primitives
 
 /// Build constant integer
-/// Stack: ( ctx-handle value -- value-handle )
-pub fn llvm_build_const_int(ctx_handle: i32, value: i32) -> Result<i32, String> {
+/// Stack: ( ctx-handle value bit-width -- value-handle )
+pub fn llvm_build_const_int(ctx_handle: i32, value: i32, bit_width: i32) -> Result<i32, String> {
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
-        registry.build_const_int(ctx_handle, value)
+        registry.build_const_int(ctx_handle, value, bit_width)
     })
 }
 
 /// Build load instruction
-/// Stack: ( builder-handle ctx-handle ptr-handle -- value-handle )
-pub fn llvm_build_load(builder_handle: i32, ctx_handle: i32, ptr_handle: i32) -> Result<i32, String> {
+/// Stack: ( builder-handle ctx-handle ptr-handle bit-width -- value-handle )
+pub fn llvm_build_load(builder_handle: i32, ctx_handle: i32, ptr_handle: i32, bit_width: i32) -> Result<i32, String> {
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
-        registry.build_load(builder_handle, ctx_handle, ptr_handle)
+        registry.build_load(builder_handle, ctx_handle, ptr_handle, bit_width)
     })
 }
 
