@@ -68,7 +68,11 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: |
           choco install llvm --version=18.1.8 -y --allow-downgrade
-          echo "LLVM_SYS_181_PREFIX=C:\Program Files\LLVM" >> $env:GITHUB_ENV
+          $env:LLVM_SYS_181_PREFIX = "C:\Program Files\LLVM"
+          $env:LIBCLANG_PATH = "C:\Program Files\LLVM\bin"
+          echo "LLVM_SYS_181_PREFIX=$env:LLVM_SYS_181_PREFIX" >> $env:GITHUB_ENV
+          echo "LIBCLANG_PATH=$env:LIBCLANG_PATH" >> $env:GITHUB_ENV
+          echo "PATH=C:\Program Files\LLVM\bin;$env:PATH" >> $env:GITHUB_ENV
 
       - name: Build release binary
         run: cargo build --release --target ${{ matrix.target }}
