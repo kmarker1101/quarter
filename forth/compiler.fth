@@ -147,8 +147,8 @@ VARIABLE PARAM-RP      \ rp pointer parameter
 \ ( value-handle -- )
 : COMPILE-PUSH
     \ 1. Load current SP value: sp_val = load(PARAM-SP)
-    \ LLVM-BUILD-LOAD expects: ( builder ctx ptr -- value )
-    CURRENT-BUILDER @ CURRENT-CTX @ PARAM-SP @ LLVM-BUILD-LOAD
+    \ LLVM-BUILD-LOAD expects: ( builder ctx ptr bit-width -- value )
+    CURRENT-BUILDER @ CURRENT-CTX @ PARAM-SP @ 64 LLVM-BUILD-LOAD
     \ Stack: ( value-handle sp-val-handle )
 
     \ 2. GEP to get memory address: addr = memory + sp_val
@@ -166,8 +166,8 @@ VARIABLE PARAM-RP      \ rp pointer parameter
     DROP \ Drop addr-handle
     \ Stack: ( value sp-val )
 
-    \ 4. Create constant 4
-    CURRENT-CTX @ 4 LLVM-BUILD-CONST-INT
+    \ 4. Create constant 4 (i64 for pointer arithmetic)
+    CURRENT-CTX @ 4 64 LLVM-BUILD-CONST-INT
     \ Stack: ( value sp-val four )
 
     \ 5. Add: new_sp = sp_val + 4
@@ -187,12 +187,12 @@ VARIABLE PARAM-RP      \ rp pointer parameter
 \ ( -- value-handle )
 : COMPILE-POP
     \ 1. Load current SP value: sp_val = load(PARAM-SP)
-    CURRENT-BUILDER @ CURRENT-CTX @ PARAM-SP @ LLVM-BUILD-LOAD
+    CURRENT-BUILDER @ CURRENT-CTX @ PARAM-SP @ 64 LLVM-BUILD-LOAD
 
     \ Stack: ( sp-val-handle )
 
-    \ 2. Create constant 4
-    CURRENT-CTX @ 4 LLVM-BUILD-CONST-INT
+    \ 2. Create constant 4 (i64 for pointer arithmetic)
+    CURRENT-CTX @ 4 64 LLVM-BUILD-CONST-INT
 
     \ Stack: ( sp-val-handle four-handle )
 
@@ -217,8 +217,8 @@ VARIABLE PARAM-RP      \ rp pointer parameter
 
     \ Stack: ( addr-handle )
 
-    \ 6. Load value from address
-    CURRENT-BUILDER @ CURRENT-CTX @ ROT LLVM-BUILD-LOAD
+    \ 6. Load value from address (i32 for stack values)
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT 32 LLVM-BUILD-LOAD
 
     \ Stack: ( value-handle )
     ;
@@ -295,7 +295,7 @@ VARIABLE PARAM-RP      \ rp pointer parameter
 
     \ Increment: next = phi + increment
     CURRENT-BUILDER @ 2 PICK
-    CURRENT-CTX @ 9 PICK LLVM-BUILD-CONST-INT
+    CURRENT-CTX @ 9 PICK 32 LLVM-BUILD-CONST-INT
     LLVM-BUILD-ADD
     \ Stack: ( body incr start limit preloop loop exit phi loop-end next )
 
@@ -357,7 +357,7 @@ VARIABLE PARAM-RP      \ rp pointer parameter
 
     \ Compare to zero (true=non-zero means exit)
     CURRENT-BUILDER @ 1 ROT
-    CURRENT-CTX @ 0 LLVM-BUILD-CONST-INT
+    CURRENT-CTX @ 0 32 LLVM-BUILD-CONST-INT
     LLVM-BUILD-ICMP
 
     \ Stack: ( body loop exit bool-handle )
@@ -388,7 +388,7 @@ VARIABLE PARAM-RP      \ rp pointer parameter
     \ Predicate 1 = NE (not equal)
     CURRENT-BUILDER @ 1  ( then else cond builder pred )
     ROT ( then else builder pred cond )
-    CURRENT-CTX @ 0 LLVM-BUILD-CONST-INT ( then else builder pred cond zero )
+    CURRENT-CTX @ 0 32 LLVM-BUILD-CONST-INT ( then else builder pred cond zero )
     LLVM-BUILD-ICMP ( then else bool-handle )
 
     \ Create basic blocks
@@ -473,7 +473,7 @@ VARIABLE PARAM-RP      \ rp pointer parameter
     DUP 1 = IF
         DROP
         AST-GET-NUMBER
-        CURRENT-CTX @ SWAP
+        CURRENT-CTX @ SWAP 32
         LLVM-BUILD-CONST-INT
         COMPILE-PUSH
         EXIT

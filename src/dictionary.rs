@@ -95,6 +95,7 @@ impl Dictionary {
         dict.add_primitive("LLVM-POSITION-AT-END", words::llvm_position_at_end_word);
         dict.add_primitive("LLVM-BUILD-RET-VOID", words::llvm_build_ret_void_word);
         dict.add_primitive("LLVM-BUILD-RET", words::llvm_build_ret_word);
+        dict.add_primitive("LLVM-DUMP-MODULE", words::llvm_dump_module_word);
         dict.add_primitive("LLVM-CREATE-JIT", words::llvm_create_jit_word);
         dict.add_primitive("LLVM-GET-FUNCTION", words::llvm_get_function_word);
 

@@ -1114,6 +1114,23 @@ pub fn llvm_build_ret_word(
     }
 }
 
+/// LLVM-DUMP-MODULE: Dump module IR to stdout
+/// Stack: ( module-handle -- )
+pub fn llvm_dump_module_word(
+    stack: &mut crate::Stack,
+    _loop_stack: &crate::LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let Some(module_handle) = stack.pop(memory) {
+        if let Err(e) = crate::llvm_forth::llvm_dump_module(module_handle) {
+            eprintln!("LLVM-DUMP-MODULE error: {}", e);
+        }
+    } else {
+        eprintln!("LLVM-DUMP-MODULE: Stack underflow");
+    }
+}
+
 /// LLVM-CREATE-JIT: Create JIT execution engine
 /// Stack: ( module-handle -- engine-handle )
 pub fn llvm_create_jit_word(
@@ -1133,7 +1150,8 @@ pub fn llvm_create_jit_word(
 }
 
 /// LLVM-GET-FUNCTION: Get JIT function pointer
-/// Stack: ( engine-handle name-addr name-len -- fn-ptr )
+/// Stack: ( engine-handle name-addr name-len -- fn-ptr-low fn-ptr-high )
+/// Returns 64-bit pointer as two 32-bit values (low word, then high word)
 pub fn llvm_get_function_word(
     stack: &mut crate::Stack,
     _loop_stack: &crate::LoopStack,
@@ -1148,7 +1166,13 @@ pub fn llvm_get_function_word(
         match extract_string(memory, name_addr as usize, name_len as usize) {
             Ok(name) => {
                 match crate::llvm_forth::llvm_get_jit_function(engine_handle, &name) {
-                    Ok(fn_ptr) => stack.push(fn_ptr as i32, memory),
+                    Ok(fn_ptr) => {
+                        // Split 64-bit pointer into two 32-bit values
+                        let low = (fn_ptr & 0xFFFFFFFF) as i32;
+                        let high = ((fn_ptr >> 32) & 0xFFFFFFFF) as i32;
+                        stack.push(low, memory);
+                        stack.push(high, memory);
+                    }
                     Err(e) => eprintln!("LLVM-GET-FUNCTION error: {}", e),
                 }
             }
@@ -1164,18 +1188,19 @@ pub fn llvm_get_function_word(
 // ============================================================================
 
 /// LLVM-BUILD-CONST-INT: Create integer constant
-/// Stack: ( ctx-handle value -- value-handle )
+/// Stack: ( ctx-handle value bit-width -- value-handle )
 pub fn llvm_build_const_int_word(
     stack: &mut crate::Stack,
     _loop_stack: &crate::LoopStack,
     _return_stack: &mut crate::ReturnStack,
     memory: &mut crate::Memory,
 ) {
-    if let (Some(value), Some(ctx_handle)) = (
+    if let (Some(bit_width), Some(value), Some(ctx_handle)) = (
+        stack.pop(memory),
         stack.pop(memory),
         stack.pop(memory),
     ) {
-        match crate::llvm_forth::llvm_build_const_int(ctx_handle, value) {
+        match crate::llvm_forth::llvm_build_const_int(ctx_handle, value, bit_width) {
             Ok(handle) => stack.push(handle, memory),
             Err(e) => eprintln!("LLVM-BUILD-CONST-INT error: {}", e),
         }
@@ -1185,19 +1210,20 @@ pub fn llvm_build_const_int_word(
 }
 
 /// LLVM-BUILD-LOAD: Load value from memory
-/// Stack: ( builder-handle ctx-handle ptr-handle -- value-handle )
+/// Stack: ( builder-handle ctx-handle ptr-handle bit-width -- value-handle )
 pub fn llvm_build_load_word(
     stack: &mut crate::Stack,
     _loop_stack: &crate::LoopStack,
     _return_stack: &mut crate::ReturnStack,
     memory: &mut crate::Memory,
 ) {
-    if let (Some(ptr_handle), Some(ctx_handle), Some(builder_handle)) = (
+    if let (Some(bit_width), Some(ptr_handle), Some(ctx_handle), Some(builder_handle)) = (
+        stack.pop(memory),
         stack.pop(memory),
         stack.pop(memory),
         stack.pop(memory),
     ) {
-        match crate::llvm_forth::llvm_build_load(builder_handle, ctx_handle, ptr_handle) {
+        match crate::llvm_forth::llvm_build_load(builder_handle, ctx_handle, ptr_handle, bit_width) {
             Ok(handle) => stack.push(handle, memory),
             Err(e) => eprintln!("LLVM-BUILD-LOAD error: {}", e),
         }
