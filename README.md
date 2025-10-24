@@ -65,7 +65,7 @@ cargo build --release
 ```
 src/
 ├── main.rs           # REPL, parser, word definition pipeline
-├── stack.rs          # Data stack (Vec<i32> in memory)
+├── stack.rs          # Data stack (i64 values in memory)
 ├── dictionary.rs     # Word dictionary (HashMap<String, Word>)
 ├── words.rs          # Built-in primitive words
 ├── ast.rs            # Abstract Syntax Tree
@@ -78,9 +78,8 @@ src/
 
 ```
 stdlib/
-├── core.fth          # Core Forth definitions (LOADED)
-├── test-framework.fth # Test framework (disabled - DEPTH in loops issue)
-└── tests.fth         # Test suite (disabled)
+├── core.fth          # Core Forth definitions
+└── test-framework.fth # Test framework (T{ -> }T syntax)
 
 forth/
 └── compiler.fth      # Self-hosting Forth compiler (666 lines)
@@ -88,12 +87,17 @@ forth/
 
 ### Memory Layout
 
+8MB byte-addressable memory space with 8-byte (64-bit) cells:
+
 ```
 Stack Section (Data Stack):
-  0 - 49,999         Data stack (grows upward)
+  0x000000-0x00FFFF  Data stack (64KB, 8K cells, grows upward)
 
-Heap Section:
-  50,000 - 299,999   General allocation (HERE/ALLOT)
+Return Stack:
+  0x010000-0x01FFFF  Return stack (64KB, 8K cells)
+
+User Memory:
+  0x020000-0x7FFFFF  General allocation (HERE/ALLOT, ~7.5MB)
 
 Compiler Scratch Space:
   300,000 - 301,999  Temporary buffers
@@ -172,8 +176,7 @@ LLVM Object Storage:
 
 ## Current Limitations
 
-- Test framework disabled (DEPTH in loops issue)
-- Stack is 32-bit integers only (no floats, strings as words)
+- Stack is 64-bit integers only (no floats, strings as words)
 - No string handling beyond character arrays
 - No file I/O words yet
 - Return stack operations don't work in JIT-compiled code yet
@@ -241,7 +244,7 @@ cargo test test_square
 cargo test -- --nocapture
 ```
 
-Currently: **49 tests passing** (9 lib tests + 40 integration tests)
+Currently: **109 tests passing** across all test suites
 
 ## Project History
 
@@ -252,7 +255,8 @@ This is a learning project where the developer is learning Rust by building a Fo
 3. Control flow (IF/THEN/ELSE, DO/LOOP)
 4. LLVM JIT compilation (Rust-based)
 5. LLVM primitives for Forth
-6. **Self-hosting Forth compiler** ✅ (Current phase)
+6. **Self-hosting Forth compiler** ✅
+7. **64-bit migration** (i32 → i64, 4-byte → 8-byte cells) ✅
 
 ## License
 
@@ -260,7 +264,6 @@ This is a personal learning project.
 
 ## Future Possibilities
 
-- Fix test framework (DEPTH in loops)
 - Add more standard Forth words
 - String handling
 - File I/O

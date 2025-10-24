@@ -36,8 +36,8 @@ T{ 15 5 MOD -> 0 }T
 S" Divide and modulo: 13 /MOD 5" TEST:
 T{ 13 5 /MOD -> 3 2 }T
 
-S" 3 CELLS equals 12" TEST:
-T{ 3 CELLS -> 12 }T
+S" 3 CELLS equals 24" TEST:
+T{ 3 CELLS -> 24 }T
 
 S" 5 1+ equals 6" TEST:
 T{ 5 1+ -> 6 }T
@@ -300,14 +300,14 @@ T{ FALSE -> 0 }T
 S" BL equals 32" TEST:
 T{ BL -> 32 }T
 
-S" 0 CELL+ equals 4" TEST:
-T{ 0 CELL+ -> 4 }T
+S" 0 CELL+ equals 8" TEST:
+T{ 0 CELL+ -> 8 }T
 
-S" 100 CELL+ equals 104" TEST:
-T{ 100 CELL+ -> 104 }T
+S" 100 CELL+ equals 108" TEST:
+T{ 100 CELL+ -> 108 }T
 
-S" 131072 CELL+ equals 131076" TEST:
-T{ 131072 CELL+ -> 131076 }T
+S" 131072 CELL+ equals 131080" TEST:
+T{ 131072 CELL+ -> 131080 }T
 
 VARIABLE +!-TEST
 

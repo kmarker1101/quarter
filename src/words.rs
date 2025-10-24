@@ -33,8 +33,8 @@ pub fn u_dot(
     // U. ( u -- )
     // Print unsigned number
     if let Some(value) = stack.pop(memory) {
-        // Treat as unsigned by converting to u32
-        let unsigned_value = value as u32;
+        // Treat as unsigned by converting to u64
+        let unsigned_value = value as u64;
         print!("{} ", unsigned_value);
     } else {
         println!("Stack underflow!");
@@ -72,7 +72,7 @@ pub fn u_dot_r(
     // U.R ( u width -- )
     // Print unsigned number right-justified in field of width
     if let (Some(width), Some(value)) = (stack.pop(memory), stack.pop(memory)) {
-        let unsigned_value = value as u32;
+        let unsigned_value = value as u64;
         let num_str = unsigned_value.to_string();
         let width = width as usize;
         if num_str.len() < width {
@@ -212,7 +212,7 @@ pub fn pick(
             // Calculate address: sp points to next free, so top is at sp-4
             // nth item is at sp - (n+1)*4
             let sp = stack.get_sp();
-            let addr = sp - (index + 1) * 4;
+            let addr = sp - (index + 1) * 8;
 
             if let Ok(value) = memory.fetch(addr) {
                 stack.push(value, memory);
@@ -297,7 +297,7 @@ pub fn depth(
     _return_stack: &mut crate::ReturnStack,
     memory: &mut crate::Memory,
 ) {
-    let d = stack.depth() as i32;
+    let d = stack.depth() as i64;
     stack.push(d, memory);
 }
 
@@ -392,7 +392,7 @@ pub fn key(
 
     let mut buffer = [0; 1];
     match std::io::stdin().read_exact(&mut buffer) {
-        Ok(_) => stack.push(buffer[0] as i32, memory),
+        Ok(_) => stack.push(buffer[0] as i64, memory),
         Err(_) => {
             // EOF or error - push 0
             stack.push(0, memory);
@@ -618,7 +618,7 @@ pub fn sp_fetch(
     // SP@ ( -- addr )
     // Push current stack pointer onto stack
     let sp = stack.get_sp();
-    stack.push(sp as i32, memory);
+    stack.push(sp as i64, memory);
 }
 
 pub fn sp_store(
@@ -645,7 +645,7 @@ pub fn rp_fetch(
     // RP@ ( -- addr )
     // Push current return stack pointer onto data stack
     let rp = return_stack.get_rp();
-    stack.push(rp as i32, memory);
+    stack.push(rp as i64, memory);
 }
 
 pub fn rp_store(
@@ -701,13 +701,13 @@ pub fn comma(
     memory: &mut crate::Memory,
 ) {
     // , (comma) ( n -- )
-    // Store n at HERE and advance dictionary pointer by 4 bytes
+    // Store n at HERE and advance dictionary pointer by 8 bytes
     if let Some(n) = stack.pop(memory) {
         let addr = memory.here() as usize;
         match memory.store(addr, n) {
             Ok(_) => {
-                // Advance dictionary pointer by 4 bytes (one cell)
-                match memory.allot(4) {
+                // Advance dictionary pointer by 8 bytes (one cell)
+                match memory.allot(8) {
                     Ok(_) => {}
                     Err(e) => println!("{}", e),
                 }
@@ -746,18 +746,18 @@ pub extern "C" fn quarter_dup(memory: *mut u8, sp: *mut usize, _rp: *mut usize) 
         let sp_val = *sp;
 
         // Bounds check: need at least 1 value (4 bytes) and room for 1 more
-        if !check_sp_read(sp_val, 4) || !check_sp_write(sp_val, 4) {
+        if !check_sp_read(sp_val, 8) || !check_sp_write(sp_val, 8) {
             return;  // Stack underflow or overflow
         }
 
         // Read value from top of stack (sp - 4)
-        let addr = memory.add(sp_val - 4) as *const i32;
+        let addr = memory.add(sp_val - 8) as *const i64;
         let val = *addr;
         // Write value to next position (sp)
-        let dest = memory.add(sp_val) as *mut i32;
+        let dest = memory.add(sp_val) as *mut i64;
         *dest = val;
-        // Increment sp by 4
-        *sp = sp_val + 4;
+        // Increment sp by 8
+        *sp = sp_val + 8;
     }
 }
 
@@ -767,12 +767,12 @@ pub extern "C" fn quarter_drop(memory: *mut u8, sp: *mut usize, _rp: *mut usize)
         let sp_val = *sp;
 
         // Bounds check: need at least 1 value (4 bytes) to drop
-        if !check_sp_read(sp_val, 4) {
+        if !check_sp_read(sp_val, 8) {
             return;  // Stack underflow
         }
 
-        // Decrement sp by 4
-        *sp = sp_val - 4;
+        // Decrement sp by 8
+        *sp = sp_val - 8;
         let _ = memory; // Suppress warning
     }
 }
@@ -782,14 +782,14 @@ pub extern "C" fn quarter_swap(memory: *mut u8, sp: *mut usize, _rp: *mut usize)
     unsafe {
         let sp_val = *sp;
 
-        // Bounds check: need at least 2 values (8 bytes) to swap
-        if !check_sp_read(sp_val, 8) {
+        // Bounds check: need at least 2 values (16 bytes) to swap
+        if !check_sp_read(sp_val, 16) {
             return;  // Stack underflow
         }
 
-        // Read a from sp-8, b from sp-4
-        let addr_a = memory.add(sp_val - 8) as *mut i32;
-        let addr_b = memory.add(sp_val - 4) as *mut i32;
+        // Read a from sp-16, b from sp-8
+        let addr_a = memory.add(sp_val - 16) as *mut i64;
+        let addr_b = memory.add(sp_val - 8) as *mut i64;
         let a = *addr_a;
         let b = *addr_b;
         // Swap them
@@ -803,20 +803,20 @@ pub extern "C" fn quarter_add(memory: *mut u8, sp: *mut usize, _rp: *mut usize) 
     unsafe {
         let sp_val = *sp;
 
-        // Bounds check: need at least 2 values (8 bytes)
-        if !check_sp_read(sp_val, 8) {
+        // Bounds check: need at least 2 values (16 bytes)
+        if !check_sp_read(sp_val, 16) {
             return;  // Stack underflow
         }
 
-        // Pop b from sp-4, a from sp-8
-        let addr_a = memory.add(sp_val - 8) as *mut i32;
-        let addr_b = memory.add(sp_val - 4) as *const i32;
+        // Pop b from sp-8, a from sp-16
+        let addr_a = memory.add(sp_val - 16) as *mut i64;
+        let addr_b = memory.add(sp_val - 8) as *const i64;
         let a = *addr_a;
         let b = *addr_b;
         // Store result at sp-8
         *addr_a = a + b;
-        // Decrement sp by 4
-        *sp = sp_val - 4;
+        // Decrement sp by 8
+        *sp = sp_val - 8;
     }
 }
 
@@ -825,20 +825,20 @@ pub extern "C" fn quarter_sub(memory: *mut u8, sp: *mut usize, _rp: *mut usize) 
     unsafe {
         let sp_val = *sp;
 
-        // Bounds check: need at least 2 values (8 bytes)
-        if !check_sp_read(sp_val, 8) {
+        // Bounds check: need at least 2 values (16 bytes)
+        if !check_sp_read(sp_val, 16) {
             return;  // Stack underflow
         }
 
-        // Pop b from sp-4, a from sp-8
-        let addr_a = memory.add(sp_val - 8) as *mut i32;
-        let addr_b = memory.add(sp_val - 4) as *const i32;
+        // Pop b from sp-8, a from sp-16
+        let addr_a = memory.add(sp_val - 16) as *mut i64;
+        let addr_b = memory.add(sp_val - 8) as *const i64;
         let a = *addr_a;
         let b = *addr_b;
         // Store result at sp-8
         *addr_a = a - b;
-        // Decrement sp by 4
-        *sp = sp_val - 4;
+        // Decrement sp by 8
+        *sp = sp_val - 8;
     }
 }
 
@@ -847,20 +847,20 @@ pub extern "C" fn quarter_mul(memory: *mut u8, sp: *mut usize, _rp: *mut usize) 
     unsafe {
         let sp_val = *sp;
 
-        // Bounds check: need at least 2 values (8 bytes)
-        if !check_sp_read(sp_val, 8) {
+        // Bounds check: need at least 2 values (16 bytes)
+        if !check_sp_read(sp_val, 16) {
             return;  // Stack underflow
         }
 
-        // Pop b from sp-4, a from sp-8
-        let addr_a = memory.add(sp_val - 8) as *mut i32;
-        let addr_b = memory.add(sp_val - 4) as *const i32;
+        // Pop b from sp-8, a from sp-16
+        let addr_a = memory.add(sp_val - 16) as *mut i64;
+        let addr_b = memory.add(sp_val - 8) as *const i64;
         let a = *addr_a;
         let b = *addr_b;
         // Store result at sp-8
         *addr_a = a * b;
-        // Decrement sp by 4
-        *sp = sp_val - 4;
+        // Decrement sp by 8
+        *sp = sp_val - 8;
     }
 }
 
@@ -869,22 +869,22 @@ pub extern "C" fn quarter_div(memory: *mut u8, sp: *mut usize, _rp: *mut usize) 
     unsafe {
         let sp_val = *sp;
 
-        // Bounds check: need at least 2 values (8 bytes)
-        if !check_sp_read(sp_val, 8) {
+        // Bounds check: need at least 2 values (16 bytes)
+        if !check_sp_read(sp_val, 16) {
             return;  // Stack underflow
         }
 
-        // Pop b from sp-4, a from sp-8
-        let addr_a = memory.add(sp_val - 8) as *mut i32;
-        let addr_b = memory.add(sp_val - 4) as *const i32;
+        // Pop b from sp-8, a from sp-16
+        let addr_a = memory.add(sp_val - 16) as *mut i64;
+        let addr_b = memory.add(sp_val - 8) as *const i64;
         let a = *addr_a;
         let b = *addr_b;
         // Store result at sp-8 (with division by zero check)
         if b != 0 {
             *addr_a = a / b;
         }
-        // Decrement sp by 4
-        *sp = sp_val - 4;
+        // Decrement sp by 8
+        *sp = sp_val - 8;
     }
 }
 
@@ -895,20 +895,20 @@ pub extern "C" fn quarter_less_than(memory: *mut u8, sp: *mut usize, _rp: *mut u
     unsafe {
         let sp_val = *sp;
 
-        // Bounds check: need at least 2 values (8 bytes)
-        if !check_sp_read(sp_val, 8) {
+        // Bounds check: need at least 2 values (16 bytes)
+        if !check_sp_read(sp_val, 16) {
             return;  // Stack underflow
         }
 
-        // Pop b from sp-4, a from sp-8
-        let addr_a = memory.add(sp_val - 8) as *mut i32;
-        let addr_b = memory.add(sp_val - 4) as *const i32;
+        // Pop b from sp-8, a from sp-16
+        let addr_a = memory.add(sp_val - 16) as *mut i64;
+        let addr_b = memory.add(sp_val - 8) as *const i64;
         let a = *addr_a;
         let b = *addr_b;
         // Store result at sp-8: -1 if a < b, 0 otherwise
         *addr_a = if a < b { -1 } else { 0 };
-        // Decrement sp by 4
-        *sp = sp_val - 4;
+        // Decrement sp by 8
+        *sp = sp_val - 8;
     }
 }
 // ============================================================================
@@ -1205,8 +1205,8 @@ pub fn llvm_get_function_word(
                 match crate::llvm_forth::llvm_get_jit_function(engine_handle, &name) {
                     Ok(fn_ptr) => {
                         // Split 64-bit pointer into two 32-bit values
-                        let low = (fn_ptr & 0xFFFFFFFF) as i32;
-                        let high = ((fn_ptr >> 32) & 0xFFFFFFFF) as i32;
+                        let low = (fn_ptr & 0xFFFFFFFF) as i64;
+                        let high = ((fn_ptr >> 32) & 0xFFFFFFFF) as i64;
                         stack.push(low, memory);
                         stack.push(high, memory);
                     }

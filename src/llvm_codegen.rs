@@ -338,12 +338,11 @@ impl<'ctx> Compiler<'ctx> {
 
     /// Compile a stack push operation
     /// Pushes value onto the stack and increments stack pointer
-    fn compile_push(&self, function: inkwell::values::FunctionValue<'ctx>, value: i32) -> Result<(), String> {
+    fn compile_push(&self, function: inkwell::values::FunctionValue<'ctx>, value: i64) -> Result<(), String> {
         let memory_ptr = function.get_nth_param(0).unwrap().into_pointer_value();
         let sp_ptr = function.get_nth_param(1).unwrap().into_pointer_value();
 
-        let i32_type = self.context.i32_type();
-        let i64_type = self.context.i64_type(); // usize on 64-bit systems
+        let i64_type = self.context.i64_type();
 
         // Load current sp value: sp = *sp_ptr
         let sp = self.builder.build_load(i64_type, sp_ptr, "sp")
@@ -357,7 +356,7 @@ impl<'ctx> Compiler<'ctx> {
         };
 
         // Create the constant value
-        let const_value = i32_type.const_int(value as u64, true);
+        let const_value = i64_type.const_int(value as u64, true);
 
         // Store value at address: *(i32*)addr = value
         let addr_i32 = self.builder.build_pointer_cast(addr, self.context.ptr_type(AddressSpace::default()), "addr_i32")
@@ -365,9 +364,9 @@ impl<'ctx> Compiler<'ctx> {
         self.builder.build_store(addr_i32, const_value)
             .map_err(|e| format!("Failed to store value: {}", e))?;
 
-        // Increment sp: sp += 4
-        let four = i64_type.const_int(4, false);
-        let new_sp = self.builder.build_int_add(sp, four, "new_sp")
+        // Increment sp: sp += 8
+        let eight = i64_type.const_int(8, false);
+        let new_sp = self.builder.build_int_add(sp, eight, "new_sp")
             .map_err(|e| format!("Failed to add: {}", e))?;
 
         // Store new sp: *sp_ptr = new_sp
@@ -402,9 +401,9 @@ impl<'ctx> Compiler<'ctx> {
         self.builder.build_store(addr_i32, value)
             .map_err(|e| format!("Failed to store value: {}", e))?;
 
-        // Increment sp: sp += 4
-        let four = i64_type.const_int(4, false);
-        let new_sp = self.builder.build_int_add(sp, four, "new_sp")
+        // Increment sp: sp += 8
+        let eight = i64_type.const_int(8, false);
+        let new_sp = self.builder.build_int_add(sp, eight, "new_sp")
             .map_err(|e| format!("Failed to add: {}", e))?;
 
         // Store new sp: *sp_ptr = new_sp
@@ -421,17 +420,16 @@ impl<'ctx> Compiler<'ctx> {
         let memory_ptr = function.get_nth_param(0).unwrap().into_pointer_value();
         let sp_ptr = function.get_nth_param(1).unwrap().into_pointer_value();
 
-        let i32_type = self.context.i32_type();
-        let i64_type = self.context.i64_type(); // usize on 64-bit systems
+        let i64_type = self.context.i64_type();
 
         // Load current sp value: sp = *sp_ptr
         let sp = self.builder.build_load(i64_type, sp_ptr, "sp")
             .map_err(|e| format!("Failed to load sp: {}", e))?
             .into_int_value();
 
-        // Decrement sp: sp -= 4
-        let four = i64_type.const_int(4, false);
-        let new_sp = self.builder.build_int_sub(sp, four, "new_sp")
+        // Decrement sp: sp -= 8
+        let eight = i64_type.const_int(8, false);
+        let new_sp = self.builder.build_int_sub(sp, eight, "new_sp")
             .map_err(|e| format!("Failed to sub: {}", e))?;
 
         // Store new sp: *sp_ptr = new_sp
@@ -447,7 +445,7 @@ impl<'ctx> Compiler<'ctx> {
         // Load value from address: value = *(i32*)addr
         let addr_i32 = self.builder.build_pointer_cast(addr, self.context.ptr_type(AddressSpace::default()), "addr_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let value = self.builder.build_load(i32_type, addr_i32, "value")
+        let value = self.builder.build_load(i64_type, addr_i32, "value")
             .map_err(|e| format!("Failed to load value: {}", e))?
             .into_int_value();
 
@@ -468,8 +466,8 @@ impl<'ctx> Compiler<'ctx> {
         let cond_value = self.compile_pop(function)?;
 
         // Compare to zero (Forth: 0 is false, non-zero is true)
-        let i32_type = self.context.i32_type();
-        let zero = i32_type.const_int(0, false);
+        let i64_type = self.context.i64_type();
+        let zero = i64_type.const_int(0, false);
         let cond = self.builder.build_int_compare(
             inkwell::IntPredicate::NE,
             cond_value,
@@ -576,8 +574,8 @@ impl<'ctx> Compiler<'ctx> {
         let cond_value = self.compile_pop(function)?;
 
         // Compare to zero (Forth: 0 is false/continue, non-zero is true/exit)
-        let i32_type = self.context.i32_type();
-        let zero = i32_type.const_int(0, false);
+        let i64_type = self.context.i64_type();
+        let zero = i64_type.const_int(0, false);
         let cond = self.builder.build_int_compare(
             inkwell::IntPredicate::NE,
             cond_value,
@@ -602,9 +600,9 @@ impl<'ctx> Compiler<'ctx> {
         function: inkwell::values::FunctionValue<'ctx>,
         dict: &crate::dictionary::Dictionary,
         body: &[AstNode],
-        increment: i32,
+        increment: i64,
     ) -> Result<(), String> {
-        let i32_type = self.context.i32_type();
+        let i64_type = self.context.i64_type();
 
         // Pop limit and start from stack
         let start = self.compile_pop(function)?;
@@ -625,7 +623,7 @@ impl<'ctx> Compiler<'ctx> {
         self.builder.position_at_end(loop_block);
 
         // Create phi node for loop index
-        let phi = self.builder.build_phi(i32_type, "i")
+        let phi = self.builder.build_phi(i64_type, "i")
             .map_err(|e| format!("Failed to build phi: {}", e))?;
 
         // Add incoming value from preloop block
@@ -651,7 +649,7 @@ impl<'ctx> Compiler<'ctx> {
         self.loop_index_stack.borrow_mut().pop();
 
         // Increment loop index
-        let increment_val = i32_type.const_int(increment as u64, true);
+        let increment_val = i64_type.const_int(increment as u64, true);
         let next_index = self.builder.build_int_add(loop_index, increment_val, "i_next")
             .map_err(|e| format!("Failed to build add: {}", e))?;
 
@@ -755,40 +753,39 @@ impl<'ctx> Compiler<'ctx> {
         let sp_ptr = function.get_nth_param(1).unwrap().into_pointer_value();
 
         let i64_type = self.context.i64_type();
-        let i32_type = self.context.i32_type();
 
         // Load current sp
         let sp = self.builder.build_load(i64_type, sp_ptr, "sp")
             .map_err(|e| format!("Failed to load sp: {}", e))?
             .into_int_value();
 
-        // Pop two values: b at sp-4, a at sp-8
-        let four = i64_type.const_int(4, false);
+        // Pop two values: b at sp-8, a at sp-16
         let eight = i64_type.const_int(8, false);
+        let sixteen = i64_type.const_int(16, false);
 
-        // Calculate address for b (top of stack): addr_b = memory + sp - 4
-        let sp_minus_4 = self.builder.build_int_sub(sp, four, "sp_minus_4")
+        // Calculate address for b (top of stack): addr_b = memory + sp - 8
+        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_b = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_4], "addr_b")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_b")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_b_i32 = self.builder.build_pointer_cast(addr_b, self.context.ptr_type(AddressSpace::default()), "addr_b_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let b = self.builder.build_load(i32_type, addr_b_i32, "b")
+        let b = self.builder.build_load(i64_type, addr_b_i32, "b")
             .map_err(|e| format!("Failed to load b: {}", e))?
             .into_int_value();
 
-        // Calculate address for a (second on stack): addr_a = memory + sp - 8
-        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
+        // Calculate address for a (second on stack): addr_a = memory + sp - 16
+        let sp_minus_16 = self.builder.build_int_sub(sp, sixteen, "sp_minus_16")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_a = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_a")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_16], "addr_a")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_a_i32 = self.builder.build_pointer_cast(addr_a, self.context.ptr_type(AddressSpace::default()), "addr_a_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let a = self.builder.build_load(i32_type, addr_a_i32, "a")
+        let a = self.builder.build_load(i64_type, addr_a_i32, "a")
             .map_err(|e| format!("Failed to load a: {}", e))?
             .into_int_value();
 
@@ -800,8 +797,8 @@ impl<'ctx> Compiler<'ctx> {
         self.builder.build_store(addr_a_i32, result)
             .map_err(|e| format!("Failed to store result: {}", e))?;
 
-        // Update sp: sp -= 4 (net effect: popped 2, pushed 1)
-        let new_sp = self.builder.build_int_sub(sp, four, "new_sp")
+        // Update sp: sp -= 8 (net effect: popped 2, pushed 1)
+        let new_sp = self.builder.build_int_sub(sp, eight, "new_sp")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         self.builder.build_store(sp_ptr, new_sp)
             .map_err(|e| format!("Failed to store sp: {}", e))?;
@@ -815,40 +812,39 @@ impl<'ctx> Compiler<'ctx> {
         let sp_ptr = function.get_nth_param(1).unwrap().into_pointer_value();
 
         let i64_type = self.context.i64_type();
-        let i32_type = self.context.i32_type();
 
         // Load current sp
         let sp = self.builder.build_load(i64_type, sp_ptr, "sp")
             .map_err(|e| format!("Failed to load sp: {}", e))?
             .into_int_value();
 
-        // Pop two values: b at sp-4, a at sp-8
-        let four = i64_type.const_int(4, false);
+        // Pop two values: b at sp-8, a at sp-16
         let eight = i64_type.const_int(8, false);
+        let sixteen = i64_type.const_int(16, false);
 
-        // Calculate address for b (top of stack): addr_b = memory + sp - 4
-        let sp_minus_4 = self.builder.build_int_sub(sp, four, "sp_minus_4")
+        // Calculate address for b (top of stack): addr_b = memory + sp - 8
+        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_b = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_4], "addr_b")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_b")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_b_i32 = self.builder.build_pointer_cast(addr_b, self.context.ptr_type(AddressSpace::default()), "addr_b_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let b = self.builder.build_load(i32_type, addr_b_i32, "b")
+        let b = self.builder.build_load(i64_type, addr_b_i32, "b")
             .map_err(|e| format!("Failed to load b: {}", e))?
             .into_int_value();
 
-        // Calculate address for a (second on stack): addr_a = memory + sp - 8
-        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
+        // Calculate address for a (second on stack): addr_a = memory + sp - 16
+        let sp_minus_16 = self.builder.build_int_sub(sp, sixteen, "sp_minus_16")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_a = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_a")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_16], "addr_a")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_a_i32 = self.builder.build_pointer_cast(addr_a, self.context.ptr_type(AddressSpace::default()), "addr_a_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let a = self.builder.build_load(i32_type, addr_a_i32, "a")
+        let a = self.builder.build_load(i64_type, addr_a_i32, "a")
             .map_err(|e| format!("Failed to load a: {}", e))?
             .into_int_value();
 
@@ -860,8 +856,8 @@ impl<'ctx> Compiler<'ctx> {
         self.builder.build_store(addr_a_i32, result)
             .map_err(|e| format!("Failed to store result: {}", e))?;
 
-        // Update sp: sp -= 4 (net effect: popped 2, pushed 1)
-        let new_sp = self.builder.build_int_sub(sp, four, "new_sp")
+        // Update sp: sp -= 8 (net effect: popped 2, pushed 1)
+        let new_sp = self.builder.build_int_sub(sp, eight, "new_sp")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         self.builder.build_store(sp_ptr, new_sp)
             .map_err(|e| format!("Failed to store sp: {}", e))?;
@@ -875,40 +871,39 @@ impl<'ctx> Compiler<'ctx> {
         let sp_ptr = function.get_nth_param(1).unwrap().into_pointer_value();
 
         let i64_type = self.context.i64_type();
-        let i32_type = self.context.i32_type();
 
         // Load current sp
         let sp = self.builder.build_load(i64_type, sp_ptr, "sp")
             .map_err(|e| format!("Failed to load sp: {}", e))?
             .into_int_value();
 
-        // Pop two values: b at sp-4, a at sp-8
-        let four = i64_type.const_int(4, false);
+        // Pop two values: b at sp-8, a at sp-16
         let eight = i64_type.const_int(8, false);
+        let sixteen = i64_type.const_int(16, false);
 
-        // Calculate address for b (top of stack): addr_b = memory + sp - 4
-        let sp_minus_4 = self.builder.build_int_sub(sp, four, "sp_minus_4")
+        // Calculate address for b (top of stack): addr_b = memory + sp - 8
+        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_b = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_4], "addr_b")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_b")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_b_i32 = self.builder.build_pointer_cast(addr_b, self.context.ptr_type(AddressSpace::default()), "addr_b_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let b = self.builder.build_load(i32_type, addr_b_i32, "b")
+        let b = self.builder.build_load(i64_type, addr_b_i32, "b")
             .map_err(|e| format!("Failed to load b: {}", e))?
             .into_int_value();
 
-        // Calculate address for a (second on stack): addr_a = memory + sp - 8
-        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
+        // Calculate address for a (second on stack): addr_a = memory + sp - 16
+        let sp_minus_16 = self.builder.build_int_sub(sp, sixteen, "sp_minus_16")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_a = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_a")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_16], "addr_a")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_a_i32 = self.builder.build_pointer_cast(addr_a, self.context.ptr_type(AddressSpace::default()), "addr_a_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let a = self.builder.build_load(i32_type, addr_a_i32, "a")
+        let a = self.builder.build_load(i64_type, addr_a_i32, "a")
             .map_err(|e| format!("Failed to load a: {}", e))?
             .into_int_value();
 
@@ -920,8 +915,8 @@ impl<'ctx> Compiler<'ctx> {
         self.builder.build_store(addr_a_i32, result)
             .map_err(|e| format!("Failed to store result: {}", e))?;
 
-        // Update sp: sp -= 4 (net effect: popped 2, pushed 1)
-        let new_sp = self.builder.build_int_sub(sp, four, "new_sp")
+        // Update sp: sp -= 8 (net effect: popped 2, pushed 1)
+        let new_sp = self.builder.build_int_sub(sp, eight, "new_sp")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         self.builder.build_store(sp_ptr, new_sp)
             .map_err(|e| format!("Failed to store sp: {}", e))?;
@@ -935,40 +930,39 @@ impl<'ctx> Compiler<'ctx> {
         let sp_ptr = function.get_nth_param(1).unwrap().into_pointer_value();
 
         let i64_type = self.context.i64_type();
-        let i32_type = self.context.i32_type();
 
         // Load current sp
         let sp = self.builder.build_load(i64_type, sp_ptr, "sp")
             .map_err(|e| format!("Failed to load sp: {}", e))?
             .into_int_value();
 
-        // Pop two values: b at sp-4, a at sp-8
-        let four = i64_type.const_int(4, false);
+        // Pop two values: b at sp-8, a at sp-16
         let eight = i64_type.const_int(8, false);
+        let sixteen = i64_type.const_int(16, false);
 
-        // Calculate address for b (top of stack): addr_b = memory + sp - 4
-        let sp_minus_4 = self.builder.build_int_sub(sp, four, "sp_minus_4")
+        // Calculate address for b (top of stack): addr_b = memory + sp - 8
+        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_b = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_4], "addr_b")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_b")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_b_i32 = self.builder.build_pointer_cast(addr_b, self.context.ptr_type(AddressSpace::default()), "addr_b_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let b = self.builder.build_load(i32_type, addr_b_i32, "b")
+        let b = self.builder.build_load(i64_type, addr_b_i32, "b")
             .map_err(|e| format!("Failed to load b: {}", e))?
             .into_int_value();
 
-        // Calculate address for a (second on stack): addr_a = memory + sp - 8
-        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
+        // Calculate address for a (second on stack): addr_a = memory + sp - 16
+        let sp_minus_16 = self.builder.build_int_sub(sp, sixteen, "sp_minus_16")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_a = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_a")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_16], "addr_a")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_a_i32 = self.builder.build_pointer_cast(addr_a, self.context.ptr_type(AddressSpace::default()), "addr_a_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let a = self.builder.build_load(i32_type, addr_a_i32, "a")
+        let a = self.builder.build_load(i64_type, addr_a_i32, "a")
             .map_err(|e| format!("Failed to load a: {}", e))?
             .into_int_value();
 
@@ -980,8 +974,8 @@ impl<'ctx> Compiler<'ctx> {
         self.builder.build_store(addr_a_i32, result)
             .map_err(|e| format!("Failed to store result: {}", e))?;
 
-        // Update sp: sp -= 4 (net effect: popped 2, pushed 1)
-        let new_sp = self.builder.build_int_sub(sp, four, "new_sp")
+        // Update sp: sp -= 8 (net effect: popped 2, pushed 1)
+        let new_sp = self.builder.build_int_sub(sp, eight, "new_sp")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         self.builder.build_store(sp_ptr, new_sp)
             .map_err(|e| format!("Failed to store sp: {}", e))?;
@@ -996,25 +990,24 @@ impl<'ctx> Compiler<'ctx> {
         let sp_ptr = function.get_nth_param(1).unwrap().into_pointer_value();
 
         let i64_type = self.context.i64_type();
-        let i32_type = self.context.i32_type();
 
         // Load current sp
         let sp = self.builder.build_load(i64_type, sp_ptr, "sp")
             .map_err(|e| format!("Failed to load sp: {}", e))?
             .into_int_value();
 
-        let four = i64_type.const_int(4, false);
+        let eight = i64_type.const_int(8, false);
 
         // Load top value at sp-4
-        let sp_minus_4 = self.builder.build_int_sub(sp, four, "sp_minus_4")
+        let sp_minus_16 = self.builder.build_int_sub(sp, eight, "sp_minus_16")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_top = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_4], "addr_top")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_16], "addr_top")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_top_i32 = self.builder.build_pointer_cast(addr_top, self.context.ptr_type(AddressSpace::default()), "addr_top_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let top_value = self.builder.build_load(i32_type, addr_top_i32, "top_value")
+        let top_value = self.builder.build_load(i64_type, addr_top_i32, "top_value")
             .map_err(|e| format!("Failed to load top value: {}", e))?
             .into_int_value();
 
@@ -1029,7 +1022,7 @@ impl<'ctx> Compiler<'ctx> {
             .map_err(|e| format!("Failed to store duplicate: {}", e))?;
 
         // Increment sp by 4
-        let new_sp = self.builder.build_int_add(sp, four, "new_sp")
+        let new_sp = self.builder.build_int_add(sp, eight, "new_sp")
             .map_err(|e| format!("Failed to add: {}", e))?;
         self.builder.build_store(sp_ptr, new_sp)
             .map_err(|e| format!("Failed to store sp: {}", e))?;
@@ -1050,8 +1043,8 @@ impl<'ctx> Compiler<'ctx> {
             .into_int_value();
 
         // Decrement sp by 4 (remove top value)
-        let four = i64_type.const_int(4, false);
-        let new_sp = self.builder.build_int_sub(sp, four, "new_sp")
+        let eight = i64_type.const_int(8, false);
+        let new_sp = self.builder.build_int_sub(sp, eight, "new_sp")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         self.builder.build_store(sp_ptr, new_sp)
             .map_err(|e| format!("Failed to store sp: {}", e))?;
@@ -1066,47 +1059,46 @@ impl<'ctx> Compiler<'ctx> {
         let sp_ptr = function.get_nth_param(1).unwrap().into_pointer_value();
 
         let i64_type = self.context.i64_type();
-        let i32_type = self.context.i32_type();
 
         // Load current sp
         let sp = self.builder.build_load(i64_type, sp_ptr, "sp")
             .map_err(|e| format!("Failed to load sp: {}", e))?
             .into_int_value();
 
-        let four = i64_type.const_int(4, false);
         let eight = i64_type.const_int(8, false);
+        let sixteen = i64_type.const_int(16, false);
 
-        // Load b (top of stack) at sp-4
-        let sp_minus_4 = self.builder.build_int_sub(sp, four, "sp_minus_4")
+        // Load b (top of stack) at sp-8
+        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_b = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_4], "addr_b")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_b")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_b_i32 = self.builder.build_pointer_cast(addr_b, self.context.ptr_type(AddressSpace::default()), "addr_b_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let b = self.builder.build_load(i32_type, addr_b_i32, "b")
+        let b = self.builder.build_load(i64_type, addr_b_i32, "b")
             .map_err(|e| format!("Failed to load b: {}", e))?
             .into_int_value();
 
-        // Load a (second on stack) at sp-8
-        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
+        // Load a (second on stack) at sp-16
+        let sp_minus_16 = self.builder.build_int_sub(sp, sixteen, "sp_minus_16")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_a = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_a")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_16], "addr_a")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_a_i32 = self.builder.build_pointer_cast(addr_a, self.context.ptr_type(AddressSpace::default()), "addr_a_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let a = self.builder.build_load(i32_type, addr_a_i32, "a")
+        let a = self.builder.build_load(i64_type, addr_a_i32, "a")
             .map_err(|e| format!("Failed to load a: {}", e))?
             .into_int_value();
 
-        // Store a where b was (sp-4)
+        // Store a where b was (sp-8)
         self.builder.build_store(addr_b_i32, a)
             .map_err(|e| format!("Failed to store a: {}", e))?;
 
-        // Store b where a was (sp-8)
+        // Store b where a was (sp-16)
         self.builder.build_store(addr_a_i32, b)
             .map_err(|e| format!("Failed to store b: {}", e))?;
 
@@ -1120,38 +1112,37 @@ impl<'ctx> Compiler<'ctx> {
         let sp_ptr = function.get_nth_param(1).unwrap().into_pointer_value();
 
         let i64_type = self.context.i64_type();
-        let i32_type = self.context.i32_type();
 
         // Load current sp
         let sp = self.builder.build_load(i64_type, sp_ptr, "sp")
             .map_err(|e| format!("Failed to load sp: {}", e))?
             .into_int_value();
 
-        let four = i64_type.const_int(4, false);
         let eight = i64_type.const_int(8, false);
+        let sixteen = i64_type.const_int(16, false);
 
-        // Pop two values: b at sp-4, a at sp-8
-        let sp_minus_4 = self.builder.build_int_sub(sp, four, "sp_minus_4")
+        // Pop two values: b at sp-8, a at sp-16
+        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_b = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_4], "addr_b")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_b")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_b_i32 = self.builder.build_pointer_cast(addr_b, self.context.ptr_type(AddressSpace::default()), "addr_b_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let b = self.builder.build_load(i32_type, addr_b_i32, "b")
+        let b = self.builder.build_load(i64_type, addr_b_i32, "b")
             .map_err(|e| format!("Failed to load b: {}", e))?
             .into_int_value();
 
-        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
+        let sp_minus_16 = self.builder.build_int_sub(sp, sixteen, "sp_minus_16")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_a = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_a")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_16], "addr_a")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_a_i32 = self.builder.build_pointer_cast(addr_a, self.context.ptr_type(AddressSpace::default()), "addr_a_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let a = self.builder.build_load(i32_type, addr_a_i32, "a")
+        let a = self.builder.build_load(i64_type, addr_a_i32, "a")
             .map_err(|e| format!("Failed to load a: {}", e))?
             .into_int_value();
 
@@ -1160,15 +1151,15 @@ impl<'ctx> Compiler<'ctx> {
             .map_err(|e| format!("Failed to compare: {}", e))?;
 
         // Sign-extend i1 to i32 (false=0, true=-1)
-        let result = self.builder.build_int_s_extend(cmp_result, i32_type, "result")
+        let result = self.builder.build_int_s_extend(cmp_result, i64_type, "result")
             .map_err(|e| format!("Failed to extend: {}", e))?;
 
         // Store result at sp-8 (where a was)
         self.builder.build_store(addr_a_i32, result)
             .map_err(|e| format!("Failed to store result: {}", e))?;
 
-        // Update sp: sp -= 4 (net effect: popped 2, pushed 1)
-        let new_sp = self.builder.build_int_sub(sp, four, "new_sp")
+        // Update sp: sp -= 8 (net effect: popped 2, pushed 1)
+        let new_sp = self.builder.build_int_sub(sp, eight, "new_sp")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         self.builder.build_store(sp_ptr, new_sp)
             .map_err(|e| format!("Failed to store sp: {}", e))?;
@@ -1183,38 +1174,37 @@ impl<'ctx> Compiler<'ctx> {
         let sp_ptr = function.get_nth_param(1).unwrap().into_pointer_value();
 
         let i64_type = self.context.i64_type();
-        let i32_type = self.context.i32_type();
 
         // Load current sp
         let sp = self.builder.build_load(i64_type, sp_ptr, "sp")
             .map_err(|e| format!("Failed to load sp: {}", e))?
             .into_int_value();
 
-        let four = i64_type.const_int(4, false);
         let eight = i64_type.const_int(8, false);
+        let sixteen = i64_type.const_int(16, false);
 
-        // Pop two values: b at sp-4, a at sp-8
-        let sp_minus_4 = self.builder.build_int_sub(sp, four, "sp_minus_4")
+        // Pop two values: b at sp-8, a at sp-16
+        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_b = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_4], "addr_b")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_b")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_b_i32 = self.builder.build_pointer_cast(addr_b, self.context.ptr_type(AddressSpace::default()), "addr_b_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let b = self.builder.build_load(i32_type, addr_b_i32, "b")
+        let b = self.builder.build_load(i64_type, addr_b_i32, "b")
             .map_err(|e| format!("Failed to load b: {}", e))?
             .into_int_value();
 
-        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
+        let sp_minus_16 = self.builder.build_int_sub(sp, sixteen, "sp_minus_16")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_a = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_a")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_16], "addr_a")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_a_i32 = self.builder.build_pointer_cast(addr_a, self.context.ptr_type(AddressSpace::default()), "addr_a_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let a = self.builder.build_load(i32_type, addr_a_i32, "a")
+        let a = self.builder.build_load(i64_type, addr_a_i32, "a")
             .map_err(|e| format!("Failed to load a: {}", e))?
             .into_int_value();
 
@@ -1223,15 +1213,15 @@ impl<'ctx> Compiler<'ctx> {
             .map_err(|e| format!("Failed to compare: {}", e))?;
 
         // Sign-extend i1 to i32 (false=0, true=-1)
-        let result = self.builder.build_int_s_extend(cmp_result, i32_type, "result")
+        let result = self.builder.build_int_s_extend(cmp_result, i64_type, "result")
             .map_err(|e| format!("Failed to extend: {}", e))?;
 
         // Store result at sp-8 (where a was)
         self.builder.build_store(addr_a_i32, result)
             .map_err(|e| format!("Failed to store result: {}", e))?;
 
-        // Update sp: sp -= 4 (net effect: popped 2, pushed 1)
-        let new_sp = self.builder.build_int_sub(sp, four, "new_sp")
+        // Update sp: sp -= 8 (net effect: popped 2, pushed 1)
+        let new_sp = self.builder.build_int_sub(sp, eight, "new_sp")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         self.builder.build_store(sp_ptr, new_sp)
             .map_err(|e| format!("Failed to store sp: {}", e))?;
@@ -1246,38 +1236,37 @@ impl<'ctx> Compiler<'ctx> {
         let sp_ptr = function.get_nth_param(1).unwrap().into_pointer_value();
 
         let i64_type = self.context.i64_type();
-        let i32_type = self.context.i32_type();
 
         // Load current sp
         let sp = self.builder.build_load(i64_type, sp_ptr, "sp")
             .map_err(|e| format!("Failed to load sp: {}", e))?
             .into_int_value();
 
-        let four = i64_type.const_int(4, false);
         let eight = i64_type.const_int(8, false);
+        let sixteen = i64_type.const_int(16, false);
 
-        // Pop two values: b at sp-4, a at sp-8
-        let sp_minus_4 = self.builder.build_int_sub(sp, four, "sp_minus_4")
+        // Pop two values: b at sp-8, a at sp-16
+        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_b = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_4], "addr_b")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_b")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_b_i32 = self.builder.build_pointer_cast(addr_b, self.context.ptr_type(AddressSpace::default()), "addr_b_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let b = self.builder.build_load(i32_type, addr_b_i32, "b")
+        let b = self.builder.build_load(i64_type, addr_b_i32, "b")
             .map_err(|e| format!("Failed to load b: {}", e))?
             .into_int_value();
 
-        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
+        let sp_minus_16 = self.builder.build_int_sub(sp, sixteen, "sp_minus_16")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_a = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_a")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_16], "addr_a")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_a_i32 = self.builder.build_pointer_cast(addr_a, self.context.ptr_type(AddressSpace::default()), "addr_a_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let a = self.builder.build_load(i32_type, addr_a_i32, "a")
+        let a = self.builder.build_load(i64_type, addr_a_i32, "a")
             .map_err(|e| format!("Failed to load a: {}", e))?
             .into_int_value();
 
@@ -1286,15 +1275,15 @@ impl<'ctx> Compiler<'ctx> {
             .map_err(|e| format!("Failed to compare: {}", e))?;
 
         // Sign-extend i1 to i32 (false=0, true=-1)
-        let result = self.builder.build_int_s_extend(cmp_result, i32_type, "result")
+        let result = self.builder.build_int_s_extend(cmp_result, i64_type, "result")
             .map_err(|e| format!("Failed to extend: {}", e))?;
 
         // Store result at sp-8 (where a was)
         self.builder.build_store(addr_a_i32, result)
             .map_err(|e| format!("Failed to store result: {}", e))?;
 
-        // Update sp: sp -= 4 (net effect: popped 2, pushed 1)
-        let new_sp = self.builder.build_int_sub(sp, four, "new_sp")
+        // Update sp: sp -= 8 (net effect: popped 2, pushed 1)
+        let new_sp = self.builder.build_int_sub(sp, eight, "new_sp")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         self.builder.build_store(sp_ptr, new_sp)
             .map_err(|e| format!("Failed to store sp: {}", e))?;
@@ -1309,36 +1298,35 @@ impl<'ctx> Compiler<'ctx> {
         let sp_ptr = function.get_nth_param(1).unwrap().into_pointer_value();
 
         let i64_type = self.context.i64_type();
-        let i32_type = self.context.i32_type();
 
         let sp = self.builder.build_load(i64_type, sp_ptr, "sp")
             .map_err(|e| format!("Failed to load sp: {}", e))?
             .into_int_value();
 
-        let four = i64_type.const_int(4, false);
         let eight = i64_type.const_int(8, false);
+        let sixteen = i64_type.const_int(16, false);
 
-        let sp_minus_4 = self.builder.build_int_sub(sp, four, "sp_minus_4")
+        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_b = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_4], "addr_b")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_b")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_b_i32 = self.builder.build_pointer_cast(addr_b, self.context.ptr_type(AddressSpace::default()), "addr_b_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let b = self.builder.build_load(i32_type, addr_b_i32, "b")
+        let b = self.builder.build_load(i64_type, addr_b_i32, "b")
             .map_err(|e| format!("Failed to load b: {}", e))?
             .into_int_value();
 
-        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
+        let sp_minus_16 = self.builder.build_int_sub(sp, sixteen, "sp_minus_16")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_a = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_a")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_16], "addr_a")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_a_i32 = self.builder.build_pointer_cast(addr_a, self.context.ptr_type(AddressSpace::default()), "addr_a_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let a = self.builder.build_load(i32_type, addr_a_i32, "a")
+        let a = self.builder.build_load(i64_type, addr_a_i32, "a")
             .map_err(|e| format!("Failed to load a: {}", e))?
             .into_int_value();
 
@@ -1348,7 +1336,7 @@ impl<'ctx> Compiler<'ctx> {
         self.builder.build_store(addr_a_i32, result)
             .map_err(|e| format!("Failed to store result: {}", e))?;
 
-        let new_sp = self.builder.build_int_sub(sp, four, "new_sp")
+        let new_sp = self.builder.build_int_sub(sp, eight, "new_sp")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         self.builder.build_store(sp_ptr, new_sp)
             .map_err(|e| format!("Failed to store sp: {}", e))?;
@@ -1363,36 +1351,35 @@ impl<'ctx> Compiler<'ctx> {
         let sp_ptr = function.get_nth_param(1).unwrap().into_pointer_value();
 
         let i64_type = self.context.i64_type();
-        let i32_type = self.context.i32_type();
 
         let sp = self.builder.build_load(i64_type, sp_ptr, "sp")
             .map_err(|e| format!("Failed to load sp: {}", e))?
             .into_int_value();
 
-        let four = i64_type.const_int(4, false);
         let eight = i64_type.const_int(8, false);
+        let sixteen = i64_type.const_int(16, false);
 
-        let sp_minus_4 = self.builder.build_int_sub(sp, four, "sp_minus_4")
+        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_b = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_4], "addr_b")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_b")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_b_i32 = self.builder.build_pointer_cast(addr_b, self.context.ptr_type(AddressSpace::default()), "addr_b_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let b = self.builder.build_load(i32_type, addr_b_i32, "b")
+        let b = self.builder.build_load(i64_type, addr_b_i32, "b")
             .map_err(|e| format!("Failed to load b: {}", e))?
             .into_int_value();
 
-        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
+        let sp_minus_16 = self.builder.build_int_sub(sp, sixteen, "sp_minus_16")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_a = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_a")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_16], "addr_a")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_a_i32 = self.builder.build_pointer_cast(addr_a, self.context.ptr_type(AddressSpace::default()), "addr_a_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let a = self.builder.build_load(i32_type, addr_a_i32, "a")
+        let a = self.builder.build_load(i64_type, addr_a_i32, "a")
             .map_err(|e| format!("Failed to load a: {}", e))?
             .into_int_value();
 
@@ -1402,7 +1389,7 @@ impl<'ctx> Compiler<'ctx> {
         self.builder.build_store(addr_a_i32, result)
             .map_err(|e| format!("Failed to store result: {}", e))?;
 
-        let new_sp = self.builder.build_int_sub(sp, four, "new_sp")
+        let new_sp = self.builder.build_int_sub(sp, eight, "new_sp")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         self.builder.build_store(sp_ptr, new_sp)
             .map_err(|e| format!("Failed to store sp: {}", e))?;
@@ -1417,36 +1404,35 @@ impl<'ctx> Compiler<'ctx> {
         let sp_ptr = function.get_nth_param(1).unwrap().into_pointer_value();
 
         let i64_type = self.context.i64_type();
-        let i32_type = self.context.i32_type();
 
         let sp = self.builder.build_load(i64_type, sp_ptr, "sp")
             .map_err(|e| format!("Failed to load sp: {}", e))?
             .into_int_value();
 
-        let four = i64_type.const_int(4, false);
         let eight = i64_type.const_int(8, false);
+        let sixteen = i64_type.const_int(16, false);
 
-        let sp_minus_4 = self.builder.build_int_sub(sp, four, "sp_minus_4")
+        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_b = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_4], "addr_b")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_b")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_b_i32 = self.builder.build_pointer_cast(addr_b, self.context.ptr_type(AddressSpace::default()), "addr_b_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let b = self.builder.build_load(i32_type, addr_b_i32, "b")
+        let b = self.builder.build_load(i64_type, addr_b_i32, "b")
             .map_err(|e| format!("Failed to load b: {}", e))?
             .into_int_value();
 
-        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
+        let sp_minus_16 = self.builder.build_int_sub(sp, sixteen, "sp_minus_16")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_a = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_a")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_16], "addr_a")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_a_i32 = self.builder.build_pointer_cast(addr_a, self.context.ptr_type(AddressSpace::default()), "addr_a_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let a = self.builder.build_load(i32_type, addr_a_i32, "a")
+        let a = self.builder.build_load(i64_type, addr_a_i32, "a")
             .map_err(|e| format!("Failed to load a: {}", e))?
             .into_int_value();
 
@@ -1456,7 +1442,7 @@ impl<'ctx> Compiler<'ctx> {
         self.builder.build_store(addr_a_i32, result)
             .map_err(|e| format!("Failed to store result: {}", e))?;
 
-        let new_sp = self.builder.build_int_sub(sp, four, "new_sp")
+        let new_sp = self.builder.build_int_sub(sp, eight, "new_sp")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         self.builder.build_store(sp_ptr, new_sp)
             .map_err(|e| format!("Failed to store sp: {}", e))?;
@@ -1471,29 +1457,28 @@ impl<'ctx> Compiler<'ctx> {
         let sp_ptr = function.get_nth_param(1).unwrap().into_pointer_value();
 
         let i64_type = self.context.i64_type();
-        let i32_type = self.context.i32_type();
 
         let sp = self.builder.build_load(i64_type, sp_ptr, "sp")
             .map_err(|e| format!("Failed to load sp: {}", e))?
             .into_int_value();
 
-        let four = i64_type.const_int(4, false);
+        let eight = i64_type.const_int(8, false);
 
         // Load top value at sp-4
-        let sp_minus_4 = self.builder.build_int_sub(sp, four, "sp_minus_4")
+        let sp_minus_16 = self.builder.build_int_sub(sp, eight, "sp_minus_16")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_4], "addr")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_16], "addr")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_i32 = self.builder.build_pointer_cast(addr, self.context.ptr_type(AddressSpace::default()), "addr_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let value = self.builder.build_load(i32_type, addr_i32, "value")
+        let value = self.builder.build_load(i64_type, addr_i32, "value")
             .map_err(|e| format!("Failed to load value: {}", e))?
             .into_int_value();
 
         // Invert: XOR with -1 (all bits set)
-        let neg_one = i32_type.const_int((-1i32) as u64, true);
+        let neg_one = i64_type.const_int((-1i32) as u64, true);
         let result = self.builder.build_xor(value, neg_one, "result")
             .map_err(|e| format!("Failed to XOR: {}", e))?;
 
@@ -1510,36 +1495,35 @@ impl<'ctx> Compiler<'ctx> {
         let sp_ptr = function.get_nth_param(1).unwrap().into_pointer_value();
 
         let i64_type = self.context.i64_type();
-        let i32_type = self.context.i32_type();
 
         let sp = self.builder.build_load(i64_type, sp_ptr, "sp")
             .map_err(|e| format!("Failed to load sp: {}", e))?
             .into_int_value();
 
-        let four = i64_type.const_int(4, false);
         let eight = i64_type.const_int(8, false);
+        let sixteen = i64_type.const_int(16, false);
 
-        let sp_minus_4 = self.builder.build_int_sub(sp, four, "sp_minus_4")
+        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_b = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_4], "addr_b")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_b")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_b_i32 = self.builder.build_pointer_cast(addr_b, self.context.ptr_type(AddressSpace::default()), "addr_b_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let shift = self.builder.build_load(i32_type, addr_b_i32, "shift")
+        let shift = self.builder.build_load(i64_type, addr_b_i32, "shift")
             .map_err(|e| format!("Failed to load shift: {}", e))?
             .into_int_value();
 
-        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
+        let sp_minus_16 = self.builder.build_int_sub(sp, sixteen, "sp_minus_16")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_a = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_a")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_16], "addr_a")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_a_i32 = self.builder.build_pointer_cast(addr_a, self.context.ptr_type(AddressSpace::default()), "addr_a_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let value = self.builder.build_load(i32_type, addr_a_i32, "value")
+        let value = self.builder.build_load(i64_type, addr_a_i32, "value")
             .map_err(|e| format!("Failed to load value: {}", e))?
             .into_int_value();
 
@@ -1549,7 +1533,7 @@ impl<'ctx> Compiler<'ctx> {
         self.builder.build_store(addr_a_i32, result)
             .map_err(|e| format!("Failed to store result: {}", e))?;
 
-        let new_sp = self.builder.build_int_sub(sp, four, "new_sp")
+        let new_sp = self.builder.build_int_sub(sp, eight, "new_sp")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         self.builder.build_store(sp_ptr, new_sp)
             .map_err(|e| format!("Failed to store sp: {}", e))?;
@@ -1564,36 +1548,35 @@ impl<'ctx> Compiler<'ctx> {
         let sp_ptr = function.get_nth_param(1).unwrap().into_pointer_value();
 
         let i64_type = self.context.i64_type();
-        let i32_type = self.context.i32_type();
 
         let sp = self.builder.build_load(i64_type, sp_ptr, "sp")
             .map_err(|e| format!("Failed to load sp: {}", e))?
             .into_int_value();
 
-        let four = i64_type.const_int(4, false);
         let eight = i64_type.const_int(8, false);
+        let sixteen = i64_type.const_int(16, false);
 
-        let sp_minus_4 = self.builder.build_int_sub(sp, four, "sp_minus_4")
+        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_b = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_4], "addr_b")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_b")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_b_i32 = self.builder.build_pointer_cast(addr_b, self.context.ptr_type(AddressSpace::default()), "addr_b_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let shift = self.builder.build_load(i32_type, addr_b_i32, "shift")
+        let shift = self.builder.build_load(i64_type, addr_b_i32, "shift")
             .map_err(|e| format!("Failed to load shift: {}", e))?
             .into_int_value();
 
-        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
+        let sp_minus_16 = self.builder.build_int_sub(sp, sixteen, "sp_minus_16")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_a = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_a")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_16], "addr_a")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_a_i32 = self.builder.build_pointer_cast(addr_a, self.context.ptr_type(AddressSpace::default()), "addr_a_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let value = self.builder.build_load(i32_type, addr_a_i32, "value")
+        let value = self.builder.build_load(i64_type, addr_a_i32, "value")
             .map_err(|e| format!("Failed to load value: {}", e))?
             .into_int_value();
 
@@ -1603,7 +1586,7 @@ impl<'ctx> Compiler<'ctx> {
         self.builder.build_store(addr_a_i32, result)
             .map_err(|e| format!("Failed to store result: {}", e))?;
 
-        let new_sp = self.builder.build_int_sub(sp, four, "new_sp")
+        let new_sp = self.builder.build_int_sub(sp, eight, "new_sp")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         self.builder.build_store(sp_ptr, new_sp)
             .map_err(|e| format!("Failed to store sp: {}", e))?;
@@ -1618,25 +1601,24 @@ impl<'ctx> Compiler<'ctx> {
         let sp_ptr = function.get_nth_param(1).unwrap().into_pointer_value();
 
         let i64_type = self.context.i64_type();
-        let i32_type = self.context.i32_type();
 
         let sp = self.builder.build_load(i64_type, sp_ptr, "sp")
             .map_err(|e| format!("Failed to load sp: {}", e))?
             .into_int_value();
 
-        let four = i64_type.const_int(4, false);
         let eight = i64_type.const_int(8, false);
+        let sixteen = i64_type.const_int(16, false);
 
-        // Load second value (a) at sp-8
-        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
+        // Load second value (a) at sp-16
+        let sp_minus_16 = self.builder.build_int_sub(sp, sixteen, "sp_minus_16")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_a = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_a")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_16], "addr_a")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_a_i32 = self.builder.build_pointer_cast(addr_a, self.context.ptr_type(AddressSpace::default()), "addr_a_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let a = self.builder.build_load(i32_type, addr_a_i32, "a")
+        let a = self.builder.build_load(i64_type, addr_a_i32, "a")
             .map_err(|e| format!("Failed to load a: {}", e))?
             .into_int_value();
 
@@ -1650,8 +1632,8 @@ impl<'ctx> Compiler<'ctx> {
         self.builder.build_store(addr_new_i32, a)
             .map_err(|e| format!("Failed to store copy: {}", e))?;
 
-        // Increment sp by 4
-        let new_sp = self.builder.build_int_add(sp, four, "new_sp")
+        // Increment sp by 8
+        let new_sp = self.builder.build_int_add(sp, eight, "new_sp")
             .map_err(|e| format!("Failed to add: {}", e))?;
         self.builder.build_store(sp_ptr, new_sp)
             .map_err(|e| format!("Failed to store sp: {}", e))?;
@@ -1666,64 +1648,63 @@ impl<'ctx> Compiler<'ctx> {
         let sp_ptr = function.get_nth_param(1).unwrap().into_pointer_value();
 
         let i64_type = self.context.i64_type();
-        let i32_type = self.context.i32_type();
 
         let sp = self.builder.build_load(i64_type, sp_ptr, "sp")
             .map_err(|e| format!("Failed to load sp: {}", e))?
             .into_int_value();
 
-        let four = i64_type.const_int(4, false);
         let eight = i64_type.const_int(8, false);
-        let twelve = i64_type.const_int(12, false);
+        let sixteen = i64_type.const_int(16, false);
+        let twenty_four = i64_type.const_int(24, false);
 
-        // Load c (top) at sp-4
-        let sp_minus_4 = self.builder.build_int_sub(sp, four, "sp_minus_4")
+        // Load c (top) at sp-8
+        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_c = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_4], "addr_c")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_c")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_c_i32 = self.builder.build_pointer_cast(addr_c, self.context.ptr_type(AddressSpace::default()), "addr_c_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let c = self.builder.build_load(i32_type, addr_c_i32, "c")
+        let c = self.builder.build_load(i64_type, addr_c_i32, "c")
             .map_err(|e| format!("Failed to load c: {}", e))?
             .into_int_value();
 
-        // Load b at sp-8
-        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
+        // Load b at sp-16
+        let sp_minus_16 = self.builder.build_int_sub(sp, sixteen, "sp_minus_16")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_b = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_b")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_16], "addr_b")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_b_i32 = self.builder.build_pointer_cast(addr_b, self.context.ptr_type(AddressSpace::default()), "addr_b_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let b = self.builder.build_load(i32_type, addr_b_i32, "b")
+        let b = self.builder.build_load(i64_type, addr_b_i32, "b")
             .map_err(|e| format!("Failed to load b: {}", e))?
             .into_int_value();
 
-        // Load a at sp-12
-        let sp_minus_12 = self.builder.build_int_sub(sp, twelve, "sp_minus_12")
+        // Load a at sp-24
+        let sp_minus_24 = self.builder.build_int_sub(sp, twenty_four, "sp_minus_24")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_a = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_12], "addr_a")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_24], "addr_a")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_a_i32 = self.builder.build_pointer_cast(addr_a, self.context.ptr_type(AddressSpace::default()), "addr_a_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let a = self.builder.build_load(i32_type, addr_a_i32, "a")
+        let a = self.builder.build_load(i64_type, addr_a_i32, "a")
             .map_err(|e| format!("Failed to load a: {}", e))?
             .into_int_value();
 
-        // Store b at sp-12 (where a was)
+        // Store b at sp-24 (where a was)
         self.builder.build_store(addr_a_i32, b)
             .map_err(|e| format!("Failed to store b: {}", e))?;
 
-        // Store c at sp-8 (where b was)
+        // Store c at sp-16 (where b was)
         self.builder.build_store(addr_b_i32, c)
             .map_err(|e| format!("Failed to store c: {}", e))?;
 
-        // Store a at sp-4 (where c was)
+        // Store a at sp-8 (where c was)
         self.builder.build_store(addr_c_i32, a)
             .map_err(|e| format!("Failed to store a: {}", e))?;
 
@@ -1737,49 +1718,48 @@ impl<'ctx> Compiler<'ctx> {
         let sp_ptr = function.get_nth_param(1).unwrap().into_pointer_value();
 
         let i64_type = self.context.i64_type();
-        let i32_type = self.context.i32_type();
 
         let sp = self.builder.build_load(i64_type, sp_ptr, "sp")
             .map_err(|e| format!("Failed to load sp: {}", e))?
             .into_int_value();
 
-        let four = i64_type.const_int(4, false);
         let eight = i64_type.const_int(8, false);
+        let sixteen = i64_type.const_int(16, false);
 
-        let sp_minus_4 = self.builder.build_int_sub(sp, four, "sp_minus_4")
+        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_b = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_4], "addr_b")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_b")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_b_i32 = self.builder.build_pointer_cast(addr_b, self.context.ptr_type(AddressSpace::default()), "addr_b_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let b = self.builder.build_load(i32_type, addr_b_i32, "b")
+        let b = self.builder.build_load(i64_type, addr_b_i32, "b")
             .map_err(|e| format!("Failed to load b: {}", e))?
             .into_int_value();
 
-        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
+        let sp_minus_16 = self.builder.build_int_sub(sp, sixteen, "sp_minus_16")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_a = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_a")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_16], "addr_a")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_a_i32 = self.builder.build_pointer_cast(addr_a, self.context.ptr_type(AddressSpace::default()), "addr_a_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let a = self.builder.build_load(i32_type, addr_a_i32, "a")
+        let a = self.builder.build_load(i64_type, addr_a_i32, "a")
             .map_err(|e| format!("Failed to load a: {}", e))?
             .into_int_value();
 
         let cmp_result = self.builder.build_int_compare(inkwell::IntPredicate::SLE, a, b, "cmp")
             .map_err(|e| format!("Failed to compare: {}", e))?;
 
-        let result = self.builder.build_int_s_extend(cmp_result, i32_type, "result")
+        let result = self.builder.build_int_s_extend(cmp_result, i64_type, "result")
             .map_err(|e| format!("Failed to extend: {}", e))?;
 
         self.builder.build_store(addr_a_i32, result)
             .map_err(|e| format!("Failed to store result: {}", e))?;
 
-        let new_sp = self.builder.build_int_sub(sp, four, "new_sp")
+        let new_sp = self.builder.build_int_sub(sp, eight, "new_sp")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         self.builder.build_store(sp_ptr, new_sp)
             .map_err(|e| format!("Failed to store sp: {}", e))?;
@@ -1794,49 +1774,48 @@ impl<'ctx> Compiler<'ctx> {
         let sp_ptr = function.get_nth_param(1).unwrap().into_pointer_value();
 
         let i64_type = self.context.i64_type();
-        let i32_type = self.context.i32_type();
 
         let sp = self.builder.build_load(i64_type, sp_ptr, "sp")
             .map_err(|e| format!("Failed to load sp: {}", e))?
             .into_int_value();
 
-        let four = i64_type.const_int(4, false);
         let eight = i64_type.const_int(8, false);
+        let sixteen = i64_type.const_int(16, false);
 
-        let sp_minus_4 = self.builder.build_int_sub(sp, four, "sp_minus_4")
+        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_b = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_4], "addr_b")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_b")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_b_i32 = self.builder.build_pointer_cast(addr_b, self.context.ptr_type(AddressSpace::default()), "addr_b_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let b = self.builder.build_load(i32_type, addr_b_i32, "b")
+        let b = self.builder.build_load(i64_type, addr_b_i32, "b")
             .map_err(|e| format!("Failed to load b: {}", e))?
             .into_int_value();
 
-        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
+        let sp_minus_16 = self.builder.build_int_sub(sp, sixteen, "sp_minus_16")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_a = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_a")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_16], "addr_a")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_a_i32 = self.builder.build_pointer_cast(addr_a, self.context.ptr_type(AddressSpace::default()), "addr_a_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let a = self.builder.build_load(i32_type, addr_a_i32, "a")
+        let a = self.builder.build_load(i64_type, addr_a_i32, "a")
             .map_err(|e| format!("Failed to load a: {}", e))?
             .into_int_value();
 
         let cmp_result = self.builder.build_int_compare(inkwell::IntPredicate::SGE, a, b, "cmp")
             .map_err(|e| format!("Failed to compare: {}", e))?;
 
-        let result = self.builder.build_int_s_extend(cmp_result, i32_type, "result")
+        let result = self.builder.build_int_s_extend(cmp_result, i64_type, "result")
             .map_err(|e| format!("Failed to extend: {}", e))?;
 
         self.builder.build_store(addr_a_i32, result)
             .map_err(|e| format!("Failed to store result: {}", e))?;
 
-        let new_sp = self.builder.build_int_sub(sp, four, "new_sp")
+        let new_sp = self.builder.build_int_sub(sp, eight, "new_sp")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         self.builder.build_store(sp_ptr, new_sp)
             .map_err(|e| format!("Failed to store sp: {}", e))?;
@@ -1851,49 +1830,48 @@ impl<'ctx> Compiler<'ctx> {
         let sp_ptr = function.get_nth_param(1).unwrap().into_pointer_value();
 
         let i64_type = self.context.i64_type();
-        let i32_type = self.context.i32_type();
 
         let sp = self.builder.build_load(i64_type, sp_ptr, "sp")
             .map_err(|e| format!("Failed to load sp: {}", e))?
             .into_int_value();
 
-        let four = i64_type.const_int(4, false);
         let eight = i64_type.const_int(8, false);
+        let sixteen = i64_type.const_int(16, false);
 
-        let sp_minus_4 = self.builder.build_int_sub(sp, four, "sp_minus_4")
+        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_b = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_4], "addr_b")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_b")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_b_i32 = self.builder.build_pointer_cast(addr_b, self.context.ptr_type(AddressSpace::default()), "addr_b_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let b = self.builder.build_load(i32_type, addr_b_i32, "b")
+        let b = self.builder.build_load(i64_type, addr_b_i32, "b")
             .map_err(|e| format!("Failed to load b: {}", e))?
             .into_int_value();
 
-        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
+        let sp_minus_16 = self.builder.build_int_sub(sp, sixteen, "sp_minus_16")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_a = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_a")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_16], "addr_a")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_a_i32 = self.builder.build_pointer_cast(addr_a, self.context.ptr_type(AddressSpace::default()), "addr_a_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let a = self.builder.build_load(i32_type, addr_a_i32, "a")
+        let a = self.builder.build_load(i64_type, addr_a_i32, "a")
             .map_err(|e| format!("Failed to load a: {}", e))?
             .into_int_value();
 
         let cmp_result = self.builder.build_int_compare(inkwell::IntPredicate::NE, a, b, "cmp")
             .map_err(|e| format!("Failed to compare: {}", e))?;
 
-        let result = self.builder.build_int_s_extend(cmp_result, i32_type, "result")
+        let result = self.builder.build_int_s_extend(cmp_result, i64_type, "result")
             .map_err(|e| format!("Failed to extend: {}", e))?;
 
         self.builder.build_store(addr_a_i32, result)
             .map_err(|e| format!("Failed to store result: {}", e))?;
 
-        let new_sp = self.builder.build_int_sub(sp, four, "new_sp")
+        let new_sp = self.builder.build_int_sub(sp, eight, "new_sp")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         self.builder.build_store(sp_ptr, new_sp)
             .map_err(|e| format!("Failed to store sp: {}", e))?;
@@ -1908,36 +1886,35 @@ impl<'ctx> Compiler<'ctx> {
         let sp_ptr = function.get_nth_param(1).unwrap().into_pointer_value();
 
         let i64_type = self.context.i64_type();
-        let i32_type = self.context.i32_type();
 
         let sp = self.builder.build_load(i64_type, sp_ptr, "sp")
             .map_err(|e| format!("Failed to load sp: {}", e))?
             .into_int_value();
 
-        let four = i64_type.const_int(4, false);
         let eight = i64_type.const_int(8, false);
+        let sixteen = i64_type.const_int(16, false);
 
-        let sp_minus_4 = self.builder.build_int_sub(sp, four, "sp_minus_4")
+        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_b = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_4], "addr_b")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_b")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_b_i32 = self.builder.build_pointer_cast(addr_b, self.context.ptr_type(AddressSpace::default()), "addr_b_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let b = self.builder.build_load(i32_type, addr_b_i32, "b")
+        let b = self.builder.build_load(i64_type, addr_b_i32, "b")
             .map_err(|e| format!("Failed to load b: {}", e))?
             .into_int_value();
 
-        let sp_minus_8 = self.builder.build_int_sub(sp, eight, "sp_minus_8")
+        let sp_minus_16 = self.builder.build_int_sub(sp, sixteen, "sp_minus_16")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         let addr_a = unsafe {
-            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_8], "addr_a")
+            self.builder.build_gep(self.context.i8_type(), memory_ptr, &[sp_minus_16], "addr_a")
                 .map_err(|e| format!("Failed to build GEP: {}", e))?
         };
         let addr_a_i32 = self.builder.build_pointer_cast(addr_a, self.context.ptr_type(AddressSpace::default()), "addr_a_i32")
             .map_err(|e| format!("Failed to cast pointer: {}", e))?;
-        let a = self.builder.build_load(i32_type, addr_a_i32, "a")
+        let a = self.builder.build_load(i64_type, addr_a_i32, "a")
             .map_err(|e| format!("Failed to load a: {}", e))?
             .into_int_value();
 
@@ -1947,7 +1924,7 @@ impl<'ctx> Compiler<'ctx> {
         self.builder.build_store(addr_a_i32, result)
             .map_err(|e| format!("Failed to store result: {}", e))?;
 
-        let new_sp = self.builder.build_int_sub(sp, four, "new_sp")
+        let new_sp = self.builder.build_int_sub(sp, eight, "new_sp")
             .map_err(|e| format!("Failed to subtract: {}", e))?;
         self.builder.build_store(sp_ptr, new_sp)
             .map_err(|e| format!("Failed to store sp: {}", e))?;

@@ -22,17 +22,17 @@ thread_local! {
 }
 
 /// Handle types for different LLVM objects
-pub type ContextHandle = i32;
-pub type ModuleHandle = i32;
-pub type BuilderHandle = i32;
-pub type FunctionHandle = i32;
-pub type BlockHandle = i32;
-pub type ValueHandle = i32;
-pub type EngineHandle = i32;
+pub type ContextHandle = i64;
+pub type ModuleHandle = i64;
+pub type BuilderHandle = i64;
+pub type FunctionHandle = i64;
+pub type BlockHandle = i64;
+pub type ValueHandle = i64;
+pub type EngineHandle = i64;
 
 /// Registry storing all LLVM objects with handles
 pub struct LLVMRegistry {
-    next_id: i32,
+    next_id: i64,
 
     // LLVM objects stored with their handles
     contexts: HashMap<ContextHandle, &'static Context>,
@@ -60,7 +60,7 @@ impl LLVMRegistry {
         }
     }
 
-    fn next_handle(&mut self) -> i32 {
+    fn next_handle(&mut self) -> i64 {
         let id = self.next_id;
         self.next_id += 1;
         id
@@ -272,8 +272,8 @@ impl LLVMRegistry {
     /// Build a constant integer
     pub fn build_const_int(&mut self,
                           ctx_handle: ContextHandle,
-                          value: i32,
-                          bit_width: i32) -> Result<ValueHandle, String> {
+                          value: i64,
+                          bit_width: i64) -> Result<ValueHandle, String> {
         let context = self.contexts.get(&ctx_handle)
             .ok_or_else(|| format!("Invalid context handle: {}", ctx_handle))?;
 
@@ -300,7 +300,7 @@ impl LLVMRegistry {
                      builder_handle: BuilderHandle,
                      ctx_handle: ContextHandle,
                      ptr_handle: ValueHandle,
-                     bit_width: i32) -> Result<ValueHandle, String> {
+                     bit_width: i64) -> Result<ValueHandle, String> {
         let builder = self.builders.get(&builder_handle)
             .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
 
@@ -322,7 +322,7 @@ impl LLVMRegistry {
         let loaded = builder.build_load(load_type, ptr, "loaded")
             .map_err(|e| format!("Failed to build load: {}", e))?;
 
-        // Set alignment based on bit width (i32 = 4 bytes, i64 = 8 bytes)
+        // Set alignment based on bit width (i64 = 4 bytes, i64 = 8 bytes)
         let alignment = (bit_width / 8) as u32;
         if let Some(instruction) = loaded.as_instruction_value() {
             instruction.set_alignment(alignment)
@@ -510,7 +510,7 @@ impl LLVMRegistry {
     /// Build integer comparison
     pub fn build_icmp(&mut self,
                      builder_handle: BuilderHandle,
-                     predicate: i32,  // 0=eq, 1=ne, 2=slt, 3=sle, 4=sgt, 5=sge
+                     predicate: i64,  // 0=eq, 1=ne, 2=slt, 3=sle, 4=sgt, 5=sge
                      lhs_handle: ValueHandle,
                      rhs_handle: ValueHandle) -> Result<ValueHandle, String> {
         let builder = self.builders.get(&builder_handle)
@@ -625,7 +625,7 @@ impl LLVMRegistry {
 
 /// Create a new LLVM context
 /// Stack: ( -- ctx-handle )
-pub fn llvm_create_context() -> Result<i32, String> {
+pub fn llvm_create_context() -> Result<i64, String> {
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         Ok(registry.create_context())
@@ -634,7 +634,7 @@ pub fn llvm_create_context() -> Result<i32, String> {
 
 /// Create a new module
 /// Stack: ( ctx-handle name-addr name-len -- module-handle )
-pub fn llvm_create_module(ctx_handle: i32, name: &str) -> Result<i32, String> {
+pub fn llvm_create_module(ctx_handle: i64, name: &str) -> Result<i64, String> {
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.create_module(ctx_handle, name)
@@ -643,7 +643,7 @@ pub fn llvm_create_module(ctx_handle: i32, name: &str) -> Result<i32, String> {
 
 /// Declare an external function in the module
 /// Stack: ( module-handle ctx-handle name-addr name-len -- )
-pub fn llvm_declare_external(module_handle: i32, ctx_handle: i32, name: &str) -> Result<(), String> {
+pub fn llvm_declare_external(module_handle: i64, ctx_handle: i64, name: &str) -> Result<(), String> {
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.declare_external_function(module_handle, ctx_handle, name)
@@ -652,7 +652,7 @@ pub fn llvm_declare_external(module_handle: i32, ctx_handle: i32, name: &str) ->
 
 /// Create a new builder
 /// Stack: ( ctx-handle -- builder-handle )
-pub fn llvm_create_builder(ctx_handle: i32) -> Result<i32, String> {
+pub fn llvm_create_builder(ctx_handle: i64) -> Result<i64, String> {
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.create_builder(ctx_handle)
@@ -661,7 +661,7 @@ pub fn llvm_create_builder(ctx_handle: i32) -> Result<i32, String> {
 
 /// Create a new function
 /// Stack: ( module-handle ctx-handle name-addr name-len -- fn-handle )
-pub fn llvm_create_function(module_handle: i32, ctx_handle: i32, name: &str) -> Result<i32, String> {
+pub fn llvm_create_function(module_handle: i64, ctx_handle: i64, name: &str) -> Result<i64, String> {
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.create_function(module_handle, ctx_handle, name)
@@ -670,7 +670,7 @@ pub fn llvm_create_function(module_handle: i32, ctx_handle: i32, name: &str) -> 
 
 /// Get existing function from module by name
 /// Stack: ( module-handle name-addr name-len -- fn-handle )
-pub fn llvm_get_function(module_handle: i32, name: &str) -> Result<i32, String> {
+pub fn llvm_get_function(module_handle: i64, name: &str) -> Result<i64, String> {
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.get_function(module_handle, name)
@@ -679,7 +679,7 @@ pub fn llvm_get_function(module_handle: i32, name: &str) -> Result<i32, String> 
 
 /// Create a basic block
 /// Stack: ( ctx-handle fn-handle name-addr name-len -- block-handle )
-pub fn llvm_create_block(ctx_handle: i32, fn_handle: i32, name: &str) -> Result<i32, String> {
+pub fn llvm_create_block(ctx_handle: i64, fn_handle: i64, name: &str) -> Result<i64, String> {
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.create_block(ctx_handle, fn_handle, name)
@@ -688,7 +688,7 @@ pub fn llvm_create_block(ctx_handle: i32, fn_handle: i32, name: &str) -> Result<
 
 /// Position builder at end of block
 /// Stack: ( builder-handle block-handle -- )
-pub fn llvm_position_at_end(builder_handle: i32, block_handle: i32) -> Result<(), String> {
+pub fn llvm_position_at_end(builder_handle: i64, block_handle: i64) -> Result<(), String> {
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.position_at_end(builder_handle, block_handle)
@@ -697,7 +697,7 @@ pub fn llvm_position_at_end(builder_handle: i32, block_handle: i32) -> Result<()
 
 /// Build return void instruction
 /// Stack: ( builder-handle -- )
-pub fn llvm_build_ret_void(builder_handle: i32) -> Result<(), String> {
+pub fn llvm_build_ret_void(builder_handle: i64) -> Result<(), String> {
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.build_ret_void(builder_handle)
@@ -706,7 +706,7 @@ pub fn llvm_build_ret_void(builder_handle: i32) -> Result<(), String> {
 
 /// Build return instruction with value
 /// Stack: ( builder-handle value-handle -- )
-pub fn llvm_build_ret(builder_handle: i32, value_handle: i32) -> Result<(), String> {
+pub fn llvm_build_ret(builder_handle: i64, value_handle: i64) -> Result<(), String> {
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.build_ret(builder_handle, value_handle)
@@ -715,7 +715,7 @@ pub fn llvm_build_ret(builder_handle: i32, value_handle: i32) -> Result<(), Stri
 
 /// Dump module IR to stdout
 /// Stack: ( module-handle -- )
-pub fn llvm_dump_module(module_handle: i32) -> Result<(), String> {
+pub fn llvm_dump_module(module_handle: i64) -> Result<(), String> {
     LLVM_REGISTRY.with(|cell| {
         let registry = cell.borrow();
         let ir = registry.dump_module_ir(module_handle)?;
@@ -728,7 +728,7 @@ pub fn llvm_dump_module(module_handle: i32) -> Result<(), String> {
 
 /// Create JIT execution engine
 /// Stack: ( module-handle -- engine-handle )
-pub fn llvm_create_jit_engine(module_handle: i32) -> Result<i32, String> {
+pub fn llvm_create_jit_engine(module_handle: i64) -> Result<i64, String> {
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.create_jit_engine(module_handle)
@@ -737,7 +737,7 @@ pub fn llvm_create_jit_engine(module_handle: i32) -> Result<i32, String> {
 
 /// Get JIT function pointer
 /// Stack: ( engine-handle name-addr name-len -- fn-ptr )
-pub fn llvm_get_jit_function(engine_handle: i32, name: &str) -> Result<usize, String> {
+pub fn llvm_get_jit_function(engine_handle: i64, name: &str) -> Result<usize, String> {
     LLVM_REGISTRY.with(|cell| {
         let registry = cell.borrow();
         registry.get_jit_function(engine_handle, name)
@@ -748,7 +748,7 @@ pub fn llvm_get_jit_function(engine_handle: i32, name: &str) -> Result<usize, St
 
 /// Build constant integer
 /// Stack: ( ctx-handle value bit-width -- value-handle )
-pub fn llvm_build_const_int(ctx_handle: i32, value: i32, bit_width: i32) -> Result<i32, String> {
+pub fn llvm_build_const_int(ctx_handle: i64, value: i64, bit_width: i64) -> Result<i64, String> {
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.build_const_int(ctx_handle, value, bit_width)
@@ -757,7 +757,7 @@ pub fn llvm_build_const_int(ctx_handle: i32, value: i32, bit_width: i32) -> Resu
 
 /// Build load instruction
 /// Stack: ( builder-handle ctx-handle ptr-handle bit-width -- value-handle )
-pub fn llvm_build_load(builder_handle: i32, ctx_handle: i32, ptr_handle: i32, bit_width: i32) -> Result<i32, String> {
+pub fn llvm_build_load(builder_handle: i64, ctx_handle: i64, ptr_handle: i64, bit_width: i64) -> Result<i64, String> {
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.build_load(builder_handle, ctx_handle, ptr_handle, bit_width)
@@ -766,7 +766,7 @@ pub fn llvm_build_load(builder_handle: i32, ctx_handle: i32, ptr_handle: i32, bi
 
 /// Build store instruction
 /// Stack: ( builder-handle value-handle ptr-handle -- )
-pub fn llvm_build_store(builder_handle: i32, value_handle: i32, ptr_handle: i32) -> Result<(), String> {
+pub fn llvm_build_store(builder_handle: i64, value_handle: i64, ptr_handle: i64) -> Result<(), String> {
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.build_store(builder_handle, value_handle, ptr_handle)
@@ -775,7 +775,7 @@ pub fn llvm_build_store(builder_handle: i32, value_handle: i32, ptr_handle: i32)
 
 /// Build GEP instruction
 /// Stack: ( builder-handle ctx-handle ptr-handle offset-handle -- result-handle )
-pub fn llvm_build_gep(builder_handle: i32, ctx_handle: i32, ptr_handle: i32, offset_handle: i32) -> Result<i32, String> {
+pub fn llvm_build_gep(builder_handle: i64, ctx_handle: i64, ptr_handle: i64, offset_handle: i64) -> Result<i64, String> {
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.build_gep(builder_handle, ctx_handle, ptr_handle, offset_handle)
@@ -784,7 +784,7 @@ pub fn llvm_build_gep(builder_handle: i32, ctx_handle: i32, ptr_handle: i32, off
 
 /// Build add instruction
 /// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
-pub fn llvm_build_add(builder_handle: i32, lhs_handle: i32, rhs_handle: i32) -> Result<i32, String> {
+pub fn llvm_build_add(builder_handle: i64, lhs_handle: i64, rhs_handle: i64) -> Result<i64, String> {
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.build_add(builder_handle, lhs_handle, rhs_handle)
@@ -793,7 +793,7 @@ pub fn llvm_build_add(builder_handle: i32, lhs_handle: i32, rhs_handle: i32) -> 
 
 /// Build sub instruction
 /// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
-pub fn llvm_build_sub(builder_handle: i32, lhs_handle: i32, rhs_handle: i32) -> Result<i32, String> {
+pub fn llvm_build_sub(builder_handle: i64, lhs_handle: i64, rhs_handle: i64) -> Result<i64, String> {
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.build_sub(builder_handle, lhs_handle, rhs_handle)
@@ -802,7 +802,7 @@ pub fn llvm_build_sub(builder_handle: i32, lhs_handle: i32, rhs_handle: i32) -> 
 
 /// Build mul instruction
 /// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
-pub fn llvm_build_mul(builder_handle: i32, lhs_handle: i32, rhs_handle: i32) -> Result<i32, String> {
+pub fn llvm_build_mul(builder_handle: i64, lhs_handle: i64, rhs_handle: i64) -> Result<i64, String> {
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.build_mul(builder_handle, lhs_handle, rhs_handle)
@@ -811,7 +811,7 @@ pub fn llvm_build_mul(builder_handle: i32, lhs_handle: i32, rhs_handle: i32) -> 
 
 /// Build unconditional branch
 /// Stack: ( builder-handle block-handle -- )
-pub fn llvm_build_br(builder_handle: i32, block_handle: i32) -> Result<(), String> {
+pub fn llvm_build_br(builder_handle: i64, block_handle: i64) -> Result<(), String> {
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.build_br(builder_handle, block_handle)
@@ -820,7 +820,7 @@ pub fn llvm_build_br(builder_handle: i32, block_handle: i32) -> Result<(), Strin
 
 /// Build conditional branch
 /// Stack: ( builder-handle cond-handle then-block else-block -- )
-pub fn llvm_build_cond_br(builder_handle: i32, cond_handle: i32, then_block: i32, else_block: i32) -> Result<(), String> {
+pub fn llvm_build_cond_br(builder_handle: i64, cond_handle: i64, then_block: i64, else_block: i64) -> Result<(), String> {
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.build_cond_br(builder_handle, cond_handle, then_block, else_block)
@@ -830,7 +830,7 @@ pub fn llvm_build_cond_br(builder_handle: i32, cond_handle: i32, then_block: i32
 /// Build integer comparison
 /// Stack: ( builder-handle predicate lhs-handle rhs-handle -- result-handle )
 /// Predicates: 0=eq, 1=ne, 2=slt, 3=sle, 4=sgt, 5=sge
-pub fn llvm_build_icmp(builder_handle: i32, predicate: i32, lhs_handle: i32, rhs_handle: i32) -> Result<i32, String> {
+pub fn llvm_build_icmp(builder_handle: i64, predicate: i64, lhs_handle: i64, rhs_handle: i64) -> Result<i64, String> {
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.build_icmp(builder_handle, predicate, lhs_handle, rhs_handle)
@@ -839,8 +839,8 @@ pub fn llvm_build_icmp(builder_handle: i32, predicate: i32, lhs_handle: i32, rhs
 
 /// Build function call with up to 3 arguments (for now)
 /// Stack: ( builder-handle fn-handle arg1 arg2 arg3 nargs -- )
-pub fn llvm_build_call(builder_handle: i32, fn_handle: i32, arg1: i32, arg2: i32, arg3: i32, nargs: i32) -> Result<(), String> {
-    let args: Vec<i32> = match nargs {
+pub fn llvm_build_call(builder_handle: i64, fn_handle: i64, arg1: i64, arg2: i64, arg3: i64, nargs: i64) -> Result<(), String> {
+    let args: Vec<i64> = match nargs {
         0 => vec![],
         1 => vec![arg1],
         2 => vec![arg1, arg2],  // Correct order: memory, sp
@@ -856,7 +856,7 @@ pub fn llvm_build_call(builder_handle: i32, fn_handle: i32, arg1: i32, arg2: i32
 
 /// Get function parameter as value
 /// Stack: ( fn-handle index -- value-handle )
-pub fn llvm_get_param(fn_handle: i32, index: i32) -> Result<i32, String> {
+pub fn llvm_get_param(fn_handle: i64, index: i64) -> Result<i64, String> {
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.get_param(fn_handle, index as u32)
@@ -865,7 +865,7 @@ pub fn llvm_get_param(fn_handle: i32, index: i32) -> Result<i32, String> {
 
 /// Build PHI node (for SSA merges in loops)
 /// Stack: ( builder-handle ctx-handle name-addr name-len -- phi-handle )
-pub fn llvm_build_phi(builder_handle: i32, ctx_handle: i32, name: &str) -> Result<i32, String> {
+pub fn llvm_build_phi(builder_handle: i64, ctx_handle: i64, name: &str) -> Result<i64, String> {
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.build_phi(builder_handle, ctx_handle, name)
@@ -874,7 +874,7 @@ pub fn llvm_build_phi(builder_handle: i32, ctx_handle: i32, name: &str) -> Resul
 
 /// Add incoming value/block pair to PHI node
 /// Stack: ( phi-handle value-handle block-handle -- )
-pub fn llvm_phi_add_incoming(phi_handle: i32, value_handle: i32, block_handle: i32) -> Result<(), String> {
+pub fn llvm_phi_add_incoming(phi_handle: i64, value_handle: i64, block_handle: i64) -> Result<(), String> {
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.phi_add_incoming(phi_handle, value_handle, block_handle)
@@ -883,7 +883,7 @@ pub fn llvm_phi_add_incoming(phi_handle: i32, value_handle: i32, block_handle: i
 
 /// Get current insert block
 /// Stack: ( builder-handle -- block-handle )
-pub fn llvm_get_insert_block(builder_handle: i32) -> Result<i32, String> {
+pub fn llvm_get_insert_block(builder_handle: i64) -> Result<i64, String> {
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.get_insert_block(builder_handle)

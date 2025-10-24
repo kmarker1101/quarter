@@ -12,29 +12,29 @@ impl Stack {
         }
     }
 
-    pub fn push(&mut self, value: i32, memory: &mut crate::Memory) {
+    pub fn push(&mut self, value: i64, memory: &mut crate::Memory) {
         // Store value at current SP
         memory.store(self.sp, value).expect("Stack overflow");
-        // Move SP to next cell (4 bytes)
-        self.sp += 4;
+        // Move SP to next cell (8 bytes)
+        self.sp += 8;
     }
 
-    pub fn pop(&mut self, memory: &mut crate::Memory) -> Option<i32> {
+    pub fn pop(&mut self, memory: &mut crate::Memory) -> Option<i64> {
         if self.sp == 0x000000 {
             return None;  // Stack underflow
         }
         // Move SP back one cell
-        self.sp -= 4;
+        self.sp -= 8;
         // Fetch value at new SP
         memory.fetch(self.sp).ok()
     }
 
-    pub fn peek(&self, memory: &crate::Memory) -> Option<i32> {
+    pub fn peek(&self, memory: &crate::Memory) -> Option<i64> {
         if self.sp == 0x000000 {
             return None;  // Stack empty
         }
-        // Peek at top of stack (SP - 4)
-        memory.fetch(self.sp - 4).ok()
+        // Peek at top of stack (SP - 8)
+        memory.fetch(self.sp - 8).ok()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -42,17 +42,17 @@ impl Stack {
     }
 
     pub fn depth(&self) -> usize {
-        self.sp / 4
+        self.sp / 8
     }
 
     pub fn print_stack(&self, memory: &crate::Memory) {
-        let depth = self.sp / 4;
+        let depth = self.sp / 8;
         if depth == 0 {
             print!("<0> ");
         } else {
             print!("<{}> ", depth);
             for i in 0..depth {
-                let addr = i * 4;
+                let addr = i * 8;
                 if let Ok(value) = memory.fetch(addr) {
                     print!("{} ", value);
                 }
