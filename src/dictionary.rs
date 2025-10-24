@@ -17,20 +17,12 @@ pub enum Word {
 
 pub struct Dictionary {
     words: HashMap<String, Word>,
-    // Store JIT compilers to keep execution engines alive
-    // IMPORTANT: Must be declared before jit_contexts so it's dropped first!
-    jit_compilers: Vec<Box<crate::llvm_codegen::Compiler<'static>>>,
-    // Store LLVM contexts (in Box so they don't move when Vec resizes)
-    // IMPORTANT: Must be declared after jit_compilers so contexts outlive compilers
-    jit_contexts: Vec<Box<inkwell::context::Context>>,
 }
 
 impl Dictionary {
     pub fn new() -> Self {
         let mut dict = Dictionary {
             words: HashMap::new(),
-            jit_compilers: Vec::new(),
-            jit_contexts: Vec::new(),
         };
 
         // Register built-in words as Primitives
@@ -155,21 +147,6 @@ impl Dictionary {
         self.words.insert(name, Word::JITCompiled(func));
     }
 
-    pub fn add_jit_compiled_with_compiler(&mut self, name: String, func: JITFunction, boxed_context: Box<inkwell::context::Context>, compiler: Box<crate::llvm_codegen::Compiler>) {
-        // SAFETY: We're extending the lifetime of the compiler reference to 'static.
-        // This is safe because:
-        // 1. The Context is in a Box, so it won't move even if the Vec resizes
-        // 2. We store the Box in self.jit_contexts, so it lives as long as Dictionary
-        // 3. The Compiler references this Context and is stored in self.jit_compilers
-        // 4. Both are dropped together when Dictionary drops, so no dangling references
-        let static_compiler: Box<crate::llvm_codegen::Compiler<'static>> = unsafe {
-            std::mem::transmute(compiler)
-        };
-
-        self.jit_contexts.push(boxed_context);
-        self.jit_compilers.push(static_compiler);
-        self.words.insert(name, Word::JITCompiled(func));
-    }
 
     pub fn has_word(&self, word: &str) -> bool {
         self.words.contains_key(word)

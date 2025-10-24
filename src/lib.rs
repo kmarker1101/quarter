@@ -1,7 +1,6 @@
 pub mod ast;
 pub mod ast_forth;
 pub mod dictionary;
-pub mod llvm_codegen;
 pub mod llvm_forth;
 pub mod stack;
 pub mod words;
@@ -22,7 +21,6 @@ const TEST_FRAMEWORK_FTH: &str = include_str!("../stdlib/test-framework.fth");
 /// Call this between tests to avoid state pollution
 pub fn clear_test_state() {
     ast_forth::ast_clear_registry();
-    llvm_codegen::clear_jit_registry();
 }
 
 // Loop stack for DO...LOOP counters
@@ -612,69 +610,6 @@ pub fn load_file(
     Ok(())
 }
 
-/// Attempt to JIT compile an AST to native code and store in dictionary
-/// Returns true if successful, false otherwise
-fn try_jit_compile(
-    name: String,
-    ast: &AstNode,
-    dict: &mut dictionary::Dictionary,
-    no_jit: bool,
-    dump_ir: bool,
-    verify_ir: bool,
-) -> bool {
-    if no_jit {
-        return false;
-    }
-
-    use inkwell::context::Context;
-    use llvm_codegen::{Compiler, register_jit_function};
-
-    // Create LLVM context in a Box so it has a stable memory location
-    let boxed_context = Box::new(Context::create());
-
-    // SAFETY: Create a 'static reference to the boxed context.
-    // This is safe because the Box will be stored in Dictionary.jit_contexts
-    // and won't be dropped until Dictionary is dropped.
-    let context_ref: &'static Context = unsafe { &*(boxed_context.as_ref() as *const Context) };
-
-    let mut compiler = match Compiler::new(context_ref) {
-        Ok(c) => c,
-        Err(_) => return false,
-    };
-
-    // Try to compile the AST
-    match compiler.compile_word(&name, ast, dict) {
-        Ok(jit_fn) => {
-            // Dump IR if requested
-            if dump_ir {
-                println!("\n=== IR for {} ===", name);
-                println!("{}", compiler.get_ir());
-                println!("==================\n");
-            }
-
-            // Verify IR if requested
-            if verify_ir {
-                if let Err(e) = compiler.verify() {
-                    eprintln!("IR verification failed for {}: {}", name, e);
-                    return false;
-                }
-            }
-
-            // Register the JIT function in the global registry
-            // This allows other words being compiled later to call this word
-            if let Err(e) = register_jit_function(name.clone(), jit_fn) {
-                eprintln!("Failed to register JIT function {}: {}", name, e);
-                return false;
-            }
-
-            // Add the JIT function to the dictionary
-            // IMPORTANT: We must keep both context and compiler alive so the JIT code memory stays valid
-            dict.add_jit_compiled_with_compiler(name, jit_fn, boxed_context, Box::new(compiler));
-            true
-        }
-        Err(_) => false,
-    }
-}
 
 pub fn execute_line(
     input: &str,
@@ -741,16 +676,9 @@ pub fn execute_line(
                 // Validate that all words in the AST exist (allow forward reference for recursion)
                 ast.validate_with_name(dict, Some(&word_name))?;
 
-                // Skip JIT compilation for word redefinitions to avoid memory leaks and registry collisions
-                // When redefining, always use interpreted mode
-                let is_redefinition = dict.has_word(&word_name);
-                if !is_redefinition
-                    && !try_jit_compile(word_name.clone(), &ast, dict, no_jit, dump_ir, verify_ir)
-                {
-                    dict.add_compiled(word_name, ast);
-                } else if is_redefinition {
-                    dict.add_compiled(word_name, ast);
-                }
+                // Add word to dictionary in interpreted mode
+                // JIT compilation is handled in main.rs via try_forth_compile
+                dict.add_compiled(word_name, ast);
                 i = end + 1;
             } else {
                 return Err("Missing ; in word definition".to_string());
