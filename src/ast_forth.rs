@@ -39,7 +39,7 @@ impl AstRegistry {
 
     /// Get node type as integer
     /// 1=PushNumber, 2=CallWord, 3=Sequence, 4=IfThenElse, 5=BeginUntil,
-    /// 6=BeginWhileRepeat, 7=DoLoop, 8=PrintString, 9=StackString, 10=Leave, 11=Exit
+    /// 6=BeginWhileRepeat, 7=DoLoop, 8=PrintString, 9=StackString, 10=Leave, 11=Exit, 12=InlineInstruction
     fn get_node_type(&self, handle: AstHandle) -> Result<i32, String> {
         let node = self.nodes.get(&handle)
             .ok_or_else(|| format!("Invalid AST handle: {}", handle))?;
@@ -56,6 +56,7 @@ impl AstRegistry {
             AstNode::StackString(_) => 9,
             AstNode::Leave => 10,
             AstNode::Exit => 11,
+            AstNode::InlineInstruction(_) => 12,
         })
     }
 
@@ -86,6 +87,25 @@ impl AstRegistry {
                 Ok(name.len() as i32)
             }
             _ => Err(format!("AST node is not a CallWord")),
+        }
+    }
+
+    /// Get instruction name from InlineInstruction node (stores in memory at given address)
+    /// Returns length of string
+    fn get_inline_instruction(&self, handle: AstHandle, memory: &mut crate::Memory, addr: usize) -> Result<i32, String> {
+        let node = self.nodes.get(&handle)
+            .ok_or_else(|| format!("Invalid AST handle: {}", handle))?;
+
+        match node {
+            AstNode::InlineInstruction(instruction) => {
+                // Store string bytes in memory
+                for (i, byte) in instruction.as_bytes().iter().enumerate() {
+                    memory.store_byte(addr + i, *byte as i32)
+                        .map_err(|e| format!("Failed to store string: {}", e))?;
+                }
+                Ok(instruction.len() as i32)
+            }
+            _ => Err(format!("AST node is not an InlineInstruction")),
         }
     }
 
@@ -256,6 +276,15 @@ pub fn ast_get_word_name(handle: i32, memory: &mut crate::Memory, addr: usize) -
     AST_REGISTRY.with(|cell| {
         let registry = cell.borrow();
         registry.get_word_name(handle, memory, addr)
+    })
+}
+
+/// Get instruction name from InlineInstruction
+/// Stack: ( ast-handle addr -- length )
+pub fn ast_get_inline_instruction(handle: i32, memory: &mut crate::Memory, addr: usize) -> Result<i32, String> {
+    AST_REGISTRY.with(|cell| {
+        let registry = cell.borrow();
+        registry.get_inline_instruction(handle, memory, addr)
     })
 }
 

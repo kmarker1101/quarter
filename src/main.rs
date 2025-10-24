@@ -115,7 +115,7 @@ fn try_jit_compile(name: String, ast: &quarter::AstNode, dict: &mut quarter::Dic
     };
 
     // Try to compile the AST
-    match compiler.compile_word(&name, ast) {
+    match compiler.compile_word(&name, ast, dict) {
         Ok(jit_fn) => {
             // Dump IR if requested
             if dump_ir {

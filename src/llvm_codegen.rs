@@ -130,7 +130,7 @@ impl<'ctx> Compiler<'ctx> {
     }
 
     /// Compile a Forth word's AST to LLVM IR and return executable function
-    pub fn compile_word(&mut self, name: &str, ast: &AstNode) -> Result<JITFunction, String> {
+    pub fn compile_word(&mut self, name: &str, ast: &AstNode, dict: &crate::dictionary::Dictionary) -> Result<JITFunction, String> {
         // Register existing JIT-compiled words so this word can call them
         self.register_jit_symbols()?;
 
@@ -150,7 +150,7 @@ impl<'ctx> Compiler<'ctx> {
         let _rp_ptr = function.get_nth_param(2).unwrap().into_pointer_value();
 
         // Compile the AST - mark as tail position since it's the last operation before return
-        self.compile_ast_node(ast, function, true)?;
+        self.compile_ast_node(ast, function, dict, true)?;
 
         // Add return
         self.builder.build_return(None)
@@ -177,7 +177,7 @@ impl<'ctx> Compiler<'ctx> {
     /// The `is_tail_position` parameter indicates whether this node is in tail position,
     /// meaning it's the last operation before a return. This enables tail call optimization
     /// for recursive calls.
-    fn compile_ast_node(&self, node: &AstNode, function: inkwell::values::FunctionValue<'ctx>, is_tail_position: bool) -> Result<(), String> {
+    fn compile_ast_node(&self, node: &AstNode, function: inkwell::values::FunctionValue<'ctx>, dict: &crate::dictionary::Dictionary, is_tail_position: bool) -> Result<(), String> {
         match node {
             AstNode::PushNumber(n) => {
                 // Push number onto stack
@@ -210,6 +210,18 @@ impl<'ctx> Compiler<'ctx> {
                     // This word has been JIT-compiled - call it directly
                     self.compile_jit_word_call(function, &word_upper)?;
                     return Ok(());
+                }
+
+                // Check if this word is defined with an INLINE instruction
+                // If so, compile it inline instead of calling a primitive
+                if let Some(word_def) = dict.get_word(&word_upper) {
+                    if let crate::dictionary::Word::Compiled(ast) = word_def {
+                        // Check if the AST is a single InlineInstruction
+                        if let AstNode::InlineInstruction(instruction) = ast {
+                            self.compile_inline_instruction(function, &instruction)?;
+                            return Ok(());
+                        }
+                    }
                 }
 
                 match word.as_str() {
@@ -253,23 +265,23 @@ impl<'ctx> Compiler<'ctx> {
                 let len = nodes.len();
                 for (i, node) in nodes.iter().enumerate() {
                     let is_last = i == len - 1;
-                    self.compile_ast_node(node, function, is_tail_position && is_last)?;
+                    self.compile_ast_node(node, function, dict, is_tail_position && is_last)?;
                 }
                 Ok(())
             }
             AstNode::IfThenElse { then_branch, else_branch } => {
                 // Both branches can be in tail position
-                self.compile_if_then_else(function, then_branch, else_branch.as_deref(), is_tail_position)?;
+                self.compile_if_then_else(function, dict, then_branch, else_branch.as_deref(), is_tail_position)?;
                 Ok(())
             }
             AstNode::BeginUntil { body } => {
                 // Loop body is not in tail position (loop continues)
-                self.compile_begin_until(function, body)?;
+                self.compile_begin_until(function, dict, body)?;
                 Ok(())
             }
             AstNode::DoLoop { body, increment } => {
                 // Loop body is not in tail position (loop continues)
-                self.compile_do_loop(function, body, *increment)?;
+                self.compile_do_loop(function, dict, body, *increment)?;
                 Ok(())
             }
             AstNode::Exit => {
@@ -289,7 +301,38 @@ impl<'ctx> Compiler<'ctx> {
                     Err("LEAVE used outside of loop".to_string())
                 }
             }
+            AstNode::InlineInstruction(instruction) => {
+                // INLINE instruction - map to LLVM implementation
+                self.compile_inline_instruction(function, instruction)?;
+                Ok(())
+            }
             _ => Err(format!("Unsupported AST node: {:?}", node))
+        }
+    }
+
+    /// Compile an inline instruction by mapping instruction name to implementation
+    /// This allows Forth-defined primitives to use LLVM implementations
+    fn compile_inline_instruction(&self, function: inkwell::values::FunctionValue<'ctx>, instruction: &str) -> Result<(), String> {
+        match instruction {
+            "LLVM-ADD" => self.compile_add(function),
+            "LLVM-SUB" => self.compile_sub(function),
+            "LLVM-MUL" => self.compile_mul(function),
+            "LLVM-DIV" => self.compile_div(function),
+            "LLVM-DUP" => self.compile_dup(function),
+            "LLVM-DROP" => self.compile_drop(function),
+            "LLVM-SWAP" => self.compile_swap(function),
+            "LLVM-OVER" => self.compile_over(function),
+            "LLVM-ROT" => self.compile_rot(function),
+            "LLVM-LT" => self.compile_less_than(function),
+            "LLVM-GT" => self.compile_greater_than(function),
+            "LLVM-EQ" => self.compile_equals(function),
+            "LLVM-AND" => self.compile_and(function),
+            "LLVM-OR" => self.compile_or(function),
+            "LLVM-XOR" => self.compile_xor(function),
+            "LLVM-INVERT" => self.compile_invert(function),
+            "LLVM-LSHIFT" => self.compile_lshift(function),
+            "LLVM-RSHIFT" => self.compile_rshift(function),
+            _ => Err(format!("Unknown inline instruction: {}", instruction))
         }
     }
 
@@ -416,6 +459,7 @@ impl<'ctx> Compiler<'ctx> {
     fn compile_if_then_else(
         &self,
         function: inkwell::values::FunctionValue<'ctx>,
+        dict: &crate::dictionary::Dictionary,
         then_branch: &[AstNode],
         else_branch: Option<&[AstNode]>,
         is_tail_position: bool,
@@ -450,7 +494,7 @@ impl<'ctx> Compiler<'ctx> {
             let then_len = then_branch.len();
             for (i, node) in then_branch.iter().enumerate() {
                 let is_last = i == then_len - 1;
-                self.compile_ast_node(node, function, is_tail_position && is_last)?;
+                self.compile_ast_node(node, function, dict, is_tail_position && is_last)?;
             }
             // Only add branch to merge if block doesn't already have a terminator (like EXIT)
             let current_block = self.builder.get_insert_block().unwrap();
@@ -465,7 +509,7 @@ impl<'ctx> Compiler<'ctx> {
                 let else_len = else_nodes.len();
                 for (i, node) in else_nodes.iter().enumerate() {
                     let is_last = i == else_len - 1;
-                    self.compile_ast_node(node, function, is_tail_position && is_last)?;
+                    self.compile_ast_node(node, function, dict, is_tail_position && is_last)?;
                 }
             }
             // Only add branch to merge if block doesn't already have a terminator (like EXIT)
@@ -484,7 +528,7 @@ impl<'ctx> Compiler<'ctx> {
             let then_len = then_branch.len();
             for (i, node) in then_branch.iter().enumerate() {
                 let is_last = i == then_len - 1;
-                self.compile_ast_node(node, function, is_tail_position && is_last)?;
+                self.compile_ast_node(node, function, dict, is_tail_position && is_last)?;
             }
             // Only add branch to merge if block doesn't already have a terminator (like EXIT)
             let current_block = self.builder.get_insert_block().unwrap();
@@ -505,6 +549,7 @@ impl<'ctx> Compiler<'ctx> {
     fn compile_begin_until(
         &self,
         function: inkwell::values::FunctionValue<'ctx>,
+        dict: &crate::dictionary::Dictionary,
         body: &[AstNode],
     ) -> Result<(), String> {
         // Create basic blocks
@@ -521,7 +566,7 @@ impl<'ctx> Compiler<'ctx> {
         // Compile loop body - not in tail position (loop continues)
         self.builder.position_at_end(loop_block);
         for node in body {
-            self.compile_ast_node(node, function, false)?;
+            self.compile_ast_node(node, function, dict, false)?;
         }
 
         // Pop exit block
@@ -555,6 +600,7 @@ impl<'ctx> Compiler<'ctx> {
     fn compile_do_loop(
         &self,
         function: inkwell::values::FunctionValue<'ctx>,
+        dict: &crate::dictionary::Dictionary,
         body: &[AstNode],
         increment: i32,
     ) -> Result<(), String> {
@@ -595,7 +641,7 @@ impl<'ctx> Compiler<'ctx> {
 
         // Compile loop body - not in tail position (loop continues)
         for node in body {
-            self.compile_ast_node(node, function, false)?;
+            self.compile_ast_node(node, function, dict, false)?;
         }
 
         // Pop exit block

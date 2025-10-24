@@ -421,6 +421,15 @@ pub fn parse_tokens(tokens: &[&str]) -> Result<AstNode, String> {
                 nodes.push(AstNode::Exit);
                 i += 1;
             }
+            "INLINE" => {
+                // INLINE <instruction> - marks next token as an inline LLVM instruction
+                if i + 1 >= tokens.len() {
+                    return Err("INLINE requires an instruction name".to_string());
+                }
+                let instruction = tokens[i + 1].to_uppercase();
+                nodes.push(AstNode::InlineInstruction(instruction));
+                i += 2;  // Skip both INLINE and the instruction name
+            }
             _ => {
                 // Try to parse as number, otherwise it's a word
                 if let Ok(num) = token.parse::<i32>() {
@@ -626,7 +635,7 @@ fn try_jit_compile(
     };
 
     // Try to compile the AST
-    match compiler.compile_word(&name, ast) {
+    match compiler.compile_word(&name, ast, dict) {
         Ok(jit_fn) => {
             // Dump IR if requested
             if dump_ir {
@@ -849,9 +858,10 @@ pub fn execute_line(
                         || upper == "+LOOP"
                         || upper == "LEAVE"
                         || upper == "EXIT"
+                        || upper == "INLINE"
                         || upper == ".\""
                 }) {
-                    return Err("Control flow and string words (IF/THEN/ELSE/BEGIN/UNTIL/WHILE/REPEAT/DO/LOOP/LEAVE/EXIT/.\") are compile-only".to_string());
+                    return Err("Control flow and string words (IF/THEN/ELSE/BEGIN/UNTIL/WHILE/REPEAT/DO/LOOP/LEAVE/EXIT/INLINE/.\") are compile-only".to_string());
                 }
 
                 let ast = parse_tokens(&exec_tokens)?;
