@@ -58,6 +58,7 @@ impl Dictionary {
         dict.add_primitive("I", words::loop_i);
         dict.add_primitive("J", words::loop_j);
         dict.add_primitive("EMIT", words::emit);
+        dict.add_primitive("TYPE", words::type_word);
         dict.add_primitive("KEY", words::key);
         // SPACE now defined in io.fth
         dict.add_primitive("AND", words::and);

@@ -1,10 +1,10 @@
 pub mod ast;
 pub mod ast_forth;
 pub mod dictionary;
-pub mod stack;
-pub mod words;
 pub mod llvm_codegen;
 pub mod llvm_forth;
+pub mod stack;
+pub mod words;
 
 pub use ast::AstNode;
 pub use dictionary::Dictionary;
@@ -17,7 +17,6 @@ const CORE_FTH: &str = include_str!("../stdlib/core.fth");
 #[allow(dead_code)] // TODO: Re-enable once DEPTH in loops is fixed
 const TEST_FRAMEWORK_FTH: &str = include_str!("../stdlib/test-framework.fth");
 #[allow(dead_code)] // TODO: Re-enable once test framework is fixed
-const TESTS_FTH: &str = include_str!("../stdlib/tests.fth");
 
 /// Clear all global registries (for testing)
 /// Call this between tests to avoid state pollution
@@ -73,13 +72,13 @@ impl LoopStack {
 // Return stack pointer (RP) tracks current top of return stack
 #[derive(Debug, Clone)]
 pub struct ReturnStack {
-    rp: usize,  // Return stack pointer (byte address in memory)
+    rp: usize, // Return stack pointer (byte address in memory)
 }
 
 impl ReturnStack {
     pub fn new() -> Self {
         ReturnStack {
-            rp: 0x010000,  // Start at beginning of return stack region
+            rp: 0x010000, // Start at beginning of return stack region
         }
     }
 
@@ -92,7 +91,7 @@ impl ReturnStack {
 
     pub fn pop(&mut self, memory: &mut Memory) -> Option<i32> {
         if self.rp == 0x010000 {
-            return None;  // Return stack underflow
+            return None; // Return stack underflow
         }
         // Move RP back one cell
         self.rp -= 4;
@@ -102,7 +101,7 @@ impl ReturnStack {
 
     pub fn peek(&self, memory: &Memory) -> Option<i32> {
         if self.rp == 0x010000 {
-            return None;  // Return stack empty
+            return None; // Return stack empty
         }
         // Peek at top of return stack (RP - 4)
         memory.fetch(self.rp - 4).ok()
@@ -139,14 +138,14 @@ impl ReturnStack {
 #[derive(Debug)]
 pub struct Memory {
     bytes: Vec<u8>,
-    dp: usize,  // Dictionary pointer - tracks next allocation address
+    dp: usize, // Dictionary pointer - tracks next allocation address
 }
 
 impl Memory {
     pub fn new() -> Self {
         Memory {
             bytes: vec![0; 8 * 1024 * 1024], // 8MB like gforth
-            dp: 0x020000,  // Start dictionary at beginning of user memory
+            dp: 0x020000,                    // Start dictionary at beginning of user memory
         }
     }
 
@@ -212,9 +211,7 @@ impl Memory {
     // Get a mutable pointer to memory at a given address
     // Used for JIT-compiled functions
     pub fn get_ptr_at(&mut self, addr: usize) -> *mut i32 {
-        unsafe {
-            self.bytes.as_mut_ptr().add(addr) as *mut i32
-        }
+        unsafe { self.bytes.as_mut_ptr().add(addr) as *mut i32 }
     }
 
     // Get mutable pointer to start of memory buffer (for JIT)
@@ -583,14 +580,31 @@ pub fn load_file(
     }
 
     // Now execute the entire file as one token stream
-    execute_line(&processed, stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir)?;
+    execute_line(
+        &processed,
+        stack,
+        dict,
+        loop_stack,
+        return_stack,
+        memory,
+        no_jit,
+        dump_ir,
+        verify_ir,
+    )?;
 
     Ok(())
 }
 
 /// Attempt to JIT compile an AST to native code and store in dictionary
 /// Returns true if successful, false otherwise
-fn try_jit_compile(name: String, ast: &AstNode, dict: &mut dictionary::Dictionary, no_jit: bool, dump_ir: bool, verify_ir: bool) -> bool {
+fn try_jit_compile(
+    name: String,
+    ast: &AstNode,
+    dict: &mut dictionary::Dictionary,
+    no_jit: bool,
+    dump_ir: bool,
+    verify_ir: bool,
+) -> bool {
     if no_jit {
         return false;
     }
@@ -604,9 +618,7 @@ fn try_jit_compile(name: String, ast: &AstNode, dict: &mut dictionary::Dictionar
     // SAFETY: Create a 'static reference to the boxed context.
     // This is safe because the Box will be stored in Dictionary.jit_contexts
     // and won't be dropped until Dictionary is dropped.
-    let context_ref: &'static Context = unsafe {
-        &*(boxed_context.as_ref() as *const Context)
-    };
+    let context_ref: &'static Context = unsafe { &*(boxed_context.as_ref() as *const Context) };
 
     let mut compiler = match Compiler::new(context_ref) {
         Ok(c) => c,
@@ -642,7 +654,7 @@ fn try_jit_compile(name: String, ast: &AstNode, dict: &mut dictionary::Dictionar
             // IMPORTANT: We must keep both context and compiler alive so the JIT code memory stays valid
             dict.add_jit_compiled_with_compiler(name, jit_fn, boxed_context, Box::new(compiler));
             true
-        },
+        }
         Err(_) => false,
     }
 }
@@ -677,7 +689,17 @@ pub fn execute_line(
             }
 
             let filename = tokens[i + 1];
-            load_file(filename, stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir)?;
+            load_file(
+                filename,
+                stack,
+                dict,
+                loop_stack,
+                return_stack,
+                memory,
+                no_jit,
+                dump_ir,
+                verify_ir,
+            )?;
             i += 2;
         } else if token_upper == ":" {
             // Find matching semicolon for definition
@@ -705,7 +727,9 @@ pub fn execute_line(
                 // Skip JIT compilation for word redefinitions to avoid memory leaks and registry collisions
                 // When redefining, always use interpreted mode
                 let is_redefinition = dict.has_word(&word_name);
-                if !is_redefinition && !try_jit_compile(word_name.clone(), &ast, dict, no_jit, dump_ir, verify_ir) {
+                if !is_redefinition
+                    && !try_jit_compile(word_name.clone(), &ast, dict, no_jit, dump_ir, verify_ir)
+                {
                     dict.add_compiled(word_name, ast);
                 } else if is_redefinition {
                     dict.add_compiled(word_name, ast);
@@ -761,8 +785,12 @@ pub fn execute_line(
         } else if token_upper == "INCLUDED" {
             // INCLUDED ( addr len -- )
             // Takes filename from stack and loads the file
-            let len = stack.pop(memory).ok_or("Stack underflow for INCLUDED (length)")?;
-            let addr = stack.pop(memory).ok_or("Stack underflow for INCLUDED (address)")?;
+            let len = stack
+                .pop(memory)
+                .ok_or("Stack underflow for INCLUDED (length)")?;
+            let addr = stack
+                .pop(memory)
+                .ok_or("Stack underflow for INCLUDED (address)")?;
 
             // Read the filename from memory
             let mut filename_bytes = Vec::new();
@@ -771,20 +799,34 @@ pub fn execute_line(
                 filename_bytes.push(byte as u8);
             }
 
-            let filename = String::from_utf8(filename_bytes)
-                .map_err(|_| "Invalid UTF-8 in filename")?;
+            let filename =
+                String::from_utf8(filename_bytes).map_err(|_| "Invalid UTF-8 in filename")?;
 
             // Load the file
-            load_file(&filename, stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir)?;
+            load_file(
+                &filename,
+                stack,
+                dict,
+                loop_stack,
+                return_stack,
+                memory,
+                no_jit,
+                dump_ir,
+                verify_ir,
+            )?;
             i += 1;
         } else {
             // Collect tokens until we hit : or INCLUDE or INCLUDED or VARIABLE or CONSTANT or CREATE or end
             let mut exec_tokens = Vec::new();
             while i < tokens.len() {
                 let check_upper = tokens[i].to_uppercase();
-                if check_upper == ":" || check_upper == "INCLUDE" || check_upper == "INCLUDED"
-                   || check_upper == "VARIABLE" || check_upper == "CONSTANT"
-                   || check_upper == "CREATE" {
+                if check_upper == ":"
+                    || check_upper == "INCLUDE"
+                    || check_upper == "INCLUDED"
+                    || check_upper == "VARIABLE"
+                    || check_upper == "CONSTANT"
+                    || check_upper == "CREATE"
+                {
                     break;
                 }
                 exec_tokens.push(tokens[i]);
@@ -851,7 +893,17 @@ pub fn load_stdlib(
 ) -> Result<(), String> {
     // Load core definitions
     let core_processed = process_stdlib_content(CORE_FTH);
-    execute_line(&core_processed, stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir)?;
+    execute_line(
+        &core_processed,
+        stack,
+        dict,
+        loop_stack,
+        return_stack,
+        memory,
+        no_jit,
+        dump_ir,
+        verify_ir,
+    )?;
 
     // TODO: Load test framework - currently has issues with DEPTH in loops
     // let test_framework_processed = process_stdlib_content(TEST_FRAMEWORK_FTH);
