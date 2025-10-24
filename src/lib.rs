@@ -16,7 +16,6 @@ const CORE_FTH: &str = include_str!("../stdlib/core.fth");
 #[allow(dead_code)] // TODO: Re-enable once DEPTH in loops is fixed
 const TEST_FRAMEWORK_FTH: &str = include_str!("../stdlib/test-framework.fth");
 #[allow(dead_code)] // TODO: Re-enable once test framework is fixed
-
 /// Clear all global registries (for testing)
 /// Call this between tests to avoid state pollution
 pub fn clear_test_state() {
@@ -27,6 +26,12 @@ pub fn clear_test_state() {
 #[derive(Debug, Clone)]
 pub struct LoopStack {
     stack: Vec<(i64, i64)>, // (index, limit) pairs
+}
+
+impl Default for LoopStack {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl LoopStack {
@@ -71,6 +76,12 @@ impl LoopStack {
 #[derive(Debug, Clone)]
 pub struct ReturnStack {
     rp: usize, // Return stack pointer (byte address in memory)
+}
+
+impl Default for ReturnStack {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ReturnStack {
@@ -137,6 +148,12 @@ impl ReturnStack {
 pub struct Memory {
     bytes: Vec<u8>,
     dp: usize, // Dictionary pointer - tracks next allocation address
+}
+
+impl Default for Memory {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Memory {
@@ -242,7 +259,7 @@ pub fn parse_tokens(tokens: &[&str]) -> Result<AstNode, String> {
 
                 while i < tokens.len() {
                     let part = tokens[i];
-                    if part.ends_with('"') {
+                    if let Some(without_quote) = part.strip_suffix('"') {
                         // Found closing quote
                         if part == "\"" {
                             // Just a closing quote - means there was a trailing space
@@ -253,7 +270,6 @@ pub fn parse_tokens(tokens: &[&str]) -> Result<AstNode, String> {
                             }
                         } else {
                             // Text followed by quote
-                            let without_quote = &part[..part.len() - 1];
                             if !without_quote.is_empty() {
                                 string_parts.push(without_quote.to_string());
                             }
@@ -276,7 +292,7 @@ pub fn parse_tokens(tokens: &[&str]) -> Result<AstNode, String> {
 
                 while i < tokens.len() {
                     let part = tokens[i];
-                    if part.ends_with('"') {
+                    if let Some(without_quote) = part.strip_suffix('"') {
                         // Found closing quote
                         if part == "\"" {
                             // Just a closing quote - means there was a trailing space
@@ -287,7 +303,6 @@ pub fn parse_tokens(tokens: &[&str]) -> Result<AstNode, String> {
                             }
                         } else {
                             // Text followed by quote
-                            let without_quote = &part[..part.len() - 1];
                             if !without_quote.is_empty() {
                                 string_parts.push(without_quote.to_string());
                             }

@@ -2,7 +2,6 @@
 ///
 /// This module exposes AST node inspection to Forth code via integer handles.
 /// Forth code can query AST structure and compile it using LLVM primitives.
-
 use crate::ast::AstNode;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -67,7 +66,7 @@ impl AstRegistry {
 
         match node {
             AstNode::PushNumber(n) => Ok(*n),
-            _ => Err(format!("AST node is not a PushNumber")),
+            _ => Err("AST node is not a PushNumber".to_string()),
         }
     }
 
@@ -86,7 +85,7 @@ impl AstRegistry {
                 }
                 Ok(name.len() as i64)
             }
-            _ => Err(format!("AST node is not a CallWord")),
+            _ => Err("AST node is not a CallWord".to_string()),
         }
     }
 
@@ -105,7 +104,7 @@ impl AstRegistry {
                 }
                 Ok(instruction.len() as i64)
             }
-            _ => Err(format!("AST node is not an InlineInstruction")),
+            _ => Err("AST node is not an InlineInstruction".to_string()),
         }
     }
 
@@ -117,7 +116,7 @@ impl AstRegistry {
         let string = match node {
             AstNode::PrintString(s) => s,
             AstNode::StackString(s) => s,
-            _ => return Err(format!("AST node is not a PrintString or StackString")),
+            _ => return Err("AST node is not a PrintString or StackString".to_string()),
         };
 
         // Store string bytes in memory
@@ -135,7 +134,7 @@ impl AstRegistry {
 
         match node {
             AstNode::Sequence(nodes) => Ok(nodes.len() as i64),
-            _ => Err(format!("AST node is not a Sequence")),
+            _ => Err("AST node is not a Sequence".to_string()),
         }
     }
 
@@ -152,7 +151,7 @@ impl AstRegistry {
                 let child = nodes[index as usize].clone();
                 Ok(self.register_node(child))
             }
-            _ => Err(format!("AST node is not a Sequence")),
+            _ => Err("AST node is not a Sequence".to_string()),
         }
     }
 
@@ -166,7 +165,7 @@ impl AstRegistry {
                 let seq = AstNode::Sequence(then_branch.clone());
                 Ok(self.register_node(seq))
             }
-            _ => Err(format!("AST node is not an IfThenElse")),
+            _ => Err("AST node is not an IfThenElse".to_string()),
         }
     }
 
@@ -185,7 +184,7 @@ impl AstRegistry {
                     None => Ok(0), // 0 indicates no else branch
                 }
             }
-            _ => Err(format!("AST node is not an IfThenElse")),
+            _ => Err("AST node is not an IfThenElse".to_string()),
         }
     }
 
@@ -198,7 +197,7 @@ impl AstRegistry {
             AstNode::BeginUntil { body } => body,
             AstNode::BeginWhileRepeat { body, .. } => body,
             AstNode::DoLoop { body, .. } => body,
-            _ => return Err(format!("AST node is not a loop")),
+            _ => return Err("AST node is not a loop".to_string()),
         };
 
         let seq = AstNode::Sequence(body.clone());
@@ -215,7 +214,7 @@ impl AstRegistry {
                 let seq = AstNode::Sequence(condition.clone());
                 Ok(self.register_node(seq))
             }
-            _ => Err(format!("AST node is not a BeginWhileRepeat")),
+            _ => Err("AST node is not a BeginWhileRepeat".to_string()),
         }
     }
 
@@ -226,7 +225,7 @@ impl AstRegistry {
 
         match node {
             AstNode::DoLoop { increment, .. } => Ok(*increment),
-            _ => Err(format!("AST node is not a DoLoop")),
+            _ => Err("AST node is not a DoLoop".to_string()),
         }
     }
 }

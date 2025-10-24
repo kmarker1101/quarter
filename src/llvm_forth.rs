@@ -357,7 +357,7 @@ impl LLVMRegistry {
         if value.is_int_value() {
             let int_val = value.into_int_value();
             let bit_width = int_val.get_type().get_bit_width();
-            let alignment = (bit_width / 8) as u32;
+            let alignment = bit_width / 8;
             store_inst.set_alignment(alignment)
                 .map_err(|e| format!("Failed to set store alignment: {}", e))?;
         }
@@ -613,7 +613,7 @@ impl LLVMRegistry {
             .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
 
         let block = builder.get_insert_block()
-            .ok_or_else(|| format!("No insert block set"))?;
+            .ok_or_else(|| "No insert block set".to_string())?;
 
         let handle = self.next_handle();
         self.blocks.insert(handle, block);
