@@ -12,6 +12,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Install LLVM 18
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 18
+          echo "LLVM_SYS_181_PREFIX=/usr/lib/llvm-18" >> $GITHUB_ENV
       - name: Run Rust tests
         run: cargo test --all
       - name: Build Quarter for Forth tests
@@ -45,6 +51,26 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      - name: Install LLVM 18 (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 18
+          echo "LLVM_SYS_181_PREFIX=/usr/lib/llvm-18" >> $GITHUB_ENV
+
+      - name: Install LLVM 18 (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install llvm@18
+          echo "LLVM_SYS_181_PREFIX=$(brew --prefix llvm@18)" >> $GITHUB_ENV
+
+      - name: Install LLVM 18 (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          choco install llvm --version=18.1.8 -y
+          echo "LLVM_SYS_181_PREFIX=C:\Program Files\LLVM" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Build release binary
         run: cargo build --release --target ${{ matrix.target }}
