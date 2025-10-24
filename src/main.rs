@@ -48,7 +48,7 @@ fn try_forth_compile(
     let name_addr = 302000;
     for (i, ch) in name.bytes().enumerate() {
         // Store each character as a byte
-        if let Err(_) = memory.store(name_addr + i, ch as i32) {
+        if let Err(_) = memory.store_byte(name_addr + i, ch as i32) {
             return false;
         }
     }
@@ -66,6 +66,12 @@ fn try_forth_compile(
 
     // Get function pointer from stack
     if let Some(fn_ptr) = stack.pop(memory) {
+        // Validate pointer is not null
+        if fn_ptr == 0 {
+            eprintln!("ERROR: Forth compiler returned NULL function pointer!");
+            return false;
+        }
+
         // Cast to JITFunction
         let jit_fn: quarter::dictionary::JITFunction = unsafe {
             std::mem::transmute(fn_ptr as *const ())
@@ -76,6 +82,7 @@ fn try_forth_compile(
         return true;
     }
 
+    eprintln!("ERROR: No function pointer on stack after COMPILE-WORD!");
     false
 }
 

@@ -786,8 +786,8 @@ pub fn llvm_build_call(builder_handle: i32, fn_handle: i32, arg1: i32, arg2: i32
     let args: Vec<i32> = match nargs {
         0 => vec![],
         1 => vec![arg1],
-        2 => vec![arg2, arg1],  // Reverse order due to stack
-        3 => vec![arg3, arg2, arg1],
+        2 => vec![arg1, arg2],  // Correct order: memory, sp
+        3 => vec![arg1, arg2, arg3],  // Correct order: memory, sp, rp
         _ => return Err(format!("Unsupported number of arguments: {}", nargs)),
     };
 
