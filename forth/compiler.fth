@@ -681,9 +681,6 @@ VARIABLE PARAM-RP      \ rp pointer parameter
 \ Compile a word from its AST
 \ Returns JIT function pointer
 : COMPILE-WORD ( ast-handle name-addr name-len -- fn-ptr )
-    \ Debug: Show we're using the Forth compiler
-    CR ." *** FORTH SELF-HOSTING COMPILER ACTIVE ***" CR
-
     \ Save name for later (we'll need it for JIT lookup)
     >R >R  \ Save name-addr and name-len on return stack
 
@@ -739,9 +736,6 @@ VARIABLE PARAM-RP      \ rp pointer parameter
 
     \ Add return
     CURRENT-BUILDER @ LLVM-BUILD-RET-VOID
-
-    \ Dump IR for debugging (disabled)
-    \ CURRENT-MODULE @ LLVM-DUMP-MODULE
 
     \ Create JIT execution engine
     CURRENT-MODULE @ LLVM-CREATE-JIT
