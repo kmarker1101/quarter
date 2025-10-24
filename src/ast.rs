@@ -24,6 +24,7 @@ pub enum AstNode {
     StackString(String),  // S" - push address and length
     Leave,
     Exit,
+    InlineInstruction(String),  // INLINE directive - maps to LLVM instruction (e.g., "LLVM-ADD")
 }
 
 impl AstNode {
@@ -39,6 +40,7 @@ impl AstNode {
             AstNode::StackString(_) => Ok(()),
             AstNode::Leave => Ok(()),
             AstNode::Exit => Ok(()),
+            AstNode::InlineInstruction(_) => Ok(()),  // Inline instructions are validated at JIT time
             AstNode::CallWord(name) => {
                 // Allow forward reference if this is the word being defined (for recursion)
                 if let Some(def_name) = defining_word {
@@ -294,6 +296,10 @@ impl AstNode {
             AstNode::Exit => {
                 // Signal to exit the current word
                 Err("EXIT".to_string())
+            }
+            AstNode::InlineInstruction(instruction) => {
+                // Inline instructions can only be executed in JIT-compiled code
+                Err(format!("Inline instruction {} can only be used in JIT-compiled words", instruction))
             }
         }
     }

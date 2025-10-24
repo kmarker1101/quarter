@@ -175,6 +175,10 @@ impl Dictionary {
         self.words.contains_key(word)
     }
 
+    pub fn get_word(&self, word: &str) -> Option<&Word> {
+        self.words.get(word)
+    }
+
     pub fn execute_word(
         &self,
         word: &str,

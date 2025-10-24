@@ -18,8 +18,12 @@ fn test_compile_simple_number() {
     // Create AST for pushing 42
     let ast = AstNode::PushNumber(42);
 
+    // Create dictionary
+    let dict = quarter::Dictionary::new();
+
     // Compile it
-    let result = compiler.compile_word("TEST", &ast);
+
+    let result = compiler.compile_word("TEST", &ast, &dict);
     assert!(result.is_ok(), "Failed to compile: {:?}", result.err());
 
     // Verify IR was generated
@@ -41,8 +45,12 @@ fn test_compile_double() {
         AstNode::CallWord("*".to_string()),
     ]);
 
+    // Create dictionary
+    let dict = quarter::Dictionary::new();
+
     // Compile it
-    let result = compiler.compile_word("DOUBLE", &ast);
+
+    let result = compiler.compile_word("DOUBLE", &ast, &dict);
     assert!(result.is_ok(), "Failed to compile: {:?}", result.err());
 
     // Verify IR was generated
@@ -70,7 +78,9 @@ fn test_compile_square() {
     ]);
 
     // Compile it
-    let result = compiler.compile_word("SQUARE", &ast);
+    let dict = quarter::Dictionary::new();
+
+    let result = compiler.compile_word("SQUARE", &ast, &dict);
     assert!(result.is_ok(), "Failed to compile: {:?}", result.err());
 
     // Verify IR was generated
@@ -103,7 +113,9 @@ fn test_compile_if_then() {
     ]);
 
     // Compile it
-    let result = compiler.compile_word("TEST_IF", &ast);
+    let dict = quarter::Dictionary::new();
+
+    let result = compiler.compile_word("TEST_IF", &ast, &dict);
     assert!(result.is_ok(), "Failed to compile: {:?}", result.err());
 
     // Verify IR was generated
@@ -139,7 +151,9 @@ fn test_compile_if_then_else() {
     ]);
 
     // Compile it
-    let result = compiler.compile_word("TEST_IF_ELSE", &ast);
+    let dict = quarter::Dictionary::new();
+
+    let result = compiler.compile_word("TEST_IF_ELSE", &ast, &dict);
     assert!(result.is_ok(), "Failed to compile: {:?}", result.err());
 
     // Verify IR was generated
@@ -180,7 +194,9 @@ fn test_compile_begin_until() {
     ]);
 
     // Compile it
-    let result = compiler.compile_word("COUNTDOWN", &ast);
+    let dict = quarter::Dictionary::new();
+
+    let result = compiler.compile_word("COUNTDOWN", &ast, &dict);
     assert!(result.is_ok(), "Failed to compile: {:?}", result.err());
 
     // Verify IR was generated
@@ -218,7 +234,9 @@ fn test_compile_do_loop() {
     ]);
 
     // Compile it
-    let result = compiler.compile_word("SUM_SIMPLE", &ast);
+    let dict = quarter::Dictionary::new();
+
+    let result = compiler.compile_word("SUM_SIMPLE", &ast, &dict);
     assert!(result.is_ok(), "Failed to compile: {:?}", result.err());
 
     // Verify IR was generated
@@ -255,7 +273,9 @@ fn test_compile_do_loop_with_i() {
     ]);
 
     // Compile it
-    let result = compiler.compile_word("SUM_TO_N", &ast);
+    let dict = quarter::Dictionary::new();
+
+    let result = compiler.compile_word("SUM_TO_N", &ast, &dict);
     assert!(result.is_ok(), "Failed to compile: {:?}", result.err());
 
     // Verify IR was generated
