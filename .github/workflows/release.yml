@@ -17,6 +17,7 @@ jobs:
           wget https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
           sudo ./llvm.sh 18
+          sudo apt-get install -y libpolly-18-dev
           echo "LLVM_SYS_181_PREFIX=/usr/lib/llvm-18" >> $GITHUB_ENV
       - name: Run Rust tests
         run: cargo test --all
@@ -58,6 +59,7 @@ jobs:
           wget https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
           sudo ./llvm.sh 18
+          sudo apt-get install -y libpolly-18-dev
           echo "LLVM_SYS_181_PREFIX=/usr/lib/llvm-18" >> $GITHUB_ENV
 
       - name: Install LLVM 18 (macOS)
