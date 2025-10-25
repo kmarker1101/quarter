@@ -850,6 +850,47 @@ VARIABLE PARAM-RP      \ rp pointer parameter
     \ Push result back to stack
     COMPILE-PUSH ;
 
+\ Emit inline modulo: pop b, pop a, push (a MOD b)
+\ ( -- )
+: EMIT-INLINE-MOD
+    \ Pop two values from stack
+    COMPILE-POP  \ b (divisor, second operand)
+    COMPILE-POP  \ a (dividend, first operand)
+    \ Stack: ( b-handle a-handle )
+
+    \ Swap to get correct order for modulo
+    SWAP
+    \ Stack: ( a-handle b-handle )
+
+    \ Remainder: a MOD b
+    CURRENT-BUILDER @ -ROT LLVM-BUILD-SREM
+    \ Stack: ( result-handle )
+
+    \ Push result back to stack
+    COMPILE-PUSH ;
+
+\ Emit inline negate: pop a, push (-a)
+\ ( -- )
+: EMIT-INLINE-NEGATE
+    \ Pop value from stack
+    COMPILE-POP  \ a
+    \ Stack: ( a-handle )
+
+    \ Build constant 0
+    CURRENT-CTX @ 0 64 LLVM-BUILD-CONST-INT
+    \ Stack: ( a-handle zero-handle )
+
+    \ Swap to get correct order: 0 - a
+    SWAP
+    \ Stack: ( zero-handle a-handle )
+
+    \ Subtract: 0 - a
+    CURRENT-BUILDER @ -ROT LLVM-BUILD-SUB
+    \ Stack: ( result-handle )
+
+    \ Push result back to stack
+    COMPILE-PUSH ;
+
 \ =============================================================================
 \ AST COMPILATION
 \ =============================================================================
@@ -1146,6 +1187,29 @@ VARIABLE PARAM-RP      \ rp pointer parameter
         WORD-NAME-BUFFER OVER COMPILER-SCRATCH 1 STRING-EQUALS? IF
             DROP  \ Drop name-len
             EMIT-INLINE-DIV
+            EXIT
+        THEN
+
+        \ Check for 'MOD'
+        77 COMPILER-SCRATCH C!     \ M
+        79 COMPILER-SCRATCH 1 + C! \ O
+        68 COMPILER-SCRATCH 2 + C! \ D
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 3 STRING-EQUALS? IF
+            DROP  \ Drop name-len
+            EMIT-INLINE-MOD
+            EXIT
+        THEN
+
+        \ Check for 'NEGATE'
+        78  COMPILER-SCRATCH C!     \ N
+        69  COMPILER-SCRATCH 1 + C! \ E
+        71  COMPILER-SCRATCH 2 + C! \ G
+        65  COMPILER-SCRATCH 3 + C! \ A
+        84  COMPILER-SCRATCH 4 + C! \ T
+        69  COMPILER-SCRATCH 5 + C! \ E
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 6 STRING-EQUALS? IF
+            DROP  \ Drop name-len
+            EMIT-INLINE-NEGATE
             EXIT
         THEN
 

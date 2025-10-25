@@ -2481,6 +2481,28 @@ pub fn llvm_build_sdiv_word(
     }
 }
 
+/// LLVM-BUILD-SREM: Signed integer remainder (modulo)
+/// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
+pub fn llvm_build_srem_word(
+    stack: &mut crate::Stack,
+    _loop_stack: &crate::LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(rhs_handle), Some(lhs_handle), Some(builder_handle)) = (
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+    ) {
+        match crate::llvm_forth::llvm_build_srem(builder_handle, lhs_handle, rhs_handle) {
+            Ok(handle) => stack.push(handle, memory),
+            Err(e) => eprintln!("LLVM-BUILD-SREM error: {}", e),
+        }
+    } else {
+        eprintln!("LLVM-BUILD-SREM: Stack underflow");
+    }
+}
+
 /// LLVM-BUILD-BR: Unconditional branch
 /// Stack: ( builder-handle block-handle -- )
 pub fn llvm_build_br_word(
