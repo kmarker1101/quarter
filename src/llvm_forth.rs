@@ -546,6 +546,30 @@ impl LLVMRegistry {
         Ok(handle)
     }
 
+    /// Build integer signed div instruction
+    pub fn build_sdiv(&mut self,
+                     builder_handle: BuilderHandle,
+                     lhs_handle: ValueHandle,
+                     rhs_handle: ValueHandle) -> Result<ValueHandle, String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let lhs = self.values.get(&lhs_handle)
+            .ok_or_else(|| format!("Invalid LHS handle: {}", lhs_handle))?
+            .into_int_value();
+
+        let rhs = self.values.get(&rhs_handle)
+            .ok_or_else(|| format!("Invalid RHS handle: {}", rhs_handle))?
+            .into_int_value();
+
+        let result = builder.build_int_signed_div(lhs, rhs, "div")
+            .map_err(|e| format!("Failed to build sdiv: {}", e))?;
+
+        let handle = self.next_handle();
+        self.values.insert(handle, result.into());
+        Ok(handle)
+    }
+
     /// Build unconditional branch
     pub fn build_br(&mut self,
                    builder_handle: BuilderHandle,
@@ -884,6 +908,15 @@ pub fn llvm_build_mul(builder_handle: i64, lhs_handle: i64, rhs_handle: i64) -> 
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.build_mul(builder_handle, lhs_handle, rhs_handle)
+    })
+}
+
+/// Build sdiv instruction
+/// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
+pub fn llvm_build_sdiv(builder_handle: i64, lhs_handle: i64, rhs_handle: i64) -> Result<i64, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_sdiv(builder_handle, lhs_handle, rhs_handle)
     })
 }
 

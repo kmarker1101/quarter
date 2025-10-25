@@ -797,6 +797,59 @@ VARIABLE PARAM-RP      \ rp pointer parameter
     \ Push result back to stack
     COMPILE-PUSH ;
 
+\ Emit inline addition: pop b, pop a, push (a + b)
+\ ( -- )
+: EMIT-INLINE-ADD
+    \ Pop two values from stack
+    COMPILE-POP  \ b
+    COMPILE-POP  \ a
+    \ Stack: ( b-handle a-handle )
+
+    \ Add: a + b
+    CURRENT-BUILDER @ ROT ROT LLVM-BUILD-ADD
+    \ Stack: ( result-handle )
+
+    \ Push result back to stack
+    COMPILE-PUSH ;
+
+\ Emit inline subtraction: pop b, pop a, push (a - b)
+\ ( -- )
+: EMIT-INLINE-SUB
+    \ Pop two values from stack
+    COMPILE-POP  \ b (second operand)
+    COMPILE-POP  \ a (first operand)
+    \ Stack: ( b-handle a-handle )
+
+    \ Swap to get correct order for subtraction
+    SWAP
+    \ Stack: ( a-handle b-handle )
+
+    \ Subtract: a - b
+    CURRENT-BUILDER @ -ROT LLVM-BUILD-SUB
+    \ Stack: ( result-handle )
+
+    \ Push result back to stack
+    COMPILE-PUSH ;
+
+\ Emit inline division: pop b, pop a, push (a / b)
+\ ( -- )
+: EMIT-INLINE-DIV
+    \ Pop two values from stack
+    COMPILE-POP  \ b (divisor, second operand)
+    COMPILE-POP  \ a (dividend, first operand)
+    \ Stack: ( b-handle a-handle )
+
+    \ Swap to get correct order for division
+    SWAP
+    \ Stack: ( a-handle b-handle )
+
+    \ Divide: a / b
+    CURRENT-BUILDER @ -ROT LLVM-BUILD-SDIV
+    \ Stack: ( result-handle )
+
+    \ Push result back to stack
+    COMPILE-PUSH ;
+
 \ =============================================================================
 \ AST COMPILATION
 \ =============================================================================
@@ -1069,6 +1122,30 @@ VARIABLE PARAM-RP      \ rp pointer parameter
             \ It's multiplication - emit inline
             DROP  \ Drop name-len
             EMIT-INLINE-MUL
+            EXIT
+        THEN
+
+        \ Check for '+'
+        43 COMPILER-SCRATCH C!  \ ASCII 43 = '+'
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 1 STRING-EQUALS? IF
+            DROP  \ Drop name-len
+            EMIT-INLINE-ADD
+            EXIT
+        THEN
+
+        \ Check for '-'
+        45 COMPILER-SCRATCH C!  \ ASCII 45 = '-'
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 1 STRING-EQUALS? IF
+            DROP  \ Drop name-len
+            EMIT-INLINE-SUB
+            EXIT
+        THEN
+
+        \ Check for '/'
+        47 COMPILER-SCRATCH C!  \ ASCII 47 = '/'
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 1 STRING-EQUALS? IF
+            DROP  \ Drop name-len
+            EMIT-INLINE-DIV
             EXIT
         THEN
 
