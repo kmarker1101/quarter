@@ -33,14 +33,14 @@ jobs:
             target: x86_64-unknown-linux-gnu
             artifact_name: quarter
             asset_name: quarter-linux-x86_64
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            artifact_name: quarter
+            asset_name: quarter-linux-aarch64
           - os: macos-latest
             target: aarch64-apple-darwin
             artifact_name: quarter
             asset_name: quarter-macos-aarch64
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            artifact_name: quarter.exe
-            asset_name: quarter-windows-x86_64.exe
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -50,7 +50,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Install LLVM 18 (Linux)
-        if: matrix.os == 'ubuntu-latest'
+        if: startsWith(matrix.os, 'ubuntu')
         run: |
           wget https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
@@ -64,21 +64,10 @@ jobs:
           brew install llvm@18
           echo "LLVM_SYS_181_PREFIX=$(brew --prefix llvm@18)" >> $GITHUB_ENV
 
-      - name: Install LLVM 18 (Windows)
-        if: matrix.os == 'windows-latest'
-        run: |
-          choco install llvm --version=18.1.8 -y --allow-downgrade
-          $env:LLVM_SYS_181_PREFIX = "C:\Program Files\LLVM"
-          $env:LIBCLANG_PATH = "C:\Program Files\LLVM\bin"
-          echo "LLVM_SYS_181_PREFIX=$env:LLVM_SYS_181_PREFIX" >> $env:GITHUB_ENV
-          echo "LIBCLANG_PATH=$env:LIBCLANG_PATH" >> $env:GITHUB_ENV
-          echo "PATH=C:\Program Files\LLVM\bin;$env:PATH" >> $env:GITHUB_ENV
-
       - name: Build release binary
         run: cargo build --release --target ${{ matrix.target }}
 
       - name: Strip binary (Linux and macOS)
-        if: matrix.os != 'windows-latest'
         run: strip target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
 
       - name: Upload binary
@@ -107,8 +96,8 @@ jobs:
           mkdir -p release-assets
           # Rename artifacts to match their target names
           mv artifacts/quarter-linux-x86_64/quarter release-assets/quarter-linux-x86_64
+          mv artifacts/quarter-linux-aarch64/quarter release-assets/quarter-linux-aarch64
           mv artifacts/quarter-macos-aarch64/quarter release-assets/quarter-macos-aarch64
-          mv artifacts/quarter-windows-x86_64.exe/quarter.exe release-assets/quarter-windows-x86_64.exe
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
