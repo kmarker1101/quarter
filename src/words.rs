@@ -269,6 +269,84 @@ pub fn equal(
     }
 }
 
+pub fn not_equal(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(b), Some(a)) = (stack.pop(memory), stack.pop(memory)) {
+        stack.push(if a != b { -1 } else { 0 }, memory);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn less_equal(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(b), Some(a)) = (stack.pop(memory), stack.pop(memory)) {
+        stack.push(if a <= b { -1 } else { 0 }, memory);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn greater_equal(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(b), Some(a)) = (stack.pop(memory), stack.pop(memory)) {
+        stack.push(if a >= b { -1 } else { 0 }, memory);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn zero_equal(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let Some(a) = stack.pop(memory) {
+        stack.push(if a == 0 { -1 } else { 0 }, memory);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn zero_less(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let Some(a) = stack.pop(memory) {
+        stack.push(if a < 0 { -1 } else { 0 }, memory);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn zero_greater(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let Some(a) = stack.pop(memory) {
+        stack.push(if a > 0 { -1 } else { 0 }, memory);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
 pub fn mod_word(
     stack: &mut Stack,
     _loop_stack: &LoopStack,
@@ -2676,6 +2754,28 @@ pub fn llvm_build_icmp_word(
         }
     } else {
         eprintln!("LLVM-BUILD-ICMP: Stack underflow");
+    }
+}
+
+/// LLVM-BUILD-SEXT: Sign-extend i1 to i64 (for Forth booleans)
+/// Stack: ( builder-handle ctx-handle value-handle -- result-handle )
+pub fn llvm_build_sext_word(
+    stack: &mut crate::Stack,
+    _loop_stack: &crate::LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(value_handle), Some(ctx_handle), Some(builder_handle)) = (
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+    ) {
+        match crate::llvm_forth::llvm_build_sext(builder_handle, ctx_handle, value_handle) {
+            Ok(handle) => stack.push(handle, memory),
+            Err(e) => eprintln!("LLVM-BUILD-SEXT error: {}", e),
+        }
+    } else {
+        eprintln!("LLVM-BUILD-SEXT: Stack underflow");
     }
 }
 

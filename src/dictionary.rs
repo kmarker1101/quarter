@@ -47,7 +47,12 @@ impl Dictionary {
         dict.add_primitive("<", words::less_than);
         dict.add_primitive(">", words::greater_than);
         dict.add_primitive("=", words::equal);
-        // <>, <=, >= now defined in core.fth
+        dict.add_primitive("<>", words::not_equal);
+        dict.add_primitive("<=", words::less_equal);
+        dict.add_primitive(">=", words::greater_equal);
+        dict.add_primitive("0=", words::zero_equal);
+        dict.add_primitive("0<", words::zero_less);
+        dict.add_primitive("0>", words::zero_greater);
         dict.add_primitive("NEGATE", words::negate);
         dict.add_primitive("ABS", words::abs);
         dict.add_primitive("MIN", words::min);
@@ -61,6 +66,7 @@ impl Dictionary {
         dict.add_primitive("DEPTH", words::depth);
         // OVER now defined in core.fth
         dict.add_primitive("/MOD", words::slash_modulo);
+        dict.add_primitive("MOD", words::mod_word);
         dict.add_primitive("I", words::loop_i);
         dict.add_primitive("J", words::loop_j);
         dict.add_primitive("EMIT", words::emit);
@@ -76,7 +82,6 @@ impl Dictionary {
         dict.add_primitive(">R", words::to_r);
         dict.add_primitive("R>", words::r_from);
         dict.add_primitive("R@", words::r_fetch);
-        // 0=, 0<, 0> now defined in comparison.fth
         // TRUE, FALSE now defined in core.fth as constants
         dict.add_primitive("!", words::store);
         dict.add_primitive("@", words::fetch);
@@ -124,6 +129,7 @@ impl Dictionary {
         dict.add_primitive("LLVM-BUILD-BR", words::llvm_build_br_word);
         dict.add_primitive("LLVM-BUILD-COND-BR", words::llvm_build_cond_br_word);
         dict.add_primitive("LLVM-BUILD-ICMP", words::llvm_build_icmp_word);
+        dict.add_primitive("LLVM-BUILD-SEXT", words::llvm_build_sext_word);
         dict.add_primitive("LLVM-BUILD-CALL", words::llvm_build_call_word);
         dict.add_primitive("LLVM-GET-PARAM", words::llvm_get_param_word);
         dict.add_primitive("LLVM-BUILD-PHI", words::llvm_build_phi_word);

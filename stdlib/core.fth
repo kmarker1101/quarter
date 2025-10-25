@@ -13,13 +13,8 @@
 \ COMPARISON OPERATORS
 \ =============================================================================
 
-: 0= ( n -- flag ) IF FALSE ELSE TRUE THEN ;
-\ = is now a primitive with JIT wrapper
-: 0< ( n -- flag ) 0 < ;
-: 0> ( n -- flag ) 0 > ;
-: <> ( n1 n2 -- flag ) = 0= ;
-: <= ( n1 n2 -- flag ) > 0= ;
-: >= ( n1 n2 -- flag ) < 0= ;
+\ All comparison operators are now inline LLVM primitives
+\ <, >, =, <>, <=, >=, 0=, 0<, 0> compile directly to LLVM icmp + sext instructions
 
 \ =============================================================================
 \ STACK MANIPULATION
@@ -55,7 +50,7 @@
 : 10+ ( n -- n+10 ) 10 + ;
 : 11+ ( n -- n+11 ) 11 + ;
 
-: MOD ( n1 n2 -- remainder ) /MOD DROP ;
+\ MOD is now an inline LLVM primitive (srem instruction)
 
 \ =============================================================================
 \ INPUT/OUTPUT

@@ -789,6 +789,30 @@ impl LLVMRegistry {
         Ok(handle)
     }
 
+    /// Build sign-extend instruction (i1 -> i64 for Forth booleans)
+    pub fn build_sext(&mut self,
+                     builder_handle: BuilderHandle,
+                     ctx_handle: ContextHandle,
+                     value_handle: ValueHandle) -> Result<ValueHandle, String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let context = self.contexts.get(&ctx_handle)
+            .ok_or_else(|| format!("Invalid context handle: {}", ctx_handle))?;
+
+        let value = self.values.get(&value_handle)
+            .ok_or_else(|| format!("Invalid value handle: {}", value_handle))?
+            .into_int_value();
+
+        let i64_type = context.i64_type();
+        let result = builder.build_int_s_extend(value, i64_type, "sext")
+            .map_err(|e| format!("Failed to build sext: {}", e))?;
+
+        let handle = self.next_handle();
+        self.values.insert(handle, result.into());
+        Ok(handle)
+    }
+
     /// Build function call
     pub fn build_call(&mut self,
                      builder_handle: BuilderHandle,
@@ -1143,6 +1167,15 @@ pub fn llvm_build_icmp(builder_handle: i64, predicate: i64, lhs_handle: i64, rhs
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.build_icmp(builder_handle, predicate, lhs_handle, rhs_handle)
+    })
+}
+
+/// Build sign-extend instruction (i1 -> i64 for Forth booleans)
+/// Stack: ( builder-handle ctx-handle value-handle -- result-handle )
+pub fn llvm_build_sext(builder_handle: i64, ctx_handle: i64, value_handle: i64) -> Result<i64, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_sext(builder_handle, ctx_handle, value_handle)
     })
 }
 

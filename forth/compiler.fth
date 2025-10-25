@@ -955,6 +955,115 @@ VARIABLE PARAM-RP      \ rp pointer parameter
     CURRENT-BUILDER @ -ROT LLVM-BUILD-ASHR
     COMPILE-PUSH ;
 
+\ Emit inline <: pop b, pop a, push (a < b ? -1 : 0)
+\ ( -- )
+: EMIT-INLINE-LT
+    COMPILE-POP COMPILE-POP  \ b a
+    SWAP                      \ a b (correct order for lhs < rhs)
+    CURRENT-BUILDER @ 2       \ a b builder 2
+    2SWAP                     \ builder 2 a b
+    LLVM-BUILD-ICMP           \ cmp-result (i1)
+    \ Convert i1 to i64 (-1 or 0)
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT LLVM-BUILD-SEXT
+    COMPILE-PUSH ;
+
+\ Emit inline >: pop b, pop a, push (a > b ? -1 : 0)
+\ ( -- )
+: EMIT-INLINE-GT
+    COMPILE-POP COMPILE-POP  \ b a
+    SWAP                      \ a b
+    CURRENT-BUILDER @ 4       \ a b builder 4
+    2SWAP                     \ builder 4 a b
+    LLVM-BUILD-ICMP
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT LLVM-BUILD-SEXT
+    COMPILE-PUSH ;
+
+\ Emit inline =: pop b, pop a, push (a = b ? -1 : 0)
+\ ( -- )
+: EMIT-INLINE-EQ
+    COMPILE-POP COMPILE-POP  \ b a
+    SWAP                      \ a b
+    CURRENT-BUILDER @ 0       \ a b builder 0
+    2SWAP                     \ builder 0 a b
+    LLVM-BUILD-ICMP
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT LLVM-BUILD-SEXT
+    COMPILE-PUSH ;
+
+\ Emit inline <>: pop b, pop a, push (a <> b ? -1 : 0)
+\ ( -- )
+: EMIT-INLINE-NE
+    COMPILE-POP COMPILE-POP  \ b a
+    SWAP                      \ a b
+    CURRENT-BUILDER @ 1       \ a b builder 1
+    2SWAP                     \ builder 1 a b
+    LLVM-BUILD-ICMP
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT LLVM-BUILD-SEXT
+    COMPILE-PUSH ;
+
+\ Emit inline <=: pop b, pop a, push (a <= b ? -1 : 0)
+\ ( -- )
+: EMIT-INLINE-LE
+    COMPILE-POP COMPILE-POP  \ b a
+    SWAP                      \ a b
+    CURRENT-BUILDER @ 3       \ a b builder 3
+    2SWAP                     \ builder 3 a b
+    LLVM-BUILD-ICMP
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT LLVM-BUILD-SEXT
+    COMPILE-PUSH ;
+
+\ Emit inline >=: pop b, pop a, push (a >= b ? -1 : 0)
+\ ( -- )
+: EMIT-INLINE-GE
+    COMPILE-POP COMPILE-POP  \ b a
+    SWAP                      \ a b
+    CURRENT-BUILDER @ 5       \ a b builder 5
+    2SWAP                     \ builder 5 a b
+    LLVM-BUILD-ICMP
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT LLVM-BUILD-SEXT
+    COMPILE-PUSH ;
+
+\ Emit inline 0=: pop a, push (a = 0 ? -1 : 0)
+\ ( -- )
+: EMIT-INLINE-0EQ
+    COMPILE-POP  \ a
+    \ Build constant 0
+    CURRENT-CTX @ 0 64 LLVM-BUILD-CONST-INT
+    \ Stack: ( a-handle zero-handle )
+    \ Need: ( builder predicate lhs rhs ) = ( builder 0 a 0 )
+    CURRENT-BUILDER @ 0       \ a zero builder 0
+    2SWAP                     \ builder 0 a zero
+    LLVM-BUILD-ICMP
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT LLVM-BUILD-SEXT
+    COMPILE-PUSH ;
+
+\ Emit inline 0<: pop a, push (a < 0 ? -1 : 0)
+\ ( -- )
+: EMIT-INLINE-0LT
+    COMPILE-POP  \ a
+    \ Build constant 0
+    CURRENT-CTX @ 0 64 LLVM-BUILD-CONST-INT
+    \ Stack: ( a-handle zero-handle )
+    \ Need: ( builder predicate lhs rhs ) = ( builder 2 a 0 )
+    CURRENT-BUILDER @ 2       \ a zero builder 2
+    2SWAP                     \ builder 2 a zero
+    LLVM-BUILD-ICMP
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT LLVM-BUILD-SEXT
+    COMPILE-PUSH ;
+
+\ Emit inline 0>: pop a, push (a > 0 ? -1 : 0)
+\ ( -- )
+: EMIT-INLINE-0GT
+    COMPILE-POP  \ a
+    \ Build constant 0
+    CURRENT-CTX @ 0 64 LLVM-BUILD-CONST-INT
+    \ Stack: ( a-handle zero-handle )
+    \ Need: ( builder predicate lhs rhs ) = ( builder 4 a 0 )
+    CURRENT-BUILDER @ 4       \ a zero builder 4
+    2SWAP                     \ builder 4 a zero
+    LLVM-BUILD-ICMP
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT LLVM-BUILD-SEXT
+    COMPILE-PUSH ;
+
 \ =============================================================================
 \ AST COMPILATION
 \ =============================================================================
@@ -1342,6 +1451,84 @@ VARIABLE PARAM-RP      \ rp pointer parameter
         WORD-NAME-BUFFER OVER COMPILER-SCRATCH 6 STRING-EQUALS? IF
             DROP
             EMIT-INLINE-RSHIFT
+            EXIT
+        THEN
+
+        \ Check for '<'
+        60 COMPILER-SCRATCH C!  \ <
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 1 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-LT
+            EXIT
+        THEN
+
+        \ Check for '>'
+        62 COMPILER-SCRATCH C!  \ >
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 1 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-GT
+            EXIT
+        THEN
+
+        \ Check for '='
+        61 COMPILER-SCRATCH C!  \ =
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 1 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-EQ
+            EXIT
+        THEN
+
+        \ Check for '<>'
+        60 COMPILER-SCRATCH C!      \ <
+        62 COMPILER-SCRATCH 1 + C!  \ >
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 2 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-NE
+            EXIT
+        THEN
+
+        \ Check for '<='
+        60 COMPILER-SCRATCH C!      \ <
+        61 COMPILER-SCRATCH 1 + C!  \ =
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 2 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-LE
+            EXIT
+        THEN
+
+        \ Check for '>='
+        62 COMPILER-SCRATCH C!      \ >
+        61 COMPILER-SCRATCH 1 + C!  \ =
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 2 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-GE
+            EXIT
+        THEN
+
+        \ Check for '0='
+        48 COMPILER-SCRATCH C!      \ 0
+        61 COMPILER-SCRATCH 1 + C!  \ =
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 2 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-0EQ
+            EXIT
+        THEN
+
+        \ Check for '0<'
+        48 COMPILER-SCRATCH C!      \ 0
+        60 COMPILER-SCRATCH 1 + C!  \ <
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 2 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-0LT
+            EXIT
+        THEN
+
+        \ Check for '0>'
+        48 COMPILER-SCRATCH C!      \ 0
+        62 COMPILER-SCRATCH 1 + C!  \ >
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 2 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-0GT
             EXIT
         THEN
 
