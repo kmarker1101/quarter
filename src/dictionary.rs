@@ -46,8 +46,16 @@ impl Dictionary {
         dict.add_primitive("U.R", words::u_dot_r);
         dict.add_primitive("<", words::less_than);
         dict.add_primitive(">", words::greater_than);
-        // =, <>, <=, >= now defined in comparison.fth
-        // NEGATE, ABS now defined in core.fth
+        dict.add_primitive("=", words::equal);
+        // <>, <=, >= now defined in core.fth
+        dict.add_primitive("NEGATE", words::negate);
+        dict.add_primitive("ABS", words::abs);
+        dict.add_primitive("MIN", words::min);
+        dict.add_primitive("MAX", words::max);
+        dict.add_primitive("1+", words::one_plus);
+        dict.add_primitive("1-", words::one_minus);
+        dict.add_primitive("2*", words::two_star);
+        dict.add_primitive("2/", words::two_slash);
         dict.add_primitive("CR", words::cr);
         dict.add_primitive("DROP", words::drop);
         dict.add_primitive("DEPTH", words::depth);

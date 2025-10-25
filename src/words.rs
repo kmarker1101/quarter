@@ -256,6 +256,38 @@ pub fn greater_than(
     }
 }
 
+pub fn equal(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(b), Some(a)) = (stack.pop(memory), stack.pop(memory)) {
+        stack.push(if a == b { -1 } else { 0 }, memory);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn mod_word(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(b), Some(a)) = (stack.pop(memory), stack.pop(memory)) {
+        if b == 0 {
+            print!("Division by zero!");
+            stack.push(a, memory);
+            stack.push(b, memory);
+        } else {
+            stack.push(a % b, memory);
+        }
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
 pub fn abs(
     stack: &mut Stack,
     _loop_stack: &LoopStack,
@@ -264,6 +296,97 @@ pub fn abs(
 ) {
     if let Some(value) = stack.pop(memory) {
         stack.push(value.abs(), memory);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn negate(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let Some(value) = stack.pop(memory) {
+        stack.push(-value, memory);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn min(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(b), Some(a)) = (stack.pop(memory), stack.pop(memory)) {
+        stack.push(if a < b { a } else { b }, memory);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn max(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(b), Some(a)) = (stack.pop(memory), stack.pop(memory)) {
+        stack.push(if a > b { a } else { b }, memory);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn one_plus(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let Some(value) = stack.pop(memory) {
+        stack.push(value + 1, memory);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn one_minus(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let Some(value) = stack.pop(memory) {
+        stack.push(value - 1, memory);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn two_star(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let Some(value) = stack.pop(memory) {
+        stack.push(value * 2, memory);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn two_slash(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let Some(value) = stack.pop(memory) {
+        stack.push(value / 2, memory);
     } else {
         println!("Stack underflow!");
     }
@@ -911,6 +1034,912 @@ pub extern "C" fn quarter_less_than(memory: *mut u8, sp: *mut usize, _rp: *mut u
         *sp = sp_val - 8;
     }
 }
+
+/// JIT-callable greater than comparison: ( a b -- flag )
+/// Pops two values, pushes -1 if a > b, 0 otherwise
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_gt(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 16) {
+            return;
+        }
+        let addr_a = memory.add(sp_val - 16) as *mut i64;
+        let addr_b = memory.add(sp_val - 8) as *const i64;
+        let a = *addr_a;
+        let b = *addr_b;
+        *addr_a = if a > b { -1 } else { 0 };
+        *sp = sp_val - 8;
+    }
+}
+
+/// JIT-callable less than (alias for quarter_less_than): ( a b -- flag )
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_lt(memory: *mut u8, sp: *mut usize, rp: *mut usize) {
+    quarter_less_than(memory, sp, rp);
+}
+
+/// JIT-callable equal comparison: ( a b -- flag )
+/// Pops two values, pushes -1 if a == b, 0 otherwise
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_equal(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 16) {
+            return;
+        }
+        let addr_a = memory.add(sp_val - 16) as *mut i64;
+        let addr_b = memory.add(sp_val - 8) as *const i64;
+        let a = addr_a.read_unaligned();
+        let b = addr_b.read_unaligned();
+        addr_a.write_unaligned(if a == b { -1 } else { 0 });
+        *sp = sp_val - 8;
+    }
+}
+
+/// quarter_negate: ( n -- -n )
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_negate(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 8) {
+            return;
+        }
+        let addr = memory.add(sp_val - 8) as *mut i64;
+        let value = addr.read_unaligned();
+        addr.write_unaligned(-value);
+    }
+}
+
+/// quarter_abs: ( n -- |n| )
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_abs(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 8) {
+            return;
+        }
+        let addr = memory.add(sp_val - 8) as *mut i64;
+        let value = addr.read_unaligned();
+        addr.write_unaligned(value.abs());
+    }
+}
+
+/// quarter_min: ( n1 n2 -- min )
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_min(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 16) {
+            return;
+        }
+        let addr_a = memory.add(sp_val - 16) as *mut i64;
+        let addr_b = memory.add(sp_val - 8) as *const i64;
+        let a = addr_a.read_unaligned();
+        let b = addr_b.read_unaligned();
+        addr_a.write_unaligned(if a < b { a } else { b });
+        *sp = sp_val - 8;
+    }
+}
+
+/// quarter_max: ( n1 n2 -- max )
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_max(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 16) {
+            return;
+        }
+        let addr_a = memory.add(sp_val - 16) as *mut i64;
+        let addr_b = memory.add(sp_val - 8) as *const i64;
+        let a = addr_a.read_unaligned();
+        let b = addr_b.read_unaligned();
+        addr_a.write_unaligned(if a > b { a } else { b });
+        *sp = sp_val - 8;
+    }
+}
+
+/// quarter_1plus: ( n -- n+1 )
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_1plus(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 8) {
+            return;
+        }
+        let addr = memory.add(sp_val - 8) as *mut i64;
+        let value = addr.read_unaligned();
+        addr.write_unaligned(value + 1);
+    }
+}
+
+/// quarter_1minus: ( n -- n-1 )
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_1minus(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 8) {
+            return;
+        }
+        let addr = memory.add(sp_val - 8) as *mut i64;
+        let value = addr.read_unaligned();
+        addr.write_unaligned(value - 1);
+    }
+}
+
+/// quarter_2star: ( n -- n*2 )
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_2star(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 8) {
+            return;
+        }
+        let addr = memory.add(sp_val - 8) as *mut i64;
+        let value = addr.read_unaligned();
+        addr.write_unaligned(value * 2);
+    }
+}
+
+/// quarter_2slash: ( n -- n/2 )
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_2slash(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 8) {
+            return;
+        }
+        let addr = memory.add(sp_val - 8) as *mut i64;
+        let value = addr.read_unaligned();
+        addr.write_unaligned(value / 2);
+    }
+}
+
+// ============================================================================
+// Memory Operations
+// ============================================================================
+
+/// JIT-callable store: ( n addr -- )
+/// Stores n at address addr (8-byte cell)
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_store(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 16) {
+            return;
+        }
+        // Pop addr from sp-8, value from sp-16 using unaligned read
+        let value_ptr = memory.add(sp_val - 16) as *const i64;
+        let addr_ptr = memory.add(sp_val - 8) as *const i64;
+        let value = value_ptr.read_unaligned();
+        let addr = addr_ptr.read_unaligned() as usize;
+
+        // Store value at addr using unaligned write
+        if addr + 8 <= 8 * 1024 * 1024 {  // 8MB bounds check
+            let dest = memory.add(addr) as *mut i64;
+            dest.write_unaligned(value);
+        }
+
+        // Decrement sp by 16 (consumed both values)
+        *sp = sp_val - 16;
+    }
+}
+
+/// JIT-callable fetch: ( addr -- n )
+/// Fetches 8-byte cell from address addr
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_fetch(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 8) {
+            return;
+        }
+        // Pop addr from sp-8 using unaligned read
+        let addr_ptr = memory.add(sp_val - 8) as *const i64;
+        let addr = addr_ptr.read_unaligned() as usize;
+
+        // Fetch value from addr
+        if addr + 8 <= 8 * 1024 * 1024 {
+            let src = memory.add(addr) as *const i64;
+            let value = src.read_unaligned();
+            // Replace addr on stack with value using unaligned write
+            let dest = memory.add(sp_val - 8) as *mut i64;
+            dest.write_unaligned(value);
+        }
+    }
+}
+
+/// JIT-callable c-store: ( c addr -- )
+/// Stores byte c at address addr
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_c_store(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 16) {
+            return;
+        }
+        // Pop addr from sp-8, value from sp-16 using unaligned read
+        let value_ptr = memory.add(sp_val - 16) as *const i64;
+        let addr_ptr = memory.add(sp_val - 8) as *const i64;
+        let value = (value_ptr.read_unaligned() & 0xFF) as u8;
+        let addr = addr_ptr.read_unaligned() as usize;
+
+        // Store byte at addr
+        if addr < 8 * 1024 * 1024 {
+            let dest = memory.add(addr);
+            *dest = value;
+        }
+
+        // Decrement sp by 16
+        *sp = sp_val - 16;
+    }
+}
+
+/// JIT-callable c-fetch: ( addr -- c )
+/// Fetches byte from address addr
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_c_fetch(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 8) {
+            return;
+        }
+        // Pop addr from sp-8 using unaligned read
+        let addr_ptr = memory.add(sp_val - 8) as *const i64;
+        let addr = addr_ptr.read_unaligned() as usize;
+
+        // Fetch byte from addr
+        if addr < 8 * 1024 * 1024 {
+            let byte_val = *memory.add(addr) as i64;
+            // Replace addr on stack with byte value using unaligned write
+            let dest = memory.add(sp_val - 8) as *mut i64;
+            dest.write_unaligned(byte_val);
+        }
+    }
+}
+
+// ============================================================================
+// Bitwise Operations
+// ============================================================================
+
+/// JIT-callable and: ( a b -- a&b )
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_and(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 16) {
+            return;
+        }
+        let addr_a = memory.add(sp_val - 16) as *mut i64;
+        let addr_b = memory.add(sp_val - 8) as *const i64;
+        let a = *addr_a;
+        let b = *addr_b;
+        *addr_a = a & b;
+        *sp = sp_val - 8;
+    }
+}
+
+/// JIT-callable or: ( a b -- a|b )
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_or(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 16) {
+            return;
+        }
+        let addr_a = memory.add(sp_val - 16) as *mut i64;
+        let addr_b = memory.add(sp_val - 8) as *const i64;
+        let a = *addr_a;
+        let b = *addr_b;
+        *addr_a = a | b;
+        *sp = sp_val - 8;
+    }
+}
+
+/// JIT-callable xor: ( a b -- a^b )
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_xor(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 16) {
+            return;
+        }
+        let addr_a = memory.add(sp_val - 16) as *mut i64;
+        let addr_b = memory.add(sp_val - 8) as *const i64;
+        let a = *addr_a;
+        let b = *addr_b;
+        *addr_a = a ^ b;
+        *sp = sp_val - 8;
+    }
+}
+
+/// JIT-callable invert: ( a -- ~a )
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_invert(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 8) {
+            return;
+        }
+        let addr = memory.add(sp_val - 8) as *mut i64;
+        *addr = !*addr;
+    }
+}
+
+/// JIT-callable lshift: ( a u -- a<<u )
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_lshift(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 16) {
+            return;
+        }
+        let addr_a = memory.add(sp_val - 16) as *mut i64;
+        let addr_u = memory.add(sp_val - 8) as *const i64;
+        let a = *addr_a;
+        let u = *addr_u as u32;
+        *addr_a = a << u;
+        *sp = sp_val - 8;
+    }
+}
+
+/// JIT-callable rshift: ( a u -- a>>u )
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_rshift(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 16) {
+            return;
+        }
+        let addr_a = memory.add(sp_val - 16) as *mut i64;
+        let addr_u = memory.add(sp_val - 8) as *const i64;
+        let a = *addr_a;
+        let u = *addr_u as u32;
+        *addr_a = a >> u;
+        *sp = sp_val - 8;
+    }
+}
+
+// ============================================================================
+// Return Stack Operations
+// ============================================================================
+
+/// JIT-callable >R: ( n -- ) (R: -- n)
+/// Moves value from data stack to return stack
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_to_r(memory: *mut u8, sp: *mut usize, rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        let rp_val = *rp;
+
+        if !check_sp_read(sp_val, 8) {
+            return;
+        }
+
+        // Check return stack bounds (return stack is at 0x010000-0x01FFFF)
+        if rp_val + 8 > 0x020000 {
+            return;  // Return stack overflow
+        }
+
+        // Pop from data stack
+        let value_addr = memory.add(sp_val - 8) as *const i64;
+        let value = *value_addr;
+        *sp = sp_val - 8;
+
+        // Push to return stack
+        let r_dest = memory.add(rp_val) as *mut i64;
+        *r_dest = value;
+        *rp = rp_val + 8;
+    }
+}
+
+/// JIT-callable R>: ( -- n ) (R: n -- )
+/// Moves value from return stack to data stack
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_r_from(memory: *mut u8, sp: *mut usize, rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        let rp_val = *rp;
+
+        // Check return stack underflow
+        if rp_val < 0x010000 + 8 {
+            return;  // Return stack underflow
+        }
+
+        // Check data stack bounds
+        if sp_val + 8 > 0x010000 {
+            return;  // Data stack overflow
+        }
+
+        // Pop from return stack
+        let r_addr = memory.add(rp_val - 8) as *const i64;
+        let value = *r_addr;
+        *rp = rp_val - 8;
+
+        // Push to data stack
+        let dest = memory.add(sp_val) as *mut i64;
+        *dest = value;
+        *sp = sp_val + 8;
+    }
+}
+
+/// JIT-callable R@: ( -- n ) (R: n -- n)
+/// Copies top of return stack to data stack
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_r_fetch(memory: *mut u8, sp: *mut usize, rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        let rp_val = *rp;
+
+        // Check return stack underflow
+        if rp_val < 0x010000 + 8 {
+            return;
+        }
+
+        // Check data stack bounds
+        if sp_val + 8 > 0x010000 {
+            return;
+        }
+
+        // Peek from return stack
+        let r_addr = memory.add(rp_val - 8) as *const i64;
+        let value = *r_addr;
+
+        // Push to data stack
+        let dest = memory.add(sp_val) as *mut i64;
+        *dest = value;
+        *sp = sp_val + 8;
+    }
+}
+
+// ============================================================================
+// Additional Stack Operations
+// ============================================================================
+
+/// JIT-callable over: ( a b -- a b a )
+/// Copies second stack item to top
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_over(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 16) {
+            return;
+        }
+        // Read second item (at sp-16) and push it
+        let addr = memory.add(sp_val - 16) as *const i64;
+        let value = addr.read_unaligned();
+        let dest = memory.add(sp_val) as *mut i64;
+        dest.write_unaligned(value);
+        *sp = sp_val + 8;
+    }
+}
+
+/// JIT-callable rot: ( a b c -- b c a )
+/// Rotates top three stack items
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_rot(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 24) {
+            return;
+        }
+        // Read a (sp-24), b (sp-16), c (sp-8)
+        let addr_a = memory.add(sp_val - 24) as *mut i64;
+        let addr_b = memory.add(sp_val - 16) as *mut i64;
+        let addr_c = memory.add(sp_val - 8) as *mut i64;
+        let a = addr_a.read_unaligned();
+        let b = addr_b.read_unaligned();
+        let c = addr_c.read_unaligned();
+        // Write b, c, a
+        addr_a.write_unaligned(b);
+        addr_b.write_unaligned(c);
+        addr_c.write_unaligned(a);
+    }
+}
+
+/// JIT-callable pick: ( ... n -- ... xn )
+/// Copies nth stack item to top (0=top)
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_pick(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 8) {
+            return;
+        }
+        let n_ptr = memory.add(sp_val - 8) as *const i64;
+        let n = n_ptr.read_unaligned();
+
+        let offset = ((n + 1) * 8) as usize;
+        if !check_sp_read(sp_val, offset) {
+            return;
+        }
+
+        let src_addr = memory.add(sp_val - offset) as *const i64;
+        let value = src_addr.read_unaligned();
+        // Replace n with the picked value
+        let dest = memory.add(sp_val - 8) as *mut i64;
+        dest.write_unaligned(value);
+    }
+}
+
+/// JIT-callable depth: ( -- n )
+/// Returns number of items on stack
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_depth(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        let depth = sp_val / 8;  // Each cell is 8 bytes
+        let dest = memory.add(sp_val) as *mut i64;
+        dest.write_unaligned(depth as i64);
+        *sp = sp_val + 8;
+    }
+}
+
+// ============================================================================
+// Arithmetic Operations
+// ============================================================================
+
+/// JIT-callable /mod: ( n1 n2 -- remainder quotient )
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_slash_mod(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 16) {
+            return;
+        }
+        let addr_n1 = memory.add(sp_val - 16) as *mut i64;
+        let addr_n2 = memory.add(sp_val - 8) as *const i64;
+        let n1 = addr_n1.read_unaligned();
+        let n2 = addr_n2.read_unaligned();
+
+        if n2 != 0 {
+            let remainder = n1 % n2;
+            let quotient = n1 / n2;
+            addr_n1.write_unaligned(remainder);
+            let quot_addr = memory.add(sp_val - 8) as *mut i64;
+            quot_addr.write_unaligned(quotient);
+        }
+    }
+}
+
+// ============================================================================
+// Loop Access
+// ============================================================================
+
+/// JIT-callable i: ( -- n ) (L: index limit -- index limit)
+/// Returns current loop index
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_i(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    // Note: This needs loop stack access which isn't passed to JIT functions
+    // For now, mark as unimplemented - this will need special handling
+    unsafe {
+        let sp_val = *sp;
+        let dest = memory.add(sp_val) as *mut i64;
+        dest.write_unaligned(0);  // Placeholder
+        *sp = sp_val + 8;
+    }
+}
+
+/// JIT-callable j: ( -- n ) (L: ... outer_index outer_limit ... -- ...)
+/// Returns outer loop index
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_j(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    // Note: Same issue as quarter_i - needs loop stack access
+    unsafe {
+        let sp_val = *sp;
+        let dest = memory.add(sp_val) as *mut i64;
+        dest.write_unaligned(0);  // Placeholder
+        *sp = sp_val + 8;
+    }
+}
+
+// ============================================================================
+// I/O Operations
+// ============================================================================
+
+/// JIT-callable emit: ( c -- )
+/// Outputs character
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_emit(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 8) {
+            return;
+        }
+        let addr = memory.add(sp_val - 8) as *const i64;
+        let code = addr.read_unaligned() as u32;
+        if let Some(ch) = char::from_u32(code) {
+            print!("{}", ch);
+        }
+        *sp = sp_val - 8;
+    }
+}
+
+/// JIT-callable key: ( -- c )
+/// Reads character (placeholder - needs proper I/O handling)
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_key(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        let dest = memory.add(sp_val) as *mut i64;
+        dest.write_unaligned(0);  // Placeholder
+        *sp = sp_val + 8;
+    }
+}
+
+/// JIT-callable cr: ( -- )
+/// Outputs newline
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_cr(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    print!("\n");
+    let _ = (memory, sp, _rp);  // Suppress warnings
+}
+
+/// JIT-callable dot: ( n -- )
+/// Prints number
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_dot(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 8) {
+            return;
+        }
+        let addr = memory.add(sp_val - 8) as *const i64;
+        let value = addr.read_unaligned();
+        print!("{} ", value);
+        *sp = sp_val - 8;
+    }
+}
+
+/// JIT-callable u_dot: ( u -- )
+/// Prints unsigned number
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_u_dot(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 8) {
+            return;
+        }
+        let addr = memory.add(sp_val - 8) as *const i64;
+        let value = addr.read_unaligned();
+        let unsigned_value = value as u64;
+        print!("{} ", unsigned_value);
+        *sp = sp_val - 8;
+    }
+}
+
+/// JIT-callable dot_r: ( n width -- )
+/// Prints number right-justified in field of width
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_dot_r(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 16) {
+            return;
+        }
+        let value_addr = memory.add(sp_val - 16) as *const i64;
+        let width_addr = memory.add(sp_val - 8) as *const i64;
+        let value = value_addr.read_unaligned();
+        let width = width_addr.read_unaligned() as usize;
+
+        let num_str = value.to_string();
+        if num_str.len() < width {
+            print!("{:>width$} ", num_str, width = width);
+        } else {
+            print!("{} ", num_str);
+        }
+        *sp = sp_val - 16;
+    }
+}
+
+/// JIT-callable u_dot_r: ( u width -- )
+/// Prints unsigned number right-justified in field of width
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_u_dot_r(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 16) {
+            return;
+        }
+        let value_addr = memory.add(sp_val - 16) as *const i64;
+        let width_addr = memory.add(sp_val - 8) as *const i64;
+        let value = value_addr.read_unaligned();
+        let width = width_addr.read_unaligned() as usize;
+
+        let unsigned_value = value as u64;
+        let num_str = unsigned_value.to_string();
+        if num_str.len() < width {
+            print!("{:>width$} ", num_str, width = width);
+        } else {
+            print!("{} ", num_str);
+        }
+        *sp = sp_val - 16;
+    }
+}
+
+/// JIT-callable type: ( addr len -- )
+/// Prints string from memory
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_type(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 16) {
+            return;
+        }
+        let addr_ptr = memory.add(sp_val - 16) as *const i64;
+        let len_ptr = memory.add(sp_val - 8) as *const i64;
+        let addr = addr_ptr.read_unaligned() as usize;
+        let len = len_ptr.read_unaligned();
+
+        if len < 0 {
+            eprintln!("TYPE: negative length");
+            *sp = sp_val - 16;
+            return;
+        }
+
+        let len = len as usize;
+        // Print each character from memory
+        for i in 0..len {
+            if addr + i < 8 * 1024 * 1024 {
+                let byte_ptr = memory.add(addr + i);
+                let byte = *byte_ptr;
+                if let Some(ch) = char::from_u32(byte as u32) {
+                    print!("{}", ch);
+                }
+            }
+        }
+        *sp = sp_val - 16;
+    }
+}
+
+// ============================================================================
+// Stack Pointer and Memory Allocation Primitives
+// ============================================================================
+
+/// JIT-callable sp_fetch: ( -- addr )
+/// Push current stack pointer onto stack
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_sp_fetch(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        // Push sp value onto stack
+        let dest = memory.add(sp_val) as *mut i64;
+        dest.write_unaligned(sp_val as i64);
+        *sp = sp_val + 8;
+    }
+}
+
+/// JIT-callable sp_store: ( addr -- )
+/// Set stack pointer from top of stack
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_sp_store(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 8) {
+            return;
+        }
+        // Pop addr and set sp to it
+        let addr_ptr = memory.add(sp_val - 8) as *const i64;
+        let new_sp = addr_ptr.read_unaligned() as usize;
+        *sp = new_sp;
+    }
+}
+
+/// JIT-callable rp_fetch: ( -- addr )
+/// Push current return stack pointer onto data stack
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_rp_fetch(memory: *mut u8, sp: *mut usize, rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        let rp_val = *rp;
+        // Push rp value onto data stack
+        let dest = memory.add(sp_val) as *mut i64;
+        dest.write_unaligned(rp_val as i64);
+        *sp = sp_val + 8;
+    }
+}
+
+/// JIT-callable rp_store: ( addr -- )
+/// Set return stack pointer from top of data stack
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_rp_store(memory: *mut u8, sp: *mut usize, rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 8) {
+            return;
+        }
+        // Pop addr and set rp to it
+        let addr_ptr = memory.add(sp_val - 8) as *const i64;
+        let new_rp = addr_ptr.read_unaligned() as usize;
+        *sp = sp_val - 8;
+        *rp = new_rp;
+    }
+}
+
+/// JIT-callable here: ( -- addr )
+/// Push current dictionary pointer
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_here(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        // Read dp from fixed memory location (0x01FFF8)
+        const DP_ADDR: usize = 0x01FFF8;
+        let dp_ptr = memory.add(DP_ADDR) as *const i64;
+        let dp_val = dp_ptr.read_unaligned();
+
+        // Push dp onto stack
+        let sp_val = *sp;
+        let dest = memory.add(sp_val) as *mut i64;
+        dest.write_unaligned(dp_val);
+        *sp = sp_val + 8;
+    }
+}
+
+/// JIT-callable allot: ( n -- )
+/// Allocate n bytes in dictionary space
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_allot(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 8) {
+            return;
+        }
+
+        // Pop n from stack
+        let n_ptr = memory.add(sp_val - 8) as *const i64;
+        let n = n_ptr.read_unaligned();
+        *sp = sp_val - 8;
+
+        // Read current dp from memory
+        const DP_ADDR: usize = 0x01FFF8;
+        let dp_ptr = memory.add(DP_ADDR) as *mut i64;
+        let dp_val = dp_ptr.read_unaligned();
+
+        // Calculate new dp
+        let new_dp = dp_val + n;
+
+        // Check for overflow (8MB limit)
+        if new_dp >= 8 * 1024 * 1024 {
+            eprintln!("Dictionary overflow");
+            return;
+        }
+
+        // Write new dp back to memory
+        dp_ptr.write_unaligned(new_dp);
+    }
+}
+
+/// JIT-callable comma: ( n -- )
+/// Store n at HERE and advance dictionary pointer by 8 bytes
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_comma(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 8) {
+            return;
+        }
+
+        // Pop n from stack
+        let n_ptr = memory.add(sp_val - 8) as *const i64;
+        let n = n_ptr.read_unaligned();
+        *sp = sp_val - 8;
+
+        // Read current dp from memory
+        const DP_ADDR: usize = 0x01FFF8;
+        let dp_ptr = memory.add(DP_ADDR) as *mut i64;
+        let dp_val = dp_ptr.read_unaligned();
+
+        // Store n at dp
+        if dp_val >= 0 && (dp_val as usize + 8) <= 8 * 1024 * 1024 {
+            let dest = memory.add(dp_val as usize) as *mut i64;
+            dest.write_unaligned(n);
+
+            // Advance dp by 8 bytes
+            let new_dp = dp_val + 8;
+            dp_ptr.write_unaligned(new_dp);
+        }
+    }
+}
+
 // ============================================================================
 // LLVM Primitives for Self-Hosting Compiler
 // ============================================================================

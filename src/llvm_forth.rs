@@ -7,6 +7,79 @@ use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::builder::Builder;
 use inkwell::execution_engine::ExecutionEngine;
+
+// Force quarter_ symbols to be included in binary
+// This function references all quarter_ functions so the linker includes them
+#[inline(never)]
+fn register_quarter_symbols() -> usize {
+    let symbols = [
+        // Stack operations
+        crate::words::quarter_dup as usize,
+        crate::words::quarter_drop as usize,
+        crate::words::quarter_swap as usize,
+        crate::words::quarter_over as usize,
+        crate::words::quarter_rot as usize,
+        crate::words::quarter_pick as usize,
+        crate::words::quarter_depth as usize,
+        // Arithmetic
+        crate::words::quarter_add as usize,
+        crate::words::quarter_sub as usize,
+        crate::words::quarter_mul as usize,
+        crate::words::quarter_div as usize,
+        crate::words::quarter_slash_mod as usize,
+        crate::words::quarter_negate as usize,
+        crate::words::quarter_abs as usize,
+        // Comparison
+        crate::words::quarter_less_than as usize,
+        crate::words::quarter_lt as usize,
+        crate::words::quarter_gt as usize,
+        crate::words::quarter_equal as usize,
+        crate::words::quarter_min as usize,
+        crate::words::quarter_max as usize,
+        crate::words::quarter_1plus as usize,
+        crate::words::quarter_1minus as usize,
+        crate::words::quarter_2star as usize,
+        crate::words::quarter_2slash as usize,
+        // Memory operations
+        crate::words::quarter_store as usize,
+        crate::words::quarter_fetch as usize,
+        crate::words::quarter_c_store as usize,
+        crate::words::quarter_c_fetch as usize,
+        // Bitwise operations
+        crate::words::quarter_and as usize,
+        crate::words::quarter_or as usize,
+        crate::words::quarter_xor as usize,
+        crate::words::quarter_invert as usize,
+        crate::words::quarter_lshift as usize,
+        crate::words::quarter_rshift as usize,
+        // Return stack operations
+        crate::words::quarter_to_r as usize,
+        crate::words::quarter_r_from as usize,
+        crate::words::quarter_r_fetch as usize,
+        // Loop access
+        crate::words::quarter_i as usize,
+        crate::words::quarter_j as usize,
+        // I/O operations
+        crate::words::quarter_emit as usize,
+        crate::words::quarter_key as usize,
+        crate::words::quarter_cr as usize,
+        crate::words::quarter_dot as usize,
+        crate::words::quarter_u_dot as usize,
+        crate::words::quarter_dot_r as usize,
+        crate::words::quarter_u_dot_r as usize,
+        crate::words::quarter_type as usize,
+        // Stack pointers
+        crate::words::quarter_sp_fetch as usize,
+        crate::words::quarter_sp_store as usize,
+        crate::words::quarter_rp_fetch as usize,
+        crate::words::quarter_rp_store as usize,
+        // Memory allocation
+        crate::words::quarter_here as usize,
+        crate::words::quarter_allot as usize,
+        crate::words::quarter_comma as usize,
+    ];
+    symbols[0] // Return something to prevent optimization
+}
 use inkwell::values::{FunctionValue, BasicValueEnum, PhiValue, BasicValue};
 use inkwell::basic_block::BasicBlock;
 use inkwell::types::BasicType;
@@ -247,11 +320,13 @@ impl LLVMRegistry {
         let engine = module.create_jit_execution_engine(OptimizationLevel::Aggressive)
             .map_err(|e| format!("Failed to create JIT engine: {}", e))?;
 
+        // Call function to ensure quarter_ symbols are included in binary
+        // LLVM MCJIT on macOS should then automatically resolve them from the current process
+        let _ = register_quarter_symbols();
+
         let handle = self.next_handle();
         self.engines.insert(handle, Box::new(engine));
 
-        // Put module back (engine owns it but we need to keep reference)
-        // Actually, ExecutionEngine takes ownership of module, so we can't put it back
         Ok(handle)
     }
 
