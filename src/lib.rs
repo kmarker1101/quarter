@@ -10,6 +10,10 @@ pub use dictionary::Dictionary;
 pub use stack::Stack;
 
 use std::fs;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Track whether the Forth compiler has been loaded
+static FORTH_COMPILER_LOADED: AtomicBool = AtomicBool::new(false);
 
 // Embedded standard library files
 const CORE_FTH: &str = include_str!("../stdlib/core.fth");
@@ -144,6 +148,10 @@ impl ReturnStack {
 // 0x000000-0x00FFFF: Data Stack (64KB)
 // 0x010000-0x01FFFF: Return Stack (64KB)
 // 0x020000-0x7FFFFF: User Memory and Dictionary (~7.5MB)
+
+// Fixed memory location for dictionary pointer (8 bytes before user memory)
+const DP_ADDR: usize = 0x01FFF8;
+
 #[derive(Debug)]
 pub struct Memory {
     bytes: Vec<u8>,
@@ -158,10 +166,41 @@ impl Default for Memory {
 
 impl Memory {
     pub fn new() -> Self {
-        Memory {
+        let mut memory = Memory {
             bytes: vec![0; 8 * 1024 * 1024], // 8MB like gforth
             dp: 0x020000,                    // Start dictionary at beginning of user memory
-        }
+        };
+        // Sync dp to memory
+        memory.sync_dp_to_memory();
+        memory
+    }
+
+    // Sync dictionary pointer to fixed memory location
+    fn sync_dp_to_memory(&mut self) {
+        let bytes = (self.dp as i64).to_le_bytes();
+        self.bytes[DP_ADDR] = bytes[0];
+        self.bytes[DP_ADDR + 1] = bytes[1];
+        self.bytes[DP_ADDR + 2] = bytes[2];
+        self.bytes[DP_ADDR + 3] = bytes[3];
+        self.bytes[DP_ADDR + 4] = bytes[4];
+        self.bytes[DP_ADDR + 5] = bytes[5];
+        self.bytes[DP_ADDR + 6] = bytes[6];
+        self.bytes[DP_ADDR + 7] = bytes[7];
+    }
+
+    // Read dictionary pointer from memory (for JIT)
+    pub fn read_dp_from_memory(&self) -> usize {
+        let bytes = [
+            self.bytes[DP_ADDR],
+            self.bytes[DP_ADDR + 1],
+            self.bytes[DP_ADDR + 2],
+            self.bytes[DP_ADDR + 3],
+            self.bytes[DP_ADDR + 4],
+            self.bytes[DP_ADDR + 5],
+            self.bytes[DP_ADDR + 6],
+            self.bytes[DP_ADDR + 7],
+        ];
+        i64::from_le_bytes(bytes) as usize
     }
 
     // HERE - return current dictionary pointer
@@ -176,6 +215,8 @@ impl Memory {
             return Err("Dictionary overflow".to_string());
         }
         self.dp = new_dp;
+        // Sync to memory so JIT code can access it
+        self.sync_dp_to_memory();
         Ok(())
     }
 
@@ -593,6 +634,7 @@ pub fn load_file(
     no_jit: bool,
     dump_ir: bool,
     verify_ir: bool,
+    use_forth_compiler: bool,
 ) -> Result<(), String> {
     let contents = fs::read_to_string(filename).map_err(|e| format!("Cannot read file: {}", e))?;
 
@@ -620,6 +662,7 @@ pub fn load_file(
         no_jit,
         dump_ir,
         verify_ir,
+        use_forth_compiler,
     )?;
 
     Ok(())
@@ -636,6 +679,7 @@ pub fn execute_line(
     no_jit: bool,
     dump_ir: bool,
     verify_ir: bool,
+    use_forth_compiler: bool,
 ) -> Result<(), String> {
     // Strip comments from input
     let input = strip_comments(input);
@@ -666,6 +710,7 @@ pub fn execute_line(
                 no_jit,
                 dump_ir,
                 verify_ir,
+                use_forth_compiler,
             )?;
             i += 2;
         } else if token_upper == ":" {
@@ -691,8 +736,19 @@ pub fn execute_line(
                 // Validate that all words in the AST exist (allow forward reference for recursion)
                 ast.validate_with_name(dict, Some(&word_name))?;
 
-                // Add word to dictionary in interpreted mode
-                // JIT compilation is handled in main.rs via try_forth_compile
+                // Try JIT compilation if enabled
+                let is_redefinition = dict.has_word(&word_name);
+                if use_forth_compiler && !is_redefinition {
+                    // Try to JIT compile - if successful, try_forth_compile will add it to dict
+                    // If it fails, we fall back to interpreted mode below
+                    if crate::try_forth_compile_word(word_name.clone(), &ast, dict, stack, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir) {
+                        // JIT compilation succeeded, word is already in dictionary
+                        i = end + 1;
+                        continue;
+                    }
+                }
+
+                // Add word to dictionary in interpreted mode (fallback or default)
                 dict.add_compiled(word_name, ast);
                 i = end + 1;
             } else {
@@ -773,6 +829,7 @@ pub fn execute_line(
                 no_jit,
                 dump_ir,
                 verify_ir,
+                use_forth_compiler,
             )?;
             i += 1;
         } else {
@@ -851,6 +908,7 @@ pub fn load_stdlib(
     no_jit: bool,
     dump_ir: bool,
     verify_ir: bool,
+    use_forth_compiler: bool,
 ) -> Result<(), String> {
     // Load core definitions
     let core_processed = process_stdlib_content(CORE_FTH);
@@ -864,6 +922,7 @@ pub fn load_stdlib(
         no_jit,
         dump_ir,
         verify_ir,
+        use_forth_compiler,
     )?;
 
     // TODO: Load test framework - currently has issues with DEPTH in loops
@@ -875,4 +934,91 @@ pub fn load_stdlib(
     // execute_line(&tests_processed, stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir)?;
 
     Ok(())
+}
+
+/// Attempt to compile a word using the Forth self-hosting compiler
+/// Loads the compiler if not already loaded
+/// Returns true if successful, false otherwise
+pub fn try_forth_compile_word(
+    name: String,
+    ast: &AstNode,
+    dict: &mut Dictionary,
+    stack: &mut Stack,
+    loop_stack: &mut LoopStack,
+    return_stack: &mut ReturnStack,
+    memory: &mut Memory,
+    no_jit: bool,
+    dump_ir: bool,
+    verify_ir: bool,
+) -> bool {
+    // Load the Forth compiler if not already loaded
+    if !FORTH_COMPILER_LOADED.load(Ordering::Relaxed) {
+        // Load stdlib first
+        if let Err(e) = load_file("stdlib/core.fth", stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir, false) {
+            eprintln!("Failed to load stdlib for Forth compiler: {}", e);
+            return false;
+        }
+        // Load compiler
+        if let Err(e) = load_file("forth/compiler.fth", stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir, false) {
+            eprintln!("Failed to load Forth compiler: {}", e);
+            return false;
+        }
+        FORTH_COMPILER_LOADED.store(true, Ordering::Relaxed);
+    }
+
+    // Register the AST
+    use crate::ast_forth::ast_register_node;
+    let ast_handle = ast_register_node(ast.clone());
+
+    // Write word name to memory at address 302000
+    let name_addr = 302000;
+    for (i, ch) in name.bytes().enumerate() {
+        if let Err(_) = memory.store_byte(name_addr + i, ch as i64) {
+            return false;
+        }
+    }
+
+    // Save stack pointer in case compilation fails
+    let saved_sp = stack.get_sp();
+
+    // Push arguments for COMPILE-WORD: ( ast-handle name-addr name-len -- fn-ptr )
+    stack.push(ast_handle, memory);
+    stack.push(name_addr as i64, memory);
+    stack.push(name.len() as i64, memory);
+
+    // Execute COMPILE-WORD
+    if let Err(e) = dict.execute_word("COMPILE-WORD", stack, loop_stack, return_stack, memory) {
+        eprintln!("Forth compiler error: {}", e);
+        // Restore stack pointer on failure
+        stack.set_sp(saved_sp);
+        return false;
+    }
+
+    // Get function pointer from stack (two 32-bit values: high, then low)
+    if let (Some(fn_ptr_high), Some(fn_ptr_low)) = (stack.pop(memory), stack.pop(memory)) {
+        // Reconstruct 64-bit pointer from two 32-bit values
+        let fn_ptr = ((fn_ptr_high as u64) << 32) | ((fn_ptr_low as u64) & 0xFFFFFFFF);
+
+        // Validate pointer is not null
+        if fn_ptr == 0 {
+            eprintln!("ERROR: Forth compiler returned NULL function pointer!");
+            // Restore stack pointer on failure
+            stack.set_sp(saved_sp);
+            return false;
+        }
+
+        // Cast to JITFunction
+        let jit_fn: crate::dictionary::JITFunction = unsafe {
+            std::mem::transmute(fn_ptr as *const ())
+        };
+
+        // Register in dictionary
+        dict.add_jit_compiled(name.clone(), jit_fn);
+        return true;
+    }
+
+    eprintln!("ERROR: No function pointer on stack after COMPILE-WORD!");
+    // Restore stack pointer on failure
+    stack.set_sp(saved_sp);
+    false
 }

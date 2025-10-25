@@ -14,7 +14,7 @@
 \ =============================================================================
 
 : 0= ( n -- flag ) IF FALSE ELSE TRUE THEN ;
-: = ( n1 n2 -- flag ) - 0= ;
+\ = is now a primitive with JIT wrapper
 : 0< ( n -- flag ) 0 < ;
 : 0> ( n -- flag ) 0 > ;
 : <> ( n1 n2 -- flag ) = 0= ;
@@ -40,13 +40,10 @@
 \ ARITHMETIC
 \ =============================================================================
 
-: NEGATE ( n1 -- n2 ) 0 SWAP - ;
-: ABS ( n -- +n ) DUP 0 < IF NEGATE THEN ;
+\ NEGATE, ABS, MIN, MAX, 1+, 1-, 2*, 2/ are now primitives with JIT wrappers
 : CELLS ( n -- n ) 8 * ;
 : CELL+ ( a-addr1 -- a-addr2 ) 8 + ;
 : +! ( n addr -- ) DUP @ ROT + SWAP ! ;
-: 1+ ( n -- n+1 ) 1 + ;
-: 1- ( n -- n-1 ) 1 - ;
 : 2+ ( n -- n+2 ) 2 + ;
 : 3+ ( n -- n+3 ) 3 + ;
 : 4+ ( n -- n+4 ) 4 + ;
@@ -57,11 +54,6 @@
 : 9+ ( n -- n+9 ) 9 + ;
 : 10+ ( n -- n+10 ) 10 + ;
 : 11+ ( n -- n+11 ) 11 + ;
-: 2* ( n -- n*2 ) 2 * ;
-: 2/ ( n -- n/2 ) 2 / ;
-
-: MIN ( n1 n2 -- n ) 2DUP > IF SWAP THEN DROP ;
-: MAX ( n1 n2 -- n ) 2DUP < IF SWAP THEN DROP ;
 
 : MOD ( n1 n2 -- remainder ) /MOD DROP ;
 

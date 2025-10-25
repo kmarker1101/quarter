@@ -19,6 +19,7 @@ fn test_u_dot() {
         false,
         false,
         false,
+        false,
     )
     .unwrap();
     assert!(stack.is_empty());
@@ -31,6 +32,7 @@ fn test_u_dot() {
         &mut loop_stack,
         &mut return_stack,
         &mut memory,
+        false,
         false,
         false,
         false,
@@ -58,6 +60,7 @@ fn test_dot_r() {
         false,
         false,
         false,
+        false,
     )
     .unwrap();
     assert!(stack.is_empty());
@@ -73,6 +76,7 @@ fn test_dot_r() {
         false,
         false,
         false,
+        false,
     )
     .unwrap();
     assert!(stack.is_empty());
@@ -85,6 +89,7 @@ fn test_dot_r() {
         &mut loop_stack,
         &mut return_stack,
         &mut memory,
+        false,
         false,
         false,
         false,
@@ -112,6 +117,7 @@ fn test_u_dot_r() {
         false,
         false,
         false,
+        false,
     )
     .unwrap();
     assert!(stack.is_empty());
@@ -124,6 +130,7 @@ fn test_u_dot_r() {
         &mut loop_stack,
         &mut return_stack,
         &mut memory,
+        false,
         false,
         false,
         false,

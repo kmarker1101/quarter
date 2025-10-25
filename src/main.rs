@@ -27,16 +27,20 @@ fn try_forth_compile(
 
     // Load the Forth compiler if not already loaded
     if !FORTH_COMPILER_LOADED.load(Ordering::Relaxed) {
-        // Load stdlib first
-        if let Err(e) = load_file("stdlib/core.fth", stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir) {
-            eprintln!("Failed to load stdlib for Forth compiler: {}", e);
-            return false;
-        }
+        // Stdlib is already loaded by main(), no need to reload it here
         // Load compiler
-        if let Err(e) = load_file("forth/compiler.fth", stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir) {
+        if let Err(e) = load_file("forth/compiler.fth", stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir, false) {
             eprintln!("Failed to load Forth compiler: {}", e);
             return false;
         }
+
+        // Now that compiler is loaded, recompile stdlib words to JIT-compiled versions
+        // This replaces the interpreted versions with native code
+        if let Err(e) = quarter::load_stdlib(stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir, true) {
+            eprintln!("Warning: Failed to JIT-compile stdlib: {}", e);
+            // Continue anyway with interpreted stdlib
+        }
+
         FORTH_COMPILER_LOADED.store(true, Ordering::Relaxed);
     }
 
@@ -132,8 +136,8 @@ fn main() {
         println!("Using Forth self-hosting compiler");
     }
 
-    // Load standard library
-    if let Err(e) = load_stdlib(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, no_jit, dump_ir, verify_ir) {
+    // Load standard library initially as interpreted (will be recompiled later if using Forth compiler)
+    if let Err(e) = load_stdlib(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, no_jit, dump_ir, verify_ir, false) {
         eprintln!("Error loading stdlib: {}", e);
         std::process::exit(1);
     }
@@ -144,7 +148,7 @@ fn main() {
     // Supported extensions: .qtr, .fth, .forth, .quarter
     if let Some(file) = filename {
         println!("Loading {}", file);
-        match load_file(&file, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, no_jit, dump_ir, verify_ir) {
+        match load_file(&file, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, no_jit, dump_ir, verify_ir, use_forth_compiler) {
             Ok(_) => {
                 return;
             }
@@ -264,7 +268,7 @@ fn main() {
                     }
 
                     let filename = tokens[1];
-                    match load_file(filename, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, no_jit, dump_ir, verify_ir) {
+                    match load_file(filename, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, no_jit, dump_ir, verify_ir, use_forth_compiler) {
                         Ok(_) => {
                             println!("ok");
                         }
@@ -403,7 +407,7 @@ fn main() {
                     let s_quote_end = tokens.iter().position(|&t| t.ends_with('"') && t != "S\"");
                     if let Some(_end_idx) = s_quote_end {
                         let all_tokens_str = tokens.join(" ");
-                        match quarter::execute_line(&all_tokens_str, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, no_jit, dump_ir, verify_ir) {
+                        match quarter::execute_line(&all_tokens_str, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, no_jit, dump_ir, verify_ir, use_forth_compiler) {
                             Ok(_) => println!("ok"),
                             Err(e) => println!("{}", e),
                         }
