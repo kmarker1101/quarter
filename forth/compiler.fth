@@ -891,6 +891,70 @@ VARIABLE PARAM-RP      \ rp pointer parameter
     \ Push result back to stack
     COMPILE-PUSH ;
 
+\ Emit inline AND: pop b, pop a, push (a AND b)
+\ ( -- )
+: EMIT-INLINE-AND
+    COMPILE-POP  \ b
+    COMPILE-POP  \ a
+    CURRENT-BUILDER @ ROT ROT LLVM-BUILD-AND
+    COMPILE-PUSH ;
+
+\ Emit inline OR: pop b, pop a, push (a OR b)
+\ ( -- )
+: EMIT-INLINE-OR
+    COMPILE-POP  \ b
+    COMPILE-POP  \ a
+    CURRENT-BUILDER @ ROT ROT LLVM-BUILD-OR
+    COMPILE-PUSH ;
+
+\ Emit inline XOR: pop b, pop a, push (a XOR b)
+\ ( -- )
+: EMIT-INLINE-XOR
+    COMPILE-POP  \ b
+    COMPILE-POP  \ a
+    CURRENT-BUILDER @ ROT ROT LLVM-BUILD-XOR
+    COMPILE-PUSH ;
+
+\ Emit inline INVERT: pop a, push (NOT a) via (a XOR -1)
+\ ( -- )
+: EMIT-INLINE-INVERT
+    COMPILE-POP  \ a
+    \ Build constant -1 (all bits set)
+    CURRENT-CTX @ -1 64 LLVM-BUILD-CONST-INT
+    \ XOR with -1 to flip all bits
+    CURRENT-BUILDER @ ROT ROT LLVM-BUILD-XOR
+    COMPILE-PUSH ;
+
+\ Emit inline LSHIFT: pop b, pop a, push (a << b)
+\ ( -- )
+: EMIT-INLINE-LSHIFT
+    COMPILE-POP  \ b (shift amount, second operand)
+    COMPILE-POP  \ a (value to shift, first operand)
+    \ Stack: ( b-handle a-handle )
+
+    \ Swap to get correct order for shift
+    SWAP
+    \ Stack: ( a-handle b-handle )
+
+    \ Shift left: a << b
+    CURRENT-BUILDER @ -ROT LLVM-BUILD-SHL
+    COMPILE-PUSH ;
+
+\ Emit inline RSHIFT: pop b, pop a, push (a >> b)
+\ ( -- )
+: EMIT-INLINE-RSHIFT
+    COMPILE-POP  \ b (shift amount, second operand)
+    COMPILE-POP  \ a (value to shift, first operand)
+    \ Stack: ( b-handle a-handle )
+
+    \ Swap to get correct order for shift
+    SWAP
+    \ Stack: ( a-handle b-handle )
+
+    \ Shift right: a >> b
+    CURRENT-BUILDER @ -ROT LLVM-BUILD-ASHR
+    COMPILE-PUSH ;
+
 \ =============================================================================
 \ AST COMPILATION
 \ =============================================================================
@@ -1210,6 +1274,74 @@ VARIABLE PARAM-RP      \ rp pointer parameter
         WORD-NAME-BUFFER OVER COMPILER-SCRATCH 6 STRING-EQUALS? IF
             DROP  \ Drop name-len
             EMIT-INLINE-NEGATE
+            EXIT
+        THEN
+
+        \ Check for 'AND'
+        65 COMPILER-SCRATCH C!     \ A
+        78 COMPILER-SCRATCH 1 + C! \ N
+        68 COMPILER-SCRATCH 2 + C! \ D
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 3 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-AND
+            EXIT
+        THEN
+
+        \ Check for 'OR'
+        79 COMPILER-SCRATCH C!     \ O
+        82 COMPILER-SCRATCH 1 + C! \ R
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 2 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-OR
+            EXIT
+        THEN
+
+        \ Check for 'XOR'
+        88 COMPILER-SCRATCH C!     \ X
+        79 COMPILER-SCRATCH 1 + C! \ O
+        82 COMPILER-SCRATCH 2 + C! \ R
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 3 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-XOR
+            EXIT
+        THEN
+
+        \ Check for 'INVERT'
+        73  COMPILER-SCRATCH C!     \ I
+        78  COMPILER-SCRATCH 1 + C! \ N
+        86  COMPILER-SCRATCH 2 + C! \ V
+        69  COMPILER-SCRATCH 3 + C! \ E
+        82  COMPILER-SCRATCH 4 + C! \ R
+        84  COMPILER-SCRATCH 5 + C! \ T
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 6 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-INVERT
+            EXIT
+        THEN
+
+        \ Check for 'LSHIFT'
+        76  COMPILER-SCRATCH C!     \ L
+        83  COMPILER-SCRATCH 1 + C! \ S
+        72  COMPILER-SCRATCH 2 + C! \ H
+        73  COMPILER-SCRATCH 3 + C! \ I
+        70  COMPILER-SCRATCH 4 + C! \ F
+        84  COMPILER-SCRATCH 5 + C! \ T
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 6 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-LSHIFT
+            EXIT
+        THEN
+
+        \ Check for 'RSHIFT'
+        82  COMPILER-SCRATCH C!     \ R
+        83  COMPILER-SCRATCH 1 + C! \ S
+        72  COMPILER-SCRATCH 2 + C! \ H
+        73  COMPILER-SCRATCH 3 + C! \ I
+        70  COMPILER-SCRATCH 4 + C! \ F
+        84  COMPILER-SCRATCH 5 + C! \ T
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 6 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-RSHIFT
             EXIT
         THEN
 

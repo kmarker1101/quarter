@@ -116,6 +116,11 @@ impl Dictionary {
         dict.add_primitive("LLVM-BUILD-MUL", words::llvm_build_mul_word);
         dict.add_primitive("LLVM-BUILD-SDIV", words::llvm_build_sdiv_word);
         dict.add_primitive("LLVM-BUILD-SREM", words::llvm_build_srem_word);
+        dict.add_primitive("LLVM-BUILD-AND", words::llvm_build_and_word);
+        dict.add_primitive("LLVM-BUILD-OR", words::llvm_build_or_word);
+        dict.add_primitive("LLVM-BUILD-XOR", words::llvm_build_xor_word);
+        dict.add_primitive("LLVM-BUILD-SHL", words::llvm_build_shl_word);
+        dict.add_primitive("LLVM-BUILD-ASHR", words::llvm_build_ashr_word);
         dict.add_primitive("LLVM-BUILD-BR", words::llvm_build_br_word);
         dict.add_primitive("LLVM-BUILD-COND-BR", words::llvm_build_cond_br_word);
         dict.add_primitive("LLVM-BUILD-ICMP", words::llvm_build_icmp_word);

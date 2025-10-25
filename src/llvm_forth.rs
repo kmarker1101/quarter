@@ -594,6 +594,126 @@ impl LLVMRegistry {
         Ok(handle)
     }
 
+    /// Build bitwise AND instruction
+    pub fn build_and(&mut self,
+                    builder_handle: BuilderHandle,
+                    lhs_handle: ValueHandle,
+                    rhs_handle: ValueHandle) -> Result<ValueHandle, String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let lhs = self.values.get(&lhs_handle)
+            .ok_or_else(|| format!("Invalid LHS handle: {}", lhs_handle))?
+            .into_int_value();
+
+        let rhs = self.values.get(&rhs_handle)
+            .ok_or_else(|| format!("Invalid RHS handle: {}", rhs_handle))?
+            .into_int_value();
+
+        let result = builder.build_and(lhs, rhs, "and")
+            .map_err(|e| format!("Failed to build and: {}", e))?;
+
+        let handle = self.next_handle();
+        self.values.insert(handle, result.into());
+        Ok(handle)
+    }
+
+    /// Build bitwise OR instruction
+    pub fn build_or(&mut self,
+                   builder_handle: BuilderHandle,
+                   lhs_handle: ValueHandle,
+                   rhs_handle: ValueHandle) -> Result<ValueHandle, String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let lhs = self.values.get(&lhs_handle)
+            .ok_or_else(|| format!("Invalid LHS handle: {}", lhs_handle))?
+            .into_int_value();
+
+        let rhs = self.values.get(&rhs_handle)
+            .ok_or_else(|| format!("Invalid RHS handle: {}", rhs_handle))?
+            .into_int_value();
+
+        let result = builder.build_or(lhs, rhs, "or")
+            .map_err(|e| format!("Failed to build or: {}", e))?;
+
+        let handle = self.next_handle();
+        self.values.insert(handle, result.into());
+        Ok(handle)
+    }
+
+    /// Build bitwise XOR instruction
+    pub fn build_xor(&mut self,
+                    builder_handle: BuilderHandle,
+                    lhs_handle: ValueHandle,
+                    rhs_handle: ValueHandle) -> Result<ValueHandle, String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let lhs = self.values.get(&lhs_handle)
+            .ok_or_else(|| format!("Invalid LHS handle: {}", lhs_handle))?
+            .into_int_value();
+
+        let rhs = self.values.get(&rhs_handle)
+            .ok_or_else(|| format!("Invalid RHS handle: {}", rhs_handle))?
+            .into_int_value();
+
+        let result = builder.build_xor(lhs, rhs, "xor")
+            .map_err(|e| format!("Failed to build xor: {}", e))?;
+
+        let handle = self.next_handle();
+        self.values.insert(handle, result.into());
+        Ok(handle)
+    }
+
+    /// Build left shift instruction
+    pub fn build_shl(&mut self,
+                    builder_handle: BuilderHandle,
+                    lhs_handle: ValueHandle,
+                    rhs_handle: ValueHandle) -> Result<ValueHandle, String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let lhs = self.values.get(&lhs_handle)
+            .ok_or_else(|| format!("Invalid LHS handle: {}", lhs_handle))?
+            .into_int_value();
+
+        let rhs = self.values.get(&rhs_handle)
+            .ok_or_else(|| format!("Invalid RHS handle: {}", rhs_handle))?
+            .into_int_value();
+
+        let result = builder.build_left_shift(lhs, rhs, "shl")
+            .map_err(|e| format!("Failed to build shl: {}", e))?;
+
+        let handle = self.next_handle();
+        self.values.insert(handle, result.into());
+        Ok(handle)
+    }
+
+    /// Build arithmetic right shift instruction (sign-preserving)
+    pub fn build_ashr(&mut self,
+                     builder_handle: BuilderHandle,
+                     lhs_handle: ValueHandle,
+                     rhs_handle: ValueHandle) -> Result<ValueHandle, String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let lhs = self.values.get(&lhs_handle)
+            .ok_or_else(|| format!("Invalid LHS handle: {}", lhs_handle))?
+            .into_int_value();
+
+        let rhs = self.values.get(&rhs_handle)
+            .ok_or_else(|| format!("Invalid RHS handle: {}", rhs_handle))?
+            .into_int_value();
+
+        let result = builder.build_right_shift(lhs, rhs, true, "ashr")
+            .map_err(|e| format!("Failed to build ashr: {}", e))?;
+
+        let handle = self.next_handle();
+        self.values.insert(handle, result.into());
+        Ok(handle)
+    }
+
     /// Build unconditional branch
     pub fn build_br(&mut self,
                    builder_handle: BuilderHandle,
@@ -950,6 +1070,51 @@ pub fn llvm_build_srem(builder_handle: i64, lhs_handle: i64, rhs_handle: i64) ->
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.build_srem(builder_handle, lhs_handle, rhs_handle)
+    })
+}
+
+/// Build and instruction
+/// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
+pub fn llvm_build_and(builder_handle: i64, lhs_handle: i64, rhs_handle: i64) -> Result<i64, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_and(builder_handle, lhs_handle, rhs_handle)
+    })
+}
+
+/// Build or instruction
+/// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
+pub fn llvm_build_or(builder_handle: i64, lhs_handle: i64, rhs_handle: i64) -> Result<i64, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_or(builder_handle, lhs_handle, rhs_handle)
+    })
+}
+
+/// Build xor instruction
+/// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
+pub fn llvm_build_xor(builder_handle: i64, lhs_handle: i64, rhs_handle: i64) -> Result<i64, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_xor(builder_handle, lhs_handle, rhs_handle)
+    })
+}
+
+/// Build shl (shift left) instruction
+/// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
+pub fn llvm_build_shl(builder_handle: i64, lhs_handle: i64, rhs_handle: i64) -> Result<i64, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_shl(builder_handle, lhs_handle, rhs_handle)
+    })
+}
+
+/// Build ashr (arithmetic shift right) instruction
+/// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
+pub fn llvm_build_ashr(builder_handle: i64, lhs_handle: i64, rhs_handle: i64) -> Result<i64, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_ashr(builder_handle, lhs_handle, rhs_handle)
     })
 }
 

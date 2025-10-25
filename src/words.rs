@@ -2503,6 +2503,116 @@ pub fn llvm_build_srem_word(
     }
 }
 
+/// LLVM-BUILD-AND: Bitwise AND
+/// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
+pub fn llvm_build_and_word(
+    stack: &mut crate::Stack,
+    _loop_stack: &crate::LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(rhs_handle), Some(lhs_handle), Some(builder_handle)) = (
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+    ) {
+        match crate::llvm_forth::llvm_build_and(builder_handle, lhs_handle, rhs_handle) {
+            Ok(handle) => stack.push(handle, memory),
+            Err(e) => eprintln!("LLVM-BUILD-AND error: {}", e),
+        }
+    } else {
+        eprintln!("LLVM-BUILD-AND: Stack underflow");
+    }
+}
+
+/// LLVM-BUILD-OR: Bitwise OR
+/// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
+pub fn llvm_build_or_word(
+    stack: &mut crate::Stack,
+    _loop_stack: &crate::LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(rhs_handle), Some(lhs_handle), Some(builder_handle)) = (
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+    ) {
+        match crate::llvm_forth::llvm_build_or(builder_handle, lhs_handle, rhs_handle) {
+            Ok(handle) => stack.push(handle, memory),
+            Err(e) => eprintln!("LLVM-BUILD-OR error: {}", e),
+        }
+    } else {
+        eprintln!("LLVM-BUILD-OR: Stack underflow");
+    }
+}
+
+/// LLVM-BUILD-XOR: Bitwise XOR
+/// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
+pub fn llvm_build_xor_word(
+    stack: &mut crate::Stack,
+    _loop_stack: &crate::LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(rhs_handle), Some(lhs_handle), Some(builder_handle)) = (
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+    ) {
+        match crate::llvm_forth::llvm_build_xor(builder_handle, lhs_handle, rhs_handle) {
+            Ok(handle) => stack.push(handle, memory),
+            Err(e) => eprintln!("LLVM-BUILD-XOR error: {}", e),
+        }
+    } else {
+        eprintln!("LLVM-BUILD-XOR: Stack underflow");
+    }
+}
+
+/// LLVM-BUILD-SHL: Shift left
+/// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
+pub fn llvm_build_shl_word(
+    stack: &mut crate::Stack,
+    _loop_stack: &crate::LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(rhs_handle), Some(lhs_handle), Some(builder_handle)) = (
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+    ) {
+        match crate::llvm_forth::llvm_build_shl(builder_handle, lhs_handle, rhs_handle) {
+            Ok(handle) => stack.push(handle, memory),
+            Err(e) => eprintln!("LLVM-BUILD-SHL error: {}", e),
+        }
+    } else {
+        eprintln!("LLVM-BUILD-SHL: Stack underflow");
+    }
+}
+
+/// LLVM-BUILD-ASHR: Arithmetic shift right
+/// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
+pub fn llvm_build_ashr_word(
+    stack: &mut crate::Stack,
+    _loop_stack: &crate::LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(rhs_handle), Some(lhs_handle), Some(builder_handle)) = (
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+    ) {
+        match crate::llvm_forth::llvm_build_ashr(builder_handle, lhs_handle, rhs_handle) {
+            Ok(handle) => stack.push(handle, memory),
+            Err(e) => eprintln!("LLVM-BUILD-ASHR error: {}", e),
+        }
+    } else {
+        eprintln!("LLVM-BUILD-ASHR: Stack underflow");
+    }
+}
+
 /// LLVM-BUILD-BR: Unconditional branch
 /// Stack: ( builder-handle block-handle -- )
 pub fn llvm_build_br_word(
