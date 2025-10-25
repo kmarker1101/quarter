@@ -40,6 +40,30 @@ VARIABLE PARAM-SP      \ sp pointer parameter
 VARIABLE PARAM-RP      \ rp pointer parameter
 
 \ =============================================================================
+\ HELPER FUNCTIONS
+\ =============================================================================
+
+\ Compare two strings for equality
+\ ( addr1 len1 addr2 len2 -- flag )
+: STRING-EQUALS?
+    \ Check lengths first
+    ROT OVER <> IF
+        \ Lengths differ
+        DROP DROP DROP FALSE EXIT
+    THEN
+    \ Lengths match, compare bytes
+    \ Stack: ( addr1 addr2 len )
+    0 DO
+        OVER I + C@
+        OVER I + C@
+        <> IF
+            \ Bytes differ
+            DROP DROP FALSE EXIT
+        THEN
+    LOOP
+    DROP DROP TRUE ;
+
+\ =============================================================================
 \ WORD NAME MAPPING
 \ Convert Forth word names to C primitive names
 \ =============================================================================
@@ -730,18 +754,18 @@ VARIABLE PARAM-RP      \ rp pointer parameter
     \ 3. Subtract: new_sp = sp_val - 8
     CURRENT-BUILDER @ 2 PICK 2 PICK LLVM-BUILD-SUB
 
-    \ Stack: ( sp-val-handle four-handle new-sp-handle )
+    \ Stack: ( sp-val-handle eight-handle new-sp-handle )
 
-    \ 4. Store new SP
-    CURRENT-BUILDER @ DUP PARAM-SP @ LLVM-BUILD-STORE
+    \ 4. Store new SP (duplicate new-sp first to keep it)
+    DUP CURRENT-BUILDER @ SWAP PARAM-SP @ LLVM-BUILD-STORE
 
-    \ Stack: ( sp-val-handle four-handle new-sp-handle )
-    NIP NIP \ Drop sp-val and four
+    \ Stack: ( sp-val-handle eight-handle new-sp-handle )
+    -ROT DROP DROP \ Drop sp-val and eight
 
     \ Stack: ( new-sp-handle )
 
     \ 5. GEP to get address: addr = memory + new_sp
-    CURRENT-BUILDER @ CURRENT-CTX @ PARAM-MEMORY @ 2 PICK LLVM-BUILD-GEP
+    CURRENT-BUILDER @ CURRENT-CTX @ PARAM-MEMORY @ 3 PICK LLVM-BUILD-GEP
 
     \ Stack: ( new-sp-handle addr-handle )
     NIP \ Drop new-sp-handle
@@ -753,6 +777,25 @@ VARIABLE PARAM-RP      \ rp pointer parameter
 
     \ Stack: ( value-handle )
     ;
+
+\ =============================================================================
+\ INLINE PRIMITIVE EMITTERS
+\ =============================================================================
+
+\ Emit inline multiplication: pop b, pop a, push (a * b)
+\ ( -- )
+: EMIT-INLINE-MUL
+    \ Pop two values from stack
+    COMPILE-POP  \ b
+    COMPILE-POP  \ a
+    \ Stack: ( b-handle a-handle )
+
+    \ Multiply: a * b
+    CURRENT-BUILDER @ ROT ROT LLVM-BUILD-MUL
+    \ Stack: ( result-handle )
+
+    \ Push result back to stack
+    COMPILE-PUSH ;
 
 \ =============================================================================
 \ AST COMPILATION
@@ -1017,6 +1060,19 @@ VARIABLE PARAM-RP      \ rp pointer parameter
         WORD-NAME-BUFFER AST-GET-WORD
         \ Stack: ( name-len )
 
+        \ Check if it's an inlinable primitive
+        \ Store "*" at COMPILER-SCRATCH for comparison
+        42 COMPILER-SCRATCH C!  \ ASCII 42 = '*'
+
+        \ Compare with "*"
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 1 STRING-EQUALS? IF
+            \ It's multiplication - emit inline
+            DROP  \ Drop name-len
+            EMIT-INLINE-MUL
+            EXIT
+        THEN
+
+        \ Not an inlinable primitive - do normal function call
         \ Map to primitive name
         WORD-NAME-BUFFER SWAP MAP-WORD-NAME
         \ Stack: ( prim-addr prim-len )
