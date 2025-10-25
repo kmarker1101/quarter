@@ -1077,6 +1077,57 @@ pub extern "C" fn quarter_equal(memory: *mut u8, sp: *mut usize, _rp: *mut usize
     }
 }
 
+/// quarter_not_equal: ( a b -- flag )
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_not_equal(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 16) {
+            return;
+        }
+        let addr_a = memory.add(sp_val - 16) as *mut i64;
+        let addr_b = memory.add(sp_val - 8) as *const i64;
+        let a = addr_a.read_unaligned();
+        let b = addr_b.read_unaligned();
+        addr_a.write_unaligned(if a != b { -1 } else { 0 });
+        *sp = sp_val - 8;
+    }
+}
+
+/// quarter_less_equal: ( a b -- flag )
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_less_equal(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 16) {
+            return;
+        }
+        let addr_a = memory.add(sp_val - 16) as *mut i64;
+        let addr_b = memory.add(sp_val - 8) as *const i64;
+        let a = addr_a.read_unaligned();
+        let b = addr_b.read_unaligned();
+        addr_a.write_unaligned(if a <= b { -1 } else { 0 });
+        *sp = sp_val - 8;
+    }
+}
+
+/// quarter_greater_equal: ( a b -- flag )
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_greater_equal(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 16) {
+            return;
+        }
+        let addr_a = memory.add(sp_val - 16) as *mut i64;
+        let addr_b = memory.add(sp_val - 8) as *const i64;
+        let a = addr_a.read_unaligned();
+        let b = addr_b.read_unaligned();
+        addr_a.write_unaligned(if a >= b { -1 } else { 0 });
+        *sp = sp_val - 8;
+    }
+}
+
 /// quarter_negate: ( n -- -n )
 #[unsafe(no_mangle)]
 pub extern "C" fn quarter_negate(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
