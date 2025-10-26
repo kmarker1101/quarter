@@ -82,7 +82,7 @@ fn test_do_loop_basic() {
 
     // : TEST 5 0 DO I LOOP ;  (pushes 0 1 2 3 4 onto stack)
     let tokens = vec!["5", "0", "DO", "I", "LOOP"];
-    let ast = parse_tokens(&tokens, &dict).unwrap();
+    let ast = parse_tokens(&tokens, &dict, None).unwrap();
 
     ast.execute(
         &mut stack,
@@ -114,7 +114,7 @@ fn test_begin_while_repeat() {
     let tokens = vec![
         "5", "BEGIN", "DUP", "WHILE", "DUP", "1", "-", "REPEAT", "DROP",
     ];
-    let ast = parse_tokens(&tokens, &dict).unwrap();
+    let ast = parse_tokens(&tokens, &dict, None).unwrap();
 
     ast.execute(
         &mut stack,
@@ -169,7 +169,7 @@ fn test_print_string() {
 
     // Parse a string literal
     let tokens = vec![".\"", "Hello", "World\""];
-    let ast = parse_tokens(&tokens, &dict).unwrap();
+    let ast = parse_tokens(&tokens, &dict, None).unwrap();
 
     // Note: This will print to stdout during test, but shouldn't error
     ast.execute(
@@ -195,7 +195,7 @@ fn test_print_string_in_loop() {
 
     // : TEST 3 0 DO ." Hi " LOOP ;
     let tokens = vec!["3", "0", "DO", ".\"", "Hi", "\"", "LOOP"];
-    let ast = parse_tokens(&tokens, &dict).unwrap();
+    let ast = parse_tokens(&tokens, &dict, None).unwrap();
 
     // Should print "Hi " three times
     ast.execute(
@@ -221,7 +221,7 @@ fn test_plus_loop_increment_by_two() {
 
     // : TEST 10 0 DO I 2 +LOOP ;  (pushes 0 2 4 6 8 onto stack)
     let tokens = vec!["10", "0", "DO", "I", "2", "+LOOP"];
-    let ast = parse_tokens(&tokens, &dict).unwrap();
+    let ast = parse_tokens(&tokens, &dict, None).unwrap();
 
     ast.execute(
         &mut stack,
@@ -250,7 +250,7 @@ fn test_plus_loop_variable_increment() {
 
     // : TEST 15 0 DO I 3 +LOOP ;  (pushes 0 3 6 9 12 onto stack)
     let tokens = vec!["15", "0", "DO", "I", "3", "+LOOP"];
-    let ast = parse_tokens(&tokens, &dict).unwrap();
+    let ast = parse_tokens(&tokens, &dict, None).unwrap();
 
     ast.execute(
         &mut stack,
@@ -313,7 +313,7 @@ fn test_nested_loops_with_j() {
     let tokens = vec![
         "3", "0", "DO", "2", "0", "DO", "J", "I", "+", "LOOP", "LOOP",
     ];
-    let ast = parse_tokens(&tokens, &dict).unwrap();
+    let ast = parse_tokens(&tokens, &dict, None).unwrap();
 
     ast.execute(
         &mut stack,
@@ -348,7 +348,7 @@ fn test_leave_in_plus_loop() {
     let tokens = vec![
         "20", "0", "DO", "I", "DUP", "7", ">", "IF", "LEAVE", "THEN", "2", "+LOOP",
     ];
-    let ast = parse_tokens(&tokens, &dict).unwrap();
+    let ast = parse_tokens(&tokens, &dict, None).unwrap();
 
     ast.execute(
         &mut stack,
@@ -743,7 +743,7 @@ fn test_exit_simple() {
 
     // : test-exit 42 exit 99 ;
     let tokens = vec!["42", "EXIT", "99"];
-    let ast = parse_tokens(&tokens, &dict).unwrap();
+    let ast = parse_tokens(&tokens, &dict, None).unwrap();
     dict.add_compiled("TEST-EXIT".to_string(), ast);
 
     dict.execute_word(
@@ -768,7 +768,7 @@ fn test_exit_in_if() {
 
     // : test-exit-if 1 if 42 exit then 99 ;
     let tokens = vec!["1", "IF", "42", "EXIT", "THEN", "99"];
-    let ast = parse_tokens(&tokens, &dict).unwrap();
+    let ast = parse_tokens(&tokens, &dict, None).unwrap();
     dict.add_compiled("TEST-EXIT-IF".to_string(), ast);
 
     dict.execute_word(
@@ -882,4 +882,184 @@ fn test_cr() {
             .is_ok()
     );
     assert_eq!(stack.pop(&mut memory), Some(42));
+}
+
+#[test]
+fn test_recurse_factorial() {
+    use quarter::execute_line;
+    use std::collections::HashSet;
+
+    let mut dict = Dictionary::new();
+    let mut stack = Stack::new();
+    let mut loop_stack = LoopStack::new();
+    let mut return_stack = ReturnStack::new();
+    let mut memory = Memory::new();
+
+    // Define factorial using RECURSE
+    execute_line(
+        ": FACTORIAL DUP 1 <= IF DROP 1 ELSE DUP 1 - RECURSE * THEN ;",
+        &mut stack,
+        &mut dict,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+        false,
+        false,
+        false,
+        false,
+        false,
+        &mut HashSet::new(),
+    )
+    .unwrap();
+
+    // Test 5! = 120
+    execute_line(
+        "5 FACTORIAL",
+        &mut stack,
+        &mut dict,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+        false,
+        false,
+        false,
+        false,
+        false,
+        &mut HashSet::new(),
+    )
+    .unwrap();
+    assert_eq!(stack.pop(&mut memory), Some(120));
+
+    // Test 0! = 1
+    execute_line(
+        "0 FACTORIAL",
+        &mut stack,
+        &mut dict,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+        false,
+        false,
+        false,
+        false,
+        false,
+        &mut HashSet::new(),
+    )
+    .unwrap();
+    assert_eq!(stack.pop(&mut memory), Some(1));
+
+    // Test 10! = 3628800
+    execute_line(
+        "10 FACTORIAL",
+        &mut stack,
+        &mut dict,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+        false,
+        false,
+        false,
+        false,
+        false,
+        &mut HashSet::new(),
+    )
+    .unwrap();
+    assert_eq!(stack.pop(&mut memory), Some(3628800));
+}
+
+#[test]
+fn test_recurse_fibonacci() {
+    use quarter::execute_line;
+    use std::collections::HashSet;
+
+    let mut dict = Dictionary::new();
+    let mut stack = Stack::new();
+    let mut loop_stack = LoopStack::new();
+    let mut return_stack = ReturnStack::new();
+    let mut memory = Memory::new();
+
+    // Define fibonacci using RECURSE
+    execute_line(
+        ": FIB DUP 2 < IF ELSE DUP 1 - RECURSE SWAP 2 - RECURSE + THEN ;",
+        &mut stack,
+        &mut dict,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+        false,
+        false,
+        false,
+        false,
+        false,
+        &mut HashSet::new(),
+    )
+    .unwrap();
+
+    // Test fib(0) = 0
+    execute_line(
+        "0 FIB",
+        &mut stack,
+        &mut dict,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+        false,
+        false,
+        false,
+        false,
+        false,
+        &mut HashSet::new(),
+    )
+    .unwrap();
+    assert_eq!(stack.pop(&mut memory), Some(0));
+
+    // Test fib(1) = 1
+    execute_line(
+        "1 FIB",
+        &mut stack,
+        &mut dict,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+        false,
+        false,
+        false,
+        false,
+        false,
+        &mut HashSet::new(),
+    )
+    .unwrap();
+    assert_eq!(stack.pop(&mut memory), Some(1));
+
+    // Test fib(10) = 55
+    execute_line(
+        "10 FIB",
+        &mut stack,
+        &mut dict,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+        false,
+        false,
+        false,
+        false,
+        false,
+        &mut HashSet::new(),
+    )
+    .unwrap();
+    assert_eq!(stack.pop(&mut memory), Some(55));
+}
+
+#[test]
+fn test_recurse_outside_definition() {
+    let dict = Dictionary::new();
+    let tokens: Vec<&str> = vec!["RECURSE"];
+
+    // RECURSE should error when not inside a word definition
+    let result = parse_tokens(&tokens, &dict, None);
+    assert!(result.is_err());
+    assert_eq!(
+        result.unwrap_err(),
+        "RECURSE can only be used inside a word definition"
+    );
 }

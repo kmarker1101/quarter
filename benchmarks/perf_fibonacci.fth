@@ -6,8 +6,8 @@
     DUP 2 < IF
         DROP 1
     ELSE
-        DUP 1 - FIBONACCI
-        SWAP 2 - FIBONACCI
+        DUP 1 - RECURSE
+        SWAP 2 - RECURSE
         +
     THEN ;
 

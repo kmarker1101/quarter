@@ -4,7 +4,7 @@ use quarter::{LoopStack, parse_tokens, AstNode, Dictionary, ReturnStack, Stack, 
 fn test_parse_simple_number() {
     let dict = Dictionary::new();
     let tokens = vec!["42"];
-    let ast = parse_tokens(&tokens, &dict).unwrap();
+    let ast = parse_tokens(&tokens, &dict, None).unwrap();
 
     match ast {
         AstNode::PushNumber(n) => assert_eq!(n, 42),
@@ -16,7 +16,7 @@ fn test_parse_simple_number() {
 fn test_parse_simple_word() {
     let dict = Dictionary::new();
     let tokens = vec!["DUP"];
-    let ast = parse_tokens(&tokens, &dict).unwrap();
+    let ast = parse_tokens(&tokens, &dict, None).unwrap();
 
     match ast {
         AstNode::CallWord(s) => assert_eq!(s, "DUP"),
@@ -28,7 +28,7 @@ fn test_parse_simple_word() {
 fn test_parse_sequence() {
     let dict = Dictionary::new();
     let tokens = vec!["5", "DUP", "*"];
-    let ast = parse_tokens(&tokens, &dict).unwrap();
+    let ast = parse_tokens(&tokens, &dict, None).unwrap();
 
     match ast {
         AstNode::Sequence(nodes) => {
@@ -54,7 +54,7 @@ fn test_parse_sequence() {
 fn test_parse_if_then() {
     let dict = Dictionary::new();
     let tokens = vec!["1", "IF", "42", "THEN"];
-    let ast = parse_tokens(&tokens, &dict).unwrap();
+    let ast = parse_tokens(&tokens, &dict, None).unwrap();
 
     match ast {
         AstNode::Sequence(nodes) => {
@@ -79,7 +79,7 @@ fn test_parse_if_then() {
 fn test_parse_if_else_then() {
     let dict = Dictionary::new();
     let tokens = vec!["1", "IF", "42", "ELSE", "99", "THEN"];
-    let ast = parse_tokens(&tokens, &dict).unwrap();
+    let ast = parse_tokens(&tokens, &dict, None).unwrap();
 
     match ast {
         AstNode::Sequence(nodes) => {
@@ -101,7 +101,7 @@ fn test_parse_if_else_then() {
 fn test_parse_nested_if() {
     let dict = Dictionary::new();
     let tokens = vec!["1", "IF", "1", "IF", "42", "THEN", "THEN"];
-    let result = parse_tokens(&tokens, &dict);
+    let result = parse_tokens(&tokens, &dict, None);
     assert!(result.is_ok());
 }
 
@@ -109,7 +109,7 @@ fn test_parse_nested_if() {
 fn test_parse_missing_then() {
     let dict = Dictionary::new();
     let tokens = vec!["1", "IF", "42"];
-    let result = parse_tokens(&tokens, &dict);
+    let result = parse_tokens(&tokens, &dict, None);
     assert!(result.is_err());
     assert_eq!(result.unwrap_err(), "Missing THEN");
 }
@@ -118,7 +118,7 @@ fn test_parse_missing_then() {
 fn test_parse_unexpected_then() {
     let dict = Dictionary::new();
     let tokens = vec!["42", "THEN"];
-    let result = parse_tokens(&tokens, &dict);
+    let result = parse_tokens(&tokens, &dict, None);
     assert!(result.is_err());
     assert_eq!(result.unwrap_err(), "Unexpected THEN or ELSE");
 }
@@ -127,7 +127,7 @@ fn test_parse_unexpected_then() {
 fn test_parse_unexpected_else() {
     let dict = Dictionary::new();
     let tokens = vec!["42", "ELSE"];
-    let result = parse_tokens(&tokens, &dict);
+    let result = parse_tokens(&tokens, &dict, None);
     assert!(result.is_err());
     assert_eq!(result.unwrap_err(), "Unexpected THEN or ELSE");
 }
@@ -136,7 +136,7 @@ fn test_parse_unexpected_else() {
 fn test_parse_complex_if_expression() {
     let dict = Dictionary::new();
     let tokens = vec!["10", "5", ">", "IF", "2", "3", "+", "ELSE", "4", "5", "*", "THEN"];
-    let result = parse_tokens(&tokens, &dict);
+    let result = parse_tokens(&tokens, &dict, None);
     assert!(result.is_ok());
 
     // Verify execution works correctly
@@ -154,7 +154,7 @@ fn test_parse_complex_if_expression() {
 fn test_parse_negative_numbers() {
     let dict = Dictionary::new();
     let tokens = vec!["-42"];
-    let ast = parse_tokens(&tokens, &dict).unwrap();
+    let ast = parse_tokens(&tokens, &dict, None).unwrap();
 
     match ast {
         AstNode::PushNumber(n) => assert_eq!(n, -42),
@@ -166,7 +166,7 @@ fn test_parse_negative_numbers() {
 fn test_parse_empty_tokens() {
     let dict = Dictionary::new();
     let tokens: Vec<&str> = vec![];
-    let result = parse_tokens(&tokens, &dict);
+    let result = parse_tokens(&tokens, &dict, None);
     assert!(result.is_ok());
 
     // Empty tokens should result in an empty sequence
