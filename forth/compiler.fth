@@ -1481,8 +1481,8 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
         CURRENT-BUILDER @ IF-THEN-BLOCK @ LLVM-POSITION-AT-END
         IF-THEN-HANDLE @ COMPILE-AST-NODE
 
-        \ Branch to merge
-        CURRENT-BUILDER @ R@ LLVM-BUILD-BR
+        \ Branch to merge (need to access merge block below else block on return stack)
+        CURRENT-BUILDER @ R> R@ SWAP >R LLVM-BUILD-BR
 
         \ Compile else branch
         CURRENT-BUILDER @ R> LLVM-POSITION-AT-END
@@ -1821,7 +1821,38 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
         THEN
 
         \ Not an inlinable primitive - do normal function call
-        \ Try compiled function first: "_fn_WORDNAME"
+        \ Stack: ( name-len )
+
+        \ Check if this is a recursive call
+        \ Compare name-len with CURRENT-WORD-LEN
+        DUP CURRENT-WORD-LEN @ = IF
+            \ Lengths match - compare the actual strings
+            TRUE  \ Assume they match
+            DUP 0 DO
+                WORD-NAME-BUFFER I + C@
+                CURRENT-WORD-NAME I + C@
+                = 0= IF  \ Not equal
+                    DROP FALSE  \ Mismatch found
+                    LEAVE
+                THEN
+            LOOP
+
+            \ If still TRUE, this is a recursive call
+            IF
+                DROP  \ Drop name-len, we don't need it
+
+                \ Use CURRENT-FUNCTION directly - it's already the function handle
+                \ from when we started compiling this word
+                CURRENT-BUILDER @
+                CURRENT-FUNCTION @
+                PARAM-MEMORY @ PARAM-SP @ PARAM-RP @ 3
+                0  \ Not a tail call
+                LLVM-BUILD-CALL
+                EXIT
+            THEN
+        THEN
+
+        \ Not recursive - try compiled function first: "_fn_WORDNAME"
         \ Stack: ( name-len )
         DUP >R  \ Save name-len to return stack
 
