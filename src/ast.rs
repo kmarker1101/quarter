@@ -298,4 +298,117 @@ impl AstNode {
             }
         }
     }
+
+    /// Execute with tail call optimization check
+    /// Returns Ok(true) if a tail call was detected (should loop back)
+    /// Returns Ok(false) if execution completed normally
+    pub fn execute_with_tco_check(
+        &self,
+        stack: &mut Stack,
+        dict: &crate::dictionary::Dictionary,
+        loop_stack: &mut crate::LoopStack,
+        return_stack: &mut crate::ReturnStack,
+        memory: &mut crate::Memory,
+        word_name: &str,
+    ) -> Result<bool, String> {
+        // Execute all nodes except the last one normally
+        match self {
+            AstNode::Sequence(nodes) => {
+                for (i, node) in nodes.iter().enumerate() {
+                    let is_last = i == nodes.len() - 1;
+
+                    if is_last {
+                        // Last node - check if it's a tail call
+                        if let AstNode::CallWord(name) = node {
+                            if name.to_uppercase() == word_name.to_uppercase() {
+                                // Tail call detected! Signal to loop back WITHOUT executing
+                                return Ok(true);
+                            }
+                        }
+                        // Last node might be IfThenElse with tail calls
+                        if let AstNode::IfThenElse { then_branch, else_branch } = node {
+                            // Check if either branch has tail calls
+                            let has_tail_call =
+                                then_branch.last().map(|n| matches!(n, AstNode::CallWord(name) if name.to_uppercase() == word_name.to_uppercase())).unwrap_or(false)
+                                || else_branch.as_ref().and_then(|b| b.last()).map(|n| matches!(n, AstNode::CallWord(name) if name.to_uppercase() == word_name.to_uppercase())).unwrap_or(false);
+
+                            if has_tail_call {
+                                // Execute the IfThenElse with TCO check
+                                return node.execute_with_tco_check(stack, dict, loop_stack, return_stack, memory, word_name);
+                            }
+                        }
+                        // Last node but not a tail call, fall through to execute
+                    }
+
+                    // Execute node normally (skipped if we returned above)
+                    match node.execute(stack, dict, loop_stack, return_stack, memory) {
+                        Err(msg) if msg == "EXIT" => {
+                            return Err(msg);
+                        }
+                        Err(e) => return Err(e),
+                        Ok(()) => {}
+                    }
+                }
+                Ok(false)  // Normal completion
+            }
+            AstNode::IfThenElse { then_branch, else_branch } => {
+                // Pop the condition from the stack
+                if let Some(condition) = stack.pop(memory) {
+                    if condition != 0 {
+                        // Execute then branch
+                        for (i, node) in then_branch.iter().enumerate() {
+                            let is_last = i == then_branch.len() - 1;
+                            if is_last {
+                                if let AstNode::CallWord(name) = node {
+                                    if name.to_uppercase() == word_name.to_uppercase() {
+                                        return Ok(true);  // Tail call
+                                    }
+                                }
+                            }
+                            match node.execute(stack, dict, loop_stack, return_stack, memory) {
+                                Err(msg) if msg == "EXIT" => return Err(msg),
+                                Err(e) => return Err(e),
+                                Ok(()) => {}
+                            }
+                        }
+                    } else if let Some(else_nodes) = else_branch {
+                        // Execute else branch
+                        for (i, node) in else_nodes.iter().enumerate() {
+                            let is_last = i == else_nodes.len() - 1;
+                            if is_last {
+                                if let AstNode::CallWord(name) = node {
+                                    if name.to_uppercase() == word_name.to_uppercase() {
+                                        return Ok(true);  // Tail call
+                                    }
+                                }
+                            }
+                            match node.execute(stack, dict, loop_stack, return_stack, memory) {
+                                Err(msg) if msg == "EXIT" => return Err(msg),
+                                Err(e) => return Err(e),
+                                Ok(()) => {}
+                            }
+                        }
+                    }
+                    Ok(false)
+                } else {
+                    Err("Stack underflow in IF".to_string())
+                }
+            }
+            AstNode::CallWord(name) => {
+                // Direct call - check if it's a tail call
+                if name.to_uppercase() == word_name.to_uppercase() {
+                    Ok(true)  // Tail call
+                } else {
+                    // Regular call, execute normally
+                    dict.execute_word(name, stack, loop_stack, return_stack, memory)?;
+                    Ok(false)
+                }
+            }
+            _ => {
+                // For other node types, just execute normally
+                self.execute(stack, dict, loop_stack, return_stack, memory)?;
+                Ok(false)
+            }
+        }
+    }
 }

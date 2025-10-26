@@ -39,6 +39,10 @@ VARIABLE PARAM-MEMORY  \ memory pointer parameter
 VARIABLE PARAM-SP      \ sp pointer parameter
 VARIABLE PARAM-RP      \ rp pointer parameter
 
+\ Tail call optimization support
+302000 CONSTANT CURRENT-WORD-NAME  \ Buffer for current word being compiled
+VARIABLE CURRENT-WORD-LEN          \ Length of current word name
+
 \ =============================================================================
 \ HELPER FUNCTIONS
 \ =============================================================================
@@ -1791,6 +1795,7 @@ VARIABLE PARAM-RP      \ rp pointer parameter
         \ Call with (memory, sp, rp) parameters
         CURRENT-BUILDER @ SWAP
         PARAM-MEMORY @ PARAM-SP @ PARAM-RP @ 3
+        0  \ Not a tail call (for now - TCO not implemented yet in JIT)
         LLVM-BUILD-CALL
 
         EXIT
@@ -2381,6 +2386,16 @@ VARIABLE PARAM-RP      \ rp pointer parameter
 \ Compile a word from its AST
 \ Returns JIT function pointer
 : COMPILE-WORD ( ast-handle name-addr name-len -- fn-ptr )
+    \ Save word name for tail call detection
+    DUP CURRENT-WORD-LEN !  \ Store length
+    \ Copy name to CURRENT-WORD-NAME buffer
+    OVER OVER  \ ( ast name-addr name-len name-addr name-len )
+    0 DO
+        DUP I + C@  \ Get byte from source
+        CURRENT-WORD-NAME I + C!  \ Store to buffer
+    LOOP
+    DROP  \ Drop name-addr copy
+
     \ Save name for later (we'll need it for JIT lookup)
     >R >R  \ Save name-addr and name-len on return stack
 

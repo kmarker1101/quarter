@@ -2855,14 +2855,15 @@ pub fn llvm_build_trunc_word(
 }
 
 /// LLVM-BUILD-CALL: Call function
-/// Stack: ( builder-handle fn-handle arg1 arg2 arg3 nargs -- )
+/// Stack: ( builder-handle fn-handle arg1 arg2 arg3 nargs is-tail-call -- )
 pub fn llvm_build_call_word(
     stack: &mut crate::Stack,
     _loop_stack: &crate::LoopStack,
     _return_stack: &mut crate::ReturnStack,
     memory: &mut crate::Memory,
 ) {
-    if let (Some(nargs), Some(arg3), Some(arg2), Some(arg1), Some(fn_handle), Some(builder_handle)) = (
+    if let (Some(is_tail_call), Some(nargs), Some(arg3), Some(arg2), Some(arg1), Some(fn_handle), Some(builder_handle)) = (
+        stack.pop(memory),
         stack.pop(memory),
         stack.pop(memory),
         stack.pop(memory),
@@ -2870,7 +2871,7 @@ pub fn llvm_build_call_word(
         stack.pop(memory),
         stack.pop(memory),
     ) {
-        if let Err(e) = crate::llvm_forth::llvm_build_call(builder_handle, fn_handle, arg1, arg2, arg3, nargs) {
+        if let Err(e) = crate::llvm_forth::llvm_build_call(builder_handle, fn_handle, arg1, arg2, arg3, nargs, is_tail_call) {
             eprintln!("LLVM-BUILD-CALL error: {}", e);
         }
     } else {

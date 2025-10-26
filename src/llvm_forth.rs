@@ -849,7 +849,8 @@ impl LLVMRegistry {
     pub fn build_call(&mut self,
                      builder_handle: BuilderHandle,
                      fn_handle: FunctionHandle,
-                     args: &[ValueHandle]) -> Result<(), String> {
+                     args: &[ValueHandle],
+                     is_tail_call: bool) -> Result<(), String> {
         let builder = self.builders.get(&builder_handle)
             .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
 
@@ -864,8 +865,14 @@ impl LLVMRegistry {
             arg_values.push((*val).into());
         }
 
-        builder.build_call(*function, &arg_values, "call")
+        let call_site = builder.build_call(*function, &arg_values, "call")
             .map_err(|e| format!("Failed to build call: {}", e))?;
+
+        // Mark as tail call if requested - LLVM will optimize to a loop
+        if is_tail_call {
+            call_site.set_tail_call(true);
+        }
+
         Ok(())
     }
 
@@ -1222,7 +1229,7 @@ pub fn llvm_build_trunc(builder_handle: i64, ctx_handle: i64, value_handle: i64,
 
 /// Build function call with up to 3 arguments (for now)
 /// Stack: ( builder-handle fn-handle arg1 arg2 arg3 nargs -- )
-pub fn llvm_build_call(builder_handle: i64, fn_handle: i64, arg1: i64, arg2: i64, arg3: i64, nargs: i64) -> Result<(), String> {
+pub fn llvm_build_call(builder_handle: i64, fn_handle: i64, arg1: i64, arg2: i64, arg3: i64, nargs: i64, is_tail_call: i64) -> Result<(), String> {
     let args: Vec<i64> = match nargs {
         0 => vec![],
         1 => vec![arg1],
@@ -1233,7 +1240,7 @@ pub fn llvm_build_call(builder_handle: i64, fn_handle: i64, arg1: i64, arg2: i64
 
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
-        registry.build_call(builder_handle, fn_handle, &args)
+        registry.build_call(builder_handle, fn_handle, &args, is_tail_call != 0)
     })
 }
 
