@@ -29,14 +29,35 @@ fn try_forth_compile(
     if !FORTH_COMPILER_LOADED.load(Ordering::Relaxed) {
         // Stdlib is already loaded by main(), no need to reload it here
         // Load compiler
-        if let Err(e) = load_file("forth/compiler.fth", stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir, false) {
+        if let Err(e) = load_file(
+            "forth/compiler.fth",
+            stack,
+            dict,
+            loop_stack,
+            return_stack,
+            memory,
+            no_jit,
+            dump_ir,
+            verify_ir,
+            false,
+        ) {
             eprintln!("Failed to load Forth compiler: {}", e);
             return false;
         }
 
         // Now that compiler is loaded, recompile stdlib words to JIT-compiled versions
         // This replaces the interpreted versions with native code
-        if let Err(e) = quarter::load_stdlib(stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir, true) {
+        if let Err(e) = quarter::load_stdlib(
+            stack,
+            dict,
+            loop_stack,
+            return_stack,
+            memory,
+            no_jit,
+            dump_ir,
+            verify_ir,
+            true,
+        ) {
             eprintln!("Warning: Failed to JIT-compile stdlib: {}", e);
             // Continue anyway with interpreted stdlib
         }
@@ -80,9 +101,8 @@ fn try_forth_compile(
         }
 
         // Cast to JITFunction
-        let jit_fn: quarter::dictionary::JITFunction = unsafe {
-            std::mem::transmute(fn_ptr as *const ())
-        };
+        let jit_fn: quarter::dictionary::JITFunction =
+            unsafe { std::mem::transmute(fn_ptr as *const ()) };
 
         // Register in dictionary
         dict.add_jit_compiled(name, jit_fn);
@@ -92,7 +112,6 @@ fn try_forth_compile(
     eprintln!("ERROR: No function pointer on stack after COMPILE-WORD!");
     false
 }
-
 
 fn main() {
     let mut stack = Stack::new();
@@ -137,18 +156,39 @@ fn main() {
     }
 
     // Load standard library initially as interpreted (will be recompiled later if using Forth compiler)
-    if let Err(e) = load_stdlib(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, no_jit, dump_ir, verify_ir, false) {
+    if let Err(e) = load_stdlib(
+        &mut stack,
+        &mut dict,
+        &mut loop_stack,
+        &mut return_stack,
+        &mut memory,
+        no_jit,
+        dump_ir,
+        verify_ir,
+        false,
+    ) {
         eprintln!("Error loading stdlib: {}", e);
         std::process::exit(1);
     }
 
-    println!("Forth Interpreter v0.1");
+    println!("Forth Interpreter v0.2");
 
     // Check for file argument
     // Supported extensions: .qtr, .fth, .forth, .quarter
     if let Some(file) = filename {
         println!("Loading {}", file);
-        match load_file(&file, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, no_jit, dump_ir, verify_ir, use_forth_compiler) {
+        match load_file(
+            &file,
+            &mut stack,
+            &mut dict,
+            &mut loop_stack,
+            &mut return_stack,
+            &mut memory,
+            no_jit,
+            dump_ir,
+            verify_ir,
+            use_forth_compiler,
+        ) {
             Ok(_) => {
                 return;
             }
@@ -268,7 +308,18 @@ fn main() {
                     }
 
                     let filename = tokens[1];
-                    match load_file(filename, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, no_jit, dump_ir, verify_ir, use_forth_compiler) {
+                    match load_file(
+                        filename,
+                        &mut stack,
+                        &mut dict,
+                        &mut loop_stack,
+                        &mut return_stack,
+                        &mut memory,
+                        no_jit,
+                        dump_ir,
+                        verify_ir,
+                        use_forth_compiler,
+                    ) {
                         Ok(_) => {
                             println!("ok");
                         }
@@ -355,12 +406,20 @@ fn main() {
                             println!("{}", e);
                         }
                     }
-                } else if tokens.len() >= 3 && tokens.get(1).map(|s| s.to_uppercase()) == Some("CONSTANT".to_string()) {
+                } else if tokens.len() >= 3
+                    && tokens.get(1).map(|s| s.to_uppercase()) == Some("CONSTANT".to_string())
+                {
                     // <value> CONSTANT <name>
                     // Parse and push the value first
                     match parse_tokens(&tokens[0..1]) {
                         Ok(ast) => {
-                            match ast.execute(&mut stack, &dict, &mut loop_stack, &mut return_stack, &mut memory) {
+                            match ast.execute(
+                                &mut stack,
+                                &dict,
+                                &mut loop_stack,
+                                &mut return_stack,
+                                &mut memory,
+                            ) {
                                 Ok(_) => {
                                     // Now pop it back and create the constant
                                     match stack.pop(&mut memory) {
@@ -401,13 +460,25 @@ fn main() {
                     dict.add_compiled(create_name, create_ast);
                     println!("ok");
                 } else if tokens.first().map(|s| s.to_uppercase()) == Some("S\"".to_string())
-                       && tokens.last().map(|s| s.to_uppercase()) == Some("INCLUDED".to_string()) {
+                    && tokens.last().map(|s| s.to_uppercase()) == Some("INCLUDED".to_string())
+                {
                     // S" filename" INCLUDED pattern (for forth-mode)
                     // Parse S" part to get filename on stack, then call INCLUDED
                     let s_quote_end = tokens.iter().position(|&t| t.ends_with('"') && t != "S\"");
                     if let Some(_end_idx) = s_quote_end {
                         let all_tokens_str = tokens.join(" ");
-                        match quarter::execute_line(&all_tokens_str, &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, no_jit, dump_ir, verify_ir, use_forth_compiler) {
+                        match quarter::execute_line(
+                            &all_tokens_str,
+                            &mut stack,
+                            &mut dict,
+                            &mut loop_stack,
+                            &mut return_stack,
+                            &mut memory,
+                            no_jit,
+                            dump_ir,
+                            verify_ir,
+                            use_forth_compiler,
+                        ) {
                             Ok(_) => println!("ok"),
                             Err(e) => println!("{}", e),
                         }
@@ -438,7 +509,13 @@ fn main() {
                         );
                     } else {
                         match parse_tokens(&tokens) {
-                            Ok(ast) => match ast.execute(&mut stack, &dict, &mut loop_stack, &mut return_stack, &mut memory) {
+                            Ok(ast) => match ast.execute(
+                                &mut stack,
+                                &dict,
+                                &mut loop_stack,
+                                &mut return_stack,
+                                &mut memory,
+                            ) {
                                 Ok(_) => println!("ok"),
                                 Err(e) => println!("{}", e),
                             },
