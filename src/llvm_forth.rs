@@ -392,6 +392,7 @@ impl LLVMRegistry {
 
         // Select type based on bit width
         let load_type = match bit_width {
+            8 => context.i8_type().as_basic_type_enum(),
             32 => context.i32_type().as_basic_type_enum(),
             64 => context.i64_type().as_basic_type_enum(),
             _ => return Err(format!("Unsupported bit width for load: {}", bit_width)),
@@ -813,6 +814,36 @@ impl LLVMRegistry {
         Ok(handle)
     }
 
+    /// Build truncate instruction (i64 -> i8 for byte operations)
+    pub fn build_trunc(&mut self,
+                      builder_handle: BuilderHandle,
+                      ctx_handle: ContextHandle,
+                      value_handle: ValueHandle,
+                      bit_width: i64) -> Result<ValueHandle, String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let context = self.contexts.get(&ctx_handle)
+            .ok_or_else(|| format!("Invalid context handle: {}", ctx_handle))?;
+
+        let value = self.values.get(&value_handle)
+            .ok_or_else(|| format!("Invalid value handle: {}", value_handle))?
+            .into_int_value();
+
+        let target_type = match bit_width {
+            8 => context.i8_type(),
+            32 => context.i32_type(),
+            _ => return Err(format!("Unsupported bit width for trunc: {}", bit_width)),
+        };
+
+        let result = builder.build_int_truncate(value, target_type, "trunc")
+            .map_err(|e| format!("Failed to build trunc: {}", e))?;
+
+        let handle = self.next_handle();
+        self.values.insert(handle, result.into());
+        Ok(handle)
+    }
+
     /// Build function call
     pub fn build_call(&mut self,
                      builder_handle: BuilderHandle,
@@ -1176,6 +1207,15 @@ pub fn llvm_build_sext(builder_handle: i64, ctx_handle: i64, value_handle: i64) 
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.build_sext(builder_handle, ctx_handle, value_handle)
+    })
+}
+
+/// Build truncate instruction (i64 -> i8 for byte operations)
+/// Stack: ( builder-handle ctx-handle value-handle bit-width -- result-handle )
+pub fn llvm_build_trunc(builder_handle: i64, ctx_handle: i64, value_handle: i64, bit_width: i64) -> Result<i64, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_trunc(builder_handle, ctx_handle, value_handle, bit_width)
     })
 }
 

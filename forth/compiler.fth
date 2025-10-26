@@ -1127,6 +1127,92 @@ VARIABLE PARAM-RP      \ rp pointer parameter
     COMPILE-PUSH  \ push x1
 ;
 
+\ Emit inline @ (fetch): pop addr, load i64 from memory[addr], push value
+\ ( -- )
+: EMIT-INLINE-FETCH
+    COMPILE-POP   \ addr -> ( addr )
+    \ GEP: ( builder ctx ptr offset -- ptr )
+    CURRENT-BUILDER @ CURRENT-CTX @ PARAM-MEMORY @ 3 PICK LLVM-BUILD-GEP
+    \ ( addr gep-ptr )
+    \ LOAD: ( builder ctx ptr width -- value )
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT 64 LLVM-BUILD-LOAD
+    \ ( addr value )
+    SWAP DROP  \ ( value )
+    COMPILE-PUSH
+;
+
+\ Emit inline ! (store): pop addr, pop value, store i64 to memory[addr]
+\ ( -- )
+: EMIT-INLINE-STORE
+    COMPILE-POP   \ addr -> ( addr )
+    COMPILE-POP   \ value -> ( addr value )
+    OVER >R       \ Save addr to R -> ( addr value ) R:( addr )
+    \ GEP: ( builder ctx ptr offset -- ptr )
+    CURRENT-BUILDER @ CURRENT-CTX @ PARAM-MEMORY @ R> LLVM-BUILD-GEP
+    \ ( addr value gep-ptr )
+    \ STORE: ( builder value ptr -- )
+    CURRENT-BUILDER @ ROT ROT LLVM-BUILD-STORE
+    \ ( addr )
+    DROP
+;
+
+\ Emit inline C@ (c-fetch): pop addr, load i8 from memory[addr], sext to i64, push
+\ ( -- )
+: EMIT-INLINE-C-FETCH
+    COMPILE-POP   \ addr -> ( addr )
+    \ GEP: ( builder ctx ptr offset -- ptr )
+    CURRENT-BUILDER @ CURRENT-CTX @ PARAM-MEMORY @ 3 PICK LLVM-BUILD-GEP
+    \ ( addr gep-ptr )
+    \ LOAD i8: ( builder ctx ptr width -- value )
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT 8 LLVM-BUILD-LOAD
+    \ ( addr i8-val )
+    \ SEXT i8->i64: ( builder ctx value -- value )
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT LLVM-BUILD-SEXT
+    \ ( addr i64-val )
+    SWAP DROP  \ ( i64-val )
+    COMPILE-PUSH
+;
+
+\ Emit inline C! (c-store): pop addr, pop value, truncate to i8, store to memory[addr]
+\ ( -- )
+: EMIT-INLINE-C-STORE
+    COMPILE-POP   \ addr -> ( addr )
+    COMPILE-POP   \ value -> ( addr value )
+    \ TRUNC i64->i8: ( builder ctx value width -- i8-val )
+    CURRENT-BUILDER @ CURRENT-CTX @ 2 PICK 8 LLVM-BUILD-TRUNC
+    \ ( addr value i8-val )
+    ROT >R        \ Save addr -> ( value i8-val ) R:( addr )
+    \ GEP: ( builder ctx ptr offset -- ptr )
+    CURRENT-BUILDER @ CURRENT-CTX @ PARAM-MEMORY @ R> LLVM-BUILD-GEP
+    \ ( value i8-val gep-ptr )
+    \ STORE: ( builder value ptr -- )
+    CURRENT-BUILDER @ ROT ROT LLVM-BUILD-STORE
+    \ ( value )
+    DROP
+;
+
+\ Emit inline +! (add-store): pop addr, pop n, add n to memory[addr]
+\ ( -- )
+: EMIT-INLINE-ADD-STORE
+    COMPILE-POP   \ addr -> ( addr )
+    COMPILE-POP   \ n -> ( addr n )
+    OVER >R       \ Save addr -> ( addr n ) R:( addr )
+    \ GEP: ( builder ctx ptr offset -- ptr )
+    CURRENT-BUILDER @ CURRENT-CTX @ PARAM-MEMORY @ R> LLVM-BUILD-GEP
+    \ ( addr n gep-ptr )
+    DUP >R        \ Save gep-ptr -> ( addr n gep-ptr ) R:( gep-ptr )
+    \ LOAD: ( builder ctx ptr width -- old )
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT 64 LLVM-BUILD-LOAD
+    \ ( addr n old )
+    \ ADD: ( builder lhs rhs -- sum )
+    CURRENT-BUILDER @ ROT ROT LLVM-BUILD-ADD
+    \ ( addr sum )
+    \ STORE: ( builder value ptr -- )
+    R> CURRENT-BUILDER @ ROT ROT LLVM-BUILD-STORE
+    \ ( addr )
+    DROP
+;
+
 \ =============================================================================
 \ AST COMPILATION
 \ =============================================================================
@@ -1645,6 +1731,49 @@ VARIABLE PARAM-RP      \ rp pointer parameter
         WORD-NAME-BUFFER OVER COMPILER-SCRATCH 3 STRING-EQUALS? IF
             DROP
             EMIT-INLINE-ROT
+            EXIT
+        THEN
+
+        \ Check for '@' (fetch)
+        64 COMPILER-SCRATCH C!      \ @
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 1 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-FETCH
+            EXIT
+        THEN
+
+        \ Check for '!' (store)
+        33 COMPILER-SCRATCH C!      \ !
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 1 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-STORE
+            EXIT
+        THEN
+
+        \ Check for 'C@'
+        67 COMPILER-SCRATCH C!      \ C
+        64 COMPILER-SCRATCH 1 + C!  \ @
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 2 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-C-FETCH
+            EXIT
+        THEN
+
+        \ Check for 'C!'
+        67 COMPILER-SCRATCH C!      \ C
+        33 COMPILER-SCRATCH 1 + C!  \ !
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 2 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-C-STORE
+            EXIT
+        THEN
+
+        \ Check for '+!'
+        43 COMPILER-SCRATCH C!      \ +
+        33 COMPILER-SCRATCH 1 + C!  \ !
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 2 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-ADD-STORE
             EXIT
         THEN
 

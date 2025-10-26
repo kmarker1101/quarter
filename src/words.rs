@@ -2813,6 +2813,29 @@ pub fn llvm_build_sext_word(
     }
 }
 
+/// LLVM-BUILD-TRUNC: Truncate i64 to smaller int (for byte operations)
+/// Stack: ( builder-handle ctx-handle value-handle bit-width -- result-handle )
+pub fn llvm_build_trunc_word(
+    stack: &mut crate::Stack,
+    _loop_stack: &crate::LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(bit_width), Some(value_handle), Some(ctx_handle), Some(builder_handle)) = (
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+    ) {
+        match crate::llvm_forth::llvm_build_trunc(builder_handle, ctx_handle, value_handle, bit_width) {
+            Ok(handle) => stack.push(handle, memory),
+            Err(e) => eprintln!("LLVM-BUILD-TRUNC error: {}", e),
+        }
+    } else {
+        eprintln!("LLVM-BUILD-TRUNC: Stack underflow");
+    }
+}
+
 /// LLVM-BUILD-CALL: Call function
 /// Stack: ( builder-handle fn-handle arg1 arg2 arg3 nargs -- )
 pub fn llvm_build_call_word(

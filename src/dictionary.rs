@@ -131,6 +131,7 @@ impl Dictionary {
         dict.add_primitive("LLVM-BUILD-COND-BR", words::llvm_build_cond_br_word);
         dict.add_primitive("LLVM-BUILD-ICMP", words::llvm_build_icmp_word);
         dict.add_primitive("LLVM-BUILD-SEXT", words::llvm_build_sext_word);
+        dict.add_primitive("LLVM-BUILD-TRUNC", words::llvm_build_trunc_word);
         dict.add_primitive("LLVM-BUILD-CALL", words::llvm_build_call_word);
         dict.add_primitive("LLVM-GET-PARAM", words::llvm_get_param_word);
         dict.add_primitive("LLVM-BUILD-PHI", words::llvm_build_phi_word);
