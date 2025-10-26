@@ -16,14 +16,14 @@ fn try_forth_compile(
     loop_stack: &mut quarter::LoopStack,
     return_stack: &mut quarter::ReturnStack,
     memory: &mut quarter::Memory,
-    use_forth_compiler: bool,
+    _use_batch: bool,  // Unused - batch compilation only
     no_jit: bool,
     dump_ir: bool,
     verify_ir: bool,
 ) -> bool {
-    if !use_forth_compiler {
-        return false;
-    }
+    // Incremental compilation disabled - use batch_compile_all_words() instead
+    let _ = (name, ast, dict, stack, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir);
+    return false;
 
     // Load the Forth compiler if not already loaded
     if !FORTH_COMPILER_LOADED.load(Ordering::Relaxed) {
@@ -125,7 +125,8 @@ fn main() {
     let mut no_jit = false;
     let mut dump_ir = false;
     let mut verify_ir = false;
-    let mut use_forth_compiler = false;
+    let mut compile_stdlib = false;
+    let mut jit_mode = false;
     let mut filename: Option<String> = None;
 
     for arg in args.iter().skip(1) {
@@ -135,8 +136,11 @@ fn main() {
             dump_ir = true;
         } else if arg == "--verify-ir" {
             verify_ir = true;
-        } else if arg == "--forth-compiler" {
-            use_forth_compiler = true;
+        } else if arg == "--compile-stdlib" {
+            compile_stdlib = true;
+        } else if arg == "--jit" {
+            jit_mode = true;
+            compile_stdlib = true;  // JIT mode implies compile stdlib
         } else if !arg.starts_with("--") {
             filename = Some(arg.clone());
         }
@@ -151,11 +155,13 @@ fn main() {
     if verify_ir {
         println!("IR verification enabled");
     }
-    if use_forth_compiler {
-        println!("Using Forth self-hosting compiler");
+    if jit_mode {
+        println!("JIT mode: batch compiling all code");
+    } else if compile_stdlib {
+        println!("Compiling stdlib for faster execution");
     }
 
-    // Load standard library initially as interpreted (will be recompiled later if using Forth compiler)
+    // Load standard library (always interpreted initially)
     if let Err(e) = load_stdlib(
         &mut stack,
         &mut dict,
@@ -165,10 +171,27 @@ fn main() {
         no_jit,
         dump_ir,
         verify_ir,
-        false,
+        false,  // Always load interpreted
     ) {
         eprintln!("Error loading stdlib: {}", e);
         std::process::exit(1);
+    }
+
+    // Compile stdlib if requested
+    if compile_stdlib {
+        if let Err(e) = quarter::batch_compile_all_words(
+            &mut dict,
+            &mut stack,
+            &mut loop_stack,
+            &mut return_stack,
+            &mut memory,
+            no_jit,
+            dump_ir,
+            verify_ir,
+        ) {
+            eprintln!("Failed to compile stdlib: {}", e);
+            std::process::exit(1);
+        }
     }
 
     println!("Forth Interpreter v0.2");
@@ -178,7 +201,7 @@ fn main() {
     if let Some(file) = filename {
         println!("Loading {}", file);
 
-        // Load file in interpreted mode (don't JIT yet if using forth compiler)
+        // Load file in interpreted mode
         match load_file(
             &file,
             &mut stack,
@@ -189,11 +212,11 @@ fn main() {
             no_jit,
             dump_ir,
             verify_ir,
-            false,  // Always load interpreted first for batch compilation
+            false,  // Always load interpreted
         ) {
             Ok(_) => {
-                // If using forth compiler, batch compile all words now
-                if use_forth_compiler {
+                // If JIT mode, batch compile user words now
+                if jit_mode {
                     if let Err(e) = quarter::batch_compile_all_words(
                         &mut dict,
                         &mut stack,
@@ -291,7 +314,7 @@ fn main() {
                                             &mut loop_stack,
                                             &mut return_stack,
                                             &mut memory,
-                                            use_forth_compiler,
+                                            false,  // Batch compilation only
                                             no_jit,
                                             dump_ir,
                                             verify_ir,
@@ -336,7 +359,7 @@ fn main() {
                         no_jit,
                         dump_ir,
                         verify_ir,
-                        use_forth_compiler,
+                        false,  // Batch compilation only
                     ) {
                         Ok(_) => {
                             println!("ok");
@@ -376,7 +399,7 @@ fn main() {
                                             &mut loop_stack,
                                             &mut return_stack,
                                             &mut memory,
-                                            use_forth_compiler,
+                                            false,  // Batch compilation only
                                             no_jit,
                                             dump_ir,
                                             verify_ir,
@@ -495,7 +518,7 @@ fn main() {
                             no_jit,
                             dump_ir,
                             verify_ir,
-                            use_forth_compiler,
+                            false,  // Batch compilation only
                         ) {
                             Ok(_) => println!("ok"),
                             Err(e) => println!("{}", e),
