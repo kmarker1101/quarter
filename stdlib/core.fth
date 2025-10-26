@@ -13,24 +13,18 @@
 \ COMPARISON OPERATORS
 \ =============================================================================
 
-: 0= ( n -- flag ) IF FALSE ELSE TRUE THEN ;
-\ = is now a primitive with JIT wrapper
-: 0< ( n -- flag ) 0 < ;
-: 0> ( n -- flag ) 0 > ;
-: <> ( n1 n2 -- flag ) = 0= ;
-: <= ( n1 n2 -- flag ) > 0= ;
-: >= ( n1 n2 -- flag ) < 0= ;
+\ All comparison operators are now inline LLVM primitives
+\ <, >, =, <>, <=, >=, 0=, 0<, 0> compile directly to LLVM icmp + sext instructions
 
 \ =============================================================================
 \ STACK MANIPULATION
 \ =============================================================================
 
-: OVER ( x1 x2 -- x1 x2 x1 ) >R DUP R> SWAP ;
+\ OVER and ROT are now inline LLVM primitives
 : NIP ( n1 n2 -- n2 ) SWAP DROP ;
 : TUCK ( n1 n2 -- n2 n1 n2 ) SWAP OVER ;
 
 \ Double-cell stack operations
-: ROT ( x1 x2 x3 -- x2 x3 x1 ) >R SWAP R> SWAP ;
 : -ROT ( x1 x2 x3 -- x3 x1 x2 ) ROT ROT ;
 : 2DUP ( a b -- a b a b ) OVER OVER ;
 : 2DROP ( a b -- ) DROP DROP ;
@@ -55,13 +49,13 @@
 : 10+ ( n -- n+10 ) 10 + ;
 : 11+ ( n -- n+11 ) 11 + ;
 
-: MOD ( n1 n2 -- remainder ) /MOD DROP ;
+\ MOD is now an inline LLVM primitive (srem instruction)
 
 \ =============================================================================
 \ INPUT/OUTPUT
 \ =============================================================================
 
-: SPACE BL EMIT ;
+\ SPACE is now an inline LLVM primitive
 
 : SPACES ( n -- )
     DUP 0 > IF

@@ -195,6 +195,40 @@ pub fn swap(
     }
 }
 
+pub fn over(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    // OVER ( x1 x2 -- x1 x2 x1 )
+    // Copy the second item to top
+    if let (Some(a), Some(b)) = (stack.pop(memory), stack.pop(memory)) {
+        stack.push(b, memory);
+        stack.push(a, memory);
+        stack.push(b, memory);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn rot(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    // ROT ( x1 x2 x3 -- x2 x3 x1 )
+    // Rotate top three items
+    if let (Some(x3), Some(x2), Some(x1)) = (stack.pop(memory), stack.pop(memory), stack.pop(memory)) {
+        stack.push(x2, memory);
+        stack.push(x3, memory);
+        stack.push(x1, memory);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
 pub fn pick(
     stack: &mut Stack,
     _loop_stack: &LoopStack,
@@ -264,6 +298,84 @@ pub fn equal(
 ) {
     if let (Some(b), Some(a)) = (stack.pop(memory), stack.pop(memory)) {
         stack.push(if a == b { -1 } else { 0 }, memory);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn not_equal(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(b), Some(a)) = (stack.pop(memory), stack.pop(memory)) {
+        stack.push(if a != b { -1 } else { 0 }, memory);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn less_equal(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(b), Some(a)) = (stack.pop(memory), stack.pop(memory)) {
+        stack.push(if a <= b { -1 } else { 0 }, memory);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn greater_equal(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(b), Some(a)) = (stack.pop(memory), stack.pop(memory)) {
+        stack.push(if a >= b { -1 } else { 0 }, memory);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn zero_equal(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let Some(a) = stack.pop(memory) {
+        stack.push(if a == 0 { -1 } else { 0 }, memory);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn zero_less(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let Some(a) = stack.pop(memory) {
+        stack.push(if a < 0 { -1 } else { 0 }, memory);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn zero_greater(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let Some(a) = stack.pop(memory) {
+        stack.push(if a > 0 { -1 } else { 0 }, memory);
     } else {
         println!("Stack underflow!");
     }
@@ -466,6 +578,17 @@ pub fn emit(
     } else {
         println!("Stack underflow!");
     }
+}
+
+/// SPACE: Print a space character
+/// Stack: ( -- )
+pub fn space(
+    _stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    _memory: &mut crate::Memory,
+) {
+    print!(" ");
 }
 
 /// TYPE: Print string from memory
@@ -1706,6 +1829,13 @@ pub extern "C" fn quarter_emit(memory: *mut u8, sp: *mut usize, _rp: *mut usize)
     }
 }
 
+/// JIT-callable space: ( -- )
+/// Outputs a space character
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_space(_memory: *mut u8, _sp: *mut usize, _rp: *mut usize) {
+    print!(" ");
+}
+
 /// JIT-callable key: ( -- c )
 /// Reads character (placeholder - needs proper I/O handling)
 #[unsafe(no_mangle)]
@@ -2459,6 +2589,160 @@ pub fn llvm_build_mul_word(
     }
 }
 
+/// LLVM-BUILD-SDIV: Signed integer division
+/// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
+pub fn llvm_build_sdiv_word(
+    stack: &mut crate::Stack,
+    _loop_stack: &crate::LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(rhs_handle), Some(lhs_handle), Some(builder_handle)) = (
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+    ) {
+        match crate::llvm_forth::llvm_build_sdiv(builder_handle, lhs_handle, rhs_handle) {
+            Ok(handle) => stack.push(handle, memory),
+            Err(e) => eprintln!("LLVM-BUILD-SDIV error: {}", e),
+        }
+    } else {
+        eprintln!("LLVM-BUILD-SDIV: Stack underflow");
+    }
+}
+
+/// LLVM-BUILD-SREM: Signed integer remainder (modulo)
+/// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
+pub fn llvm_build_srem_word(
+    stack: &mut crate::Stack,
+    _loop_stack: &crate::LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(rhs_handle), Some(lhs_handle), Some(builder_handle)) = (
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+    ) {
+        match crate::llvm_forth::llvm_build_srem(builder_handle, lhs_handle, rhs_handle) {
+            Ok(handle) => stack.push(handle, memory),
+            Err(e) => eprintln!("LLVM-BUILD-SREM error: {}", e),
+        }
+    } else {
+        eprintln!("LLVM-BUILD-SREM: Stack underflow");
+    }
+}
+
+/// LLVM-BUILD-AND: Bitwise AND
+/// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
+pub fn llvm_build_and_word(
+    stack: &mut crate::Stack,
+    _loop_stack: &crate::LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(rhs_handle), Some(lhs_handle), Some(builder_handle)) = (
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+    ) {
+        match crate::llvm_forth::llvm_build_and(builder_handle, lhs_handle, rhs_handle) {
+            Ok(handle) => stack.push(handle, memory),
+            Err(e) => eprintln!("LLVM-BUILD-AND error: {}", e),
+        }
+    } else {
+        eprintln!("LLVM-BUILD-AND: Stack underflow");
+    }
+}
+
+/// LLVM-BUILD-OR: Bitwise OR
+/// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
+pub fn llvm_build_or_word(
+    stack: &mut crate::Stack,
+    _loop_stack: &crate::LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(rhs_handle), Some(lhs_handle), Some(builder_handle)) = (
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+    ) {
+        match crate::llvm_forth::llvm_build_or(builder_handle, lhs_handle, rhs_handle) {
+            Ok(handle) => stack.push(handle, memory),
+            Err(e) => eprintln!("LLVM-BUILD-OR error: {}", e),
+        }
+    } else {
+        eprintln!("LLVM-BUILD-OR: Stack underflow");
+    }
+}
+
+/// LLVM-BUILD-XOR: Bitwise XOR
+/// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
+pub fn llvm_build_xor_word(
+    stack: &mut crate::Stack,
+    _loop_stack: &crate::LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(rhs_handle), Some(lhs_handle), Some(builder_handle)) = (
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+    ) {
+        match crate::llvm_forth::llvm_build_xor(builder_handle, lhs_handle, rhs_handle) {
+            Ok(handle) => stack.push(handle, memory),
+            Err(e) => eprintln!("LLVM-BUILD-XOR error: {}", e),
+        }
+    } else {
+        eprintln!("LLVM-BUILD-XOR: Stack underflow");
+    }
+}
+
+/// LLVM-BUILD-SHL: Shift left
+/// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
+pub fn llvm_build_shl_word(
+    stack: &mut crate::Stack,
+    _loop_stack: &crate::LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(rhs_handle), Some(lhs_handle), Some(builder_handle)) = (
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+    ) {
+        match crate::llvm_forth::llvm_build_shl(builder_handle, lhs_handle, rhs_handle) {
+            Ok(handle) => stack.push(handle, memory),
+            Err(e) => eprintln!("LLVM-BUILD-SHL error: {}", e),
+        }
+    } else {
+        eprintln!("LLVM-BUILD-SHL: Stack underflow");
+    }
+}
+
+/// LLVM-BUILD-ASHR: Arithmetic shift right
+/// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
+pub fn llvm_build_ashr_word(
+    stack: &mut crate::Stack,
+    _loop_stack: &crate::LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(rhs_handle), Some(lhs_handle), Some(builder_handle)) = (
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+    ) {
+        match crate::llvm_forth::llvm_build_ashr(builder_handle, lhs_handle, rhs_handle) {
+            Ok(handle) => stack.push(handle, memory),
+            Err(e) => eprintln!("LLVM-BUILD-ASHR error: {}", e),
+        }
+    } else {
+        eprintln!("LLVM-BUILD-ASHR: Stack underflow");
+    }
+}
+
 /// LLVM-BUILD-BR: Unconditional branch
 /// Stack: ( builder-handle block-handle -- )
 pub fn llvm_build_br_word(
@@ -2522,6 +2806,51 @@ pub fn llvm_build_icmp_word(
         }
     } else {
         eprintln!("LLVM-BUILD-ICMP: Stack underflow");
+    }
+}
+
+/// LLVM-BUILD-SEXT: Sign-extend i1 to i64 (for Forth booleans)
+/// Stack: ( builder-handle ctx-handle value-handle -- result-handle )
+pub fn llvm_build_sext_word(
+    stack: &mut crate::Stack,
+    _loop_stack: &crate::LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(value_handle), Some(ctx_handle), Some(builder_handle)) = (
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+    ) {
+        match crate::llvm_forth::llvm_build_sext(builder_handle, ctx_handle, value_handle) {
+            Ok(handle) => stack.push(handle, memory),
+            Err(e) => eprintln!("LLVM-BUILD-SEXT error: {}", e),
+        }
+    } else {
+        eprintln!("LLVM-BUILD-SEXT: Stack underflow");
+    }
+}
+
+/// LLVM-BUILD-TRUNC: Truncate i64 to smaller int (for byte operations)
+/// Stack: ( builder-handle ctx-handle value-handle bit-width -- result-handle )
+pub fn llvm_build_trunc_word(
+    stack: &mut crate::Stack,
+    _loop_stack: &crate::LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(bit_width), Some(value_handle), Some(ctx_handle), Some(builder_handle)) = (
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+    ) {
+        match crate::llvm_forth::llvm_build_trunc(builder_handle, ctx_handle, value_handle, bit_width) {
+            Ok(handle) => stack.push(handle, memory),
+            Err(e) => eprintln!("LLVM-BUILD-TRUNC error: {}", e),
+        }
+    } else {
+        eprintln!("LLVM-BUILD-TRUNC: Stack underflow");
     }
 }
 

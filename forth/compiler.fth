@@ -40,6 +40,30 @@ VARIABLE PARAM-SP      \ sp pointer parameter
 VARIABLE PARAM-RP      \ rp pointer parameter
 
 \ =============================================================================
+\ HELPER FUNCTIONS
+\ =============================================================================
+
+\ Compare two strings for equality
+\ ( addr1 len1 addr2 len2 -- flag )
+: STRING-EQUALS?
+    \ Check lengths first
+    ROT OVER <> IF
+        \ Lengths differ
+        DROP DROP DROP FALSE EXIT
+    THEN
+    \ Lengths match, compare bytes
+    \ Stack: ( addr1 addr2 len )
+    0 DO
+        OVER I + C@
+        OVER I + C@
+        <> IF
+            \ Bytes differ
+            DROP DROP FALSE EXIT
+        THEN
+    LOOP
+    DROP DROP TRUE ;
+
+\ =============================================================================
 \ WORD NAME MAPPING
 \ Convert Forth word names to C primitive names
 \ =============================================================================
@@ -730,18 +754,18 @@ VARIABLE PARAM-RP      \ rp pointer parameter
     \ 3. Subtract: new_sp = sp_val - 8
     CURRENT-BUILDER @ 2 PICK 2 PICK LLVM-BUILD-SUB
 
-    \ Stack: ( sp-val-handle four-handle new-sp-handle )
+    \ Stack: ( sp-val-handle eight-handle new-sp-handle )
 
-    \ 4. Store new SP
-    CURRENT-BUILDER @ DUP PARAM-SP @ LLVM-BUILD-STORE
+    \ 4. Store new SP (duplicate new-sp first to keep it)
+    DUP CURRENT-BUILDER @ SWAP PARAM-SP @ LLVM-BUILD-STORE
 
-    \ Stack: ( sp-val-handle four-handle new-sp-handle )
-    NIP NIP \ Drop sp-val and four
+    \ Stack: ( sp-val-handle eight-handle new-sp-handle )
+    -ROT DROP DROP \ Drop sp-val and eight
 
     \ Stack: ( new-sp-handle )
 
     \ 5. GEP to get address: addr = memory + new_sp
-    CURRENT-BUILDER @ CURRENT-CTX @ PARAM-MEMORY @ 2 PICK LLVM-BUILD-GEP
+    CURRENT-BUILDER @ CURRENT-CTX @ PARAM-MEMORY @ 3 PICK LLVM-BUILD-GEP
 
     \ Stack: ( new-sp-handle addr-handle )
     NIP \ Drop new-sp-handle
@@ -753,6 +777,441 @@ VARIABLE PARAM-RP      \ rp pointer parameter
 
     \ Stack: ( value-handle )
     ;
+
+\ =============================================================================
+\ INLINE PRIMITIVE EMITTERS
+\ =============================================================================
+
+\ Emit inline multiplication: pop b, pop a, push (a * b)
+\ ( -- )
+: EMIT-INLINE-MUL
+    \ Pop two values from stack
+    COMPILE-POP  \ b
+    COMPILE-POP  \ a
+    \ Stack: ( b-handle a-handle )
+
+    \ Multiply: a * b
+    CURRENT-BUILDER @ ROT ROT LLVM-BUILD-MUL
+    \ Stack: ( result-handle )
+
+    \ Push result back to stack
+    COMPILE-PUSH ;
+
+\ Emit inline addition: pop b, pop a, push (a + b)
+\ ( -- )
+: EMIT-INLINE-ADD
+    \ Pop two values from stack
+    COMPILE-POP  \ b
+    COMPILE-POP  \ a
+    \ Stack: ( b-handle a-handle )
+
+    \ Add: a + b
+    CURRENT-BUILDER @ ROT ROT LLVM-BUILD-ADD
+    \ Stack: ( result-handle )
+
+    \ Push result back to stack
+    COMPILE-PUSH ;
+
+\ Emit inline subtraction: pop b, pop a, push (a - b)
+\ ( -- )
+: EMIT-INLINE-SUB
+    \ Pop two values from stack
+    COMPILE-POP  \ b (second operand)
+    COMPILE-POP  \ a (first operand)
+    \ Stack: ( b-handle a-handle )
+
+    \ Swap to get correct order for subtraction
+    SWAP
+    \ Stack: ( a-handle b-handle )
+
+    \ Subtract: a - b
+    CURRENT-BUILDER @ -ROT LLVM-BUILD-SUB
+    \ Stack: ( result-handle )
+
+    \ Push result back to stack
+    COMPILE-PUSH ;
+
+\ Emit inline division: pop b, pop a, push (a / b)
+\ ( -- )
+: EMIT-INLINE-DIV
+    \ Pop two values from stack
+    COMPILE-POP  \ b (divisor, second operand)
+    COMPILE-POP  \ a (dividend, first operand)
+    \ Stack: ( b-handle a-handle )
+
+    \ Swap to get correct order for division
+    SWAP
+    \ Stack: ( a-handle b-handle )
+
+    \ Divide: a / b
+    CURRENT-BUILDER @ -ROT LLVM-BUILD-SDIV
+    \ Stack: ( result-handle )
+
+    \ Push result back to stack
+    COMPILE-PUSH ;
+
+\ Emit inline modulo: pop b, pop a, push (a MOD b)
+\ ( -- )
+: EMIT-INLINE-MOD
+    \ Pop two values from stack
+    COMPILE-POP  \ b (divisor, second operand)
+    COMPILE-POP  \ a (dividend, first operand)
+    \ Stack: ( b-handle a-handle )
+
+    \ Swap to get correct order for modulo
+    SWAP
+    \ Stack: ( a-handle b-handle )
+
+    \ Remainder: a MOD b
+    CURRENT-BUILDER @ -ROT LLVM-BUILD-SREM
+    \ Stack: ( result-handle )
+
+    \ Push result back to stack
+    COMPILE-PUSH ;
+
+\ Emit inline negate: pop a, push (-a)
+\ ( -- )
+: EMIT-INLINE-NEGATE
+    \ Pop value from stack
+    COMPILE-POP  \ a
+    \ Stack: ( a-handle )
+
+    \ Build constant 0
+    CURRENT-CTX @ 0 64 LLVM-BUILD-CONST-INT
+    \ Stack: ( a-handle zero-handle )
+
+    \ Swap to get correct order: 0 - a
+    SWAP
+    \ Stack: ( zero-handle a-handle )
+
+    \ Subtract: 0 - a
+    CURRENT-BUILDER @ -ROT LLVM-BUILD-SUB
+    \ Stack: ( result-handle )
+
+    \ Push result back to stack
+    COMPILE-PUSH ;
+
+\ Emit inline AND: pop b, pop a, push (a AND b)
+\ ( -- )
+: EMIT-INLINE-AND
+    COMPILE-POP  \ b
+    COMPILE-POP  \ a
+    CURRENT-BUILDER @ ROT ROT LLVM-BUILD-AND
+    COMPILE-PUSH ;
+
+\ Emit inline OR: pop b, pop a, push (a OR b)
+\ ( -- )
+: EMIT-INLINE-OR
+    COMPILE-POP  \ b
+    COMPILE-POP  \ a
+    CURRENT-BUILDER @ ROT ROT LLVM-BUILD-OR
+    COMPILE-PUSH ;
+
+\ Emit inline XOR: pop b, pop a, push (a XOR b)
+\ ( -- )
+: EMIT-INLINE-XOR
+    COMPILE-POP  \ b
+    COMPILE-POP  \ a
+    CURRENT-BUILDER @ ROT ROT LLVM-BUILD-XOR
+    COMPILE-PUSH ;
+
+\ Emit inline INVERT: pop a, push (NOT a) via (a XOR -1)
+\ ( -- )
+: EMIT-INLINE-INVERT
+    COMPILE-POP  \ a
+    \ Build constant -1 (all bits set)
+    CURRENT-CTX @ -1 64 LLVM-BUILD-CONST-INT
+    \ XOR with -1 to flip all bits
+    CURRENT-BUILDER @ ROT ROT LLVM-BUILD-XOR
+    COMPILE-PUSH ;
+
+\ Emit inline LSHIFT: pop b, pop a, push (a << b)
+\ ( -- )
+: EMIT-INLINE-LSHIFT
+    COMPILE-POP  \ b (shift amount, second operand)
+    COMPILE-POP  \ a (value to shift, first operand)
+    \ Stack: ( b-handle a-handle )
+
+    \ Swap to get correct order for shift
+    SWAP
+    \ Stack: ( a-handle b-handle )
+
+    \ Shift left: a << b
+    CURRENT-BUILDER @ -ROT LLVM-BUILD-SHL
+    COMPILE-PUSH ;
+
+\ Emit inline RSHIFT: pop b, pop a, push (a >> b)
+\ ( -- )
+: EMIT-INLINE-RSHIFT
+    COMPILE-POP  \ b (shift amount, second operand)
+    COMPILE-POP  \ a (value to shift, first operand)
+    \ Stack: ( b-handle a-handle )
+
+    \ Swap to get correct order for shift
+    SWAP
+    \ Stack: ( a-handle b-handle )
+
+    \ Shift right: a >> b
+    CURRENT-BUILDER @ -ROT LLVM-BUILD-ASHR
+    COMPILE-PUSH ;
+
+\ Emit inline <: pop b, pop a, push (a < b ? -1 : 0)
+\ ( -- )
+: EMIT-INLINE-LT
+    COMPILE-POP COMPILE-POP  \ b a
+    SWAP                      \ a b (correct order for lhs < rhs)
+    CURRENT-BUILDER @ 2       \ a b builder 2
+    2SWAP                     \ builder 2 a b
+    LLVM-BUILD-ICMP           \ cmp-result (i1)
+    \ Convert i1 to i64 (-1 or 0)
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT LLVM-BUILD-SEXT
+    COMPILE-PUSH ;
+
+\ Emit inline >: pop b, pop a, push (a > b ? -1 : 0)
+\ ( -- )
+: EMIT-INLINE-GT
+    COMPILE-POP COMPILE-POP  \ b a
+    SWAP                      \ a b
+    CURRENT-BUILDER @ 4       \ a b builder 4
+    2SWAP                     \ builder 4 a b
+    LLVM-BUILD-ICMP
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT LLVM-BUILD-SEXT
+    COMPILE-PUSH ;
+
+\ Emit inline =: pop b, pop a, push (a = b ? -1 : 0)
+\ ( -- )
+: EMIT-INLINE-EQ
+    COMPILE-POP COMPILE-POP  \ b a
+    SWAP                      \ a b
+    CURRENT-BUILDER @ 0       \ a b builder 0
+    2SWAP                     \ builder 0 a b
+    LLVM-BUILD-ICMP
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT LLVM-BUILD-SEXT
+    COMPILE-PUSH ;
+
+\ Emit inline <>: pop b, pop a, push (a <> b ? -1 : 0)
+\ ( -- )
+: EMIT-INLINE-NE
+    COMPILE-POP COMPILE-POP  \ b a
+    SWAP                      \ a b
+    CURRENT-BUILDER @ 1       \ a b builder 1
+    2SWAP                     \ builder 1 a b
+    LLVM-BUILD-ICMP
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT LLVM-BUILD-SEXT
+    COMPILE-PUSH ;
+
+\ Emit inline <=: pop b, pop a, push (a <= b ? -1 : 0)
+\ ( -- )
+: EMIT-INLINE-LE
+    COMPILE-POP COMPILE-POP  \ b a
+    SWAP                      \ a b
+    CURRENT-BUILDER @ 3       \ a b builder 3
+    2SWAP                     \ builder 3 a b
+    LLVM-BUILD-ICMP
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT LLVM-BUILD-SEXT
+    COMPILE-PUSH ;
+
+\ Emit inline >=: pop b, pop a, push (a >= b ? -1 : 0)
+\ ( -- )
+: EMIT-INLINE-GE
+    COMPILE-POP COMPILE-POP  \ b a
+    SWAP                      \ a b
+    CURRENT-BUILDER @ 5       \ a b builder 5
+    2SWAP                     \ builder 5 a b
+    LLVM-BUILD-ICMP
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT LLVM-BUILD-SEXT
+    COMPILE-PUSH ;
+
+\ Emit inline 0=: pop a, push (a = 0 ? -1 : 0)
+\ ( -- )
+: EMIT-INLINE-0EQ
+    COMPILE-POP  \ a
+    \ Build constant 0
+    CURRENT-CTX @ 0 64 LLVM-BUILD-CONST-INT
+    \ Stack: ( a-handle zero-handle )
+    \ Need: ( builder predicate lhs rhs ) = ( builder 0 a 0 )
+    CURRENT-BUILDER @ 0       \ a zero builder 0
+    2SWAP                     \ builder 0 a zero
+    LLVM-BUILD-ICMP
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT LLVM-BUILD-SEXT
+    COMPILE-PUSH ;
+
+\ Emit inline 0<: pop a, push (a < 0 ? -1 : 0)
+\ ( -- )
+: EMIT-INLINE-0LT
+    COMPILE-POP  \ a
+    \ Build constant 0
+    CURRENT-CTX @ 0 64 LLVM-BUILD-CONST-INT
+    \ Stack: ( a-handle zero-handle )
+    \ Need: ( builder predicate lhs rhs ) = ( builder 2 a 0 )
+    CURRENT-BUILDER @ 2       \ a zero builder 2
+    2SWAP                     \ builder 2 a zero
+    LLVM-BUILD-ICMP
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT LLVM-BUILD-SEXT
+    COMPILE-PUSH ;
+
+\ Emit inline 0>: pop a, push (a > 0 ? -1 : 0)
+\ ( -- )
+: EMIT-INLINE-0GT
+    COMPILE-POP  \ a
+    \ Build constant 0
+    CURRENT-CTX @ 0 64 LLVM-BUILD-CONST-INT
+    \ Stack: ( a-handle zero-handle )
+    \ Need: ( builder predicate lhs rhs ) = ( builder 4 a 0 )
+    CURRENT-BUILDER @ 4       \ a zero builder 4
+    2SWAP                     \ builder 4 a zero
+    LLVM-BUILD-ICMP
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT LLVM-BUILD-SEXT
+    COMPILE-PUSH ;
+
+\ Emit inline DUP: pop a, push a, push a
+\ ( -- )
+: EMIT-INLINE-DUP
+    COMPILE-POP   \ Pop value
+    DUP           \ Duplicate the handle
+    COMPILE-PUSH  \ Push first copy
+    COMPILE-PUSH  \ Push second copy
+;
+
+\ Emit inline DROP: pop a
+\ ( -- )
+: EMIT-INLINE-DROP
+    COMPILE-POP   \ Pop and discard
+    DROP          \ Drop the handle
+;
+
+\ Emit inline SWAP: pop b, pop a, push b, push a
+\ ( -- )
+: EMIT-INLINE-SWAP
+    COMPILE-POP   \ b
+    COMPILE-POP   \ a
+    SWAP          \ Now: b a
+    COMPILE-PUSH  \ Push b
+    COMPILE-PUSH  \ Push a
+;
+
+\ Emit inline OVER: pop x2, pop x1, push x1, push x2, push x1
+\ ( -- )
+: EMIT-INLINE-OVER
+    COMPILE-POP   \ x2 -> stack: ( x2h )
+    COMPILE-POP   \ x1 -> stack: ( x2h x1h )
+    DUP           \ stack: ( x2h x1h x1h )
+    COMPILE-PUSH  \ push x1 -> stack: ( x2h x1h )
+    SWAP          \ stack: ( x1h x2h )
+    DUP           \ stack: ( x1h x2h x2h )
+    COMPILE-PUSH  \ push x2 -> stack: ( x1h x2h )
+    DROP          \ stack: ( x1h )
+    COMPILE-PUSH  \ push x1
+;
+
+\ Emit inline ROT: pop x3, pop x2, pop x1, push x2, push x3, push x1
+\ ( -- )
+: EMIT-INLINE-ROT
+    COMPILE-POP   \ x3 -> stack: ( x3h )
+    COMPILE-POP   \ x2 -> stack: ( x3h x2h )
+    COMPILE-POP   \ x1 -> stack: ( x3h x2h x1h )
+    \ Need to push: x2h, x3h, x1h
+    >R            \ Save x1h -> stack: ( x3h x2h ) R: ( x1h )
+    SWAP          \ stack: ( x2h x3h )
+    DUP           \ stack: ( x2h x3h x3h )
+    >R            \ Save x3h -> stack: ( x2h x3h ) R: ( x1h x3h )
+    DROP          \ stack: ( x2h )
+    DUP           \ stack: ( x2h x2h )
+    COMPILE-PUSH  \ push x2 -> stack: ( x2h )
+    DROP          \ stack: ( )
+    R>            \ Get x3h -> stack: ( x3h )
+    DUP           \ stack: ( x3h x3h )
+    COMPILE-PUSH  \ push x3 -> stack: ( x3h )
+    DROP          \ stack: ( )
+    R>            \ Get x1h -> stack: ( x1h )
+    COMPILE-PUSH  \ push x1
+;
+
+\ Emit inline @ (fetch): pop addr, load i64 from memory[addr], push value
+\ ( -- )
+: EMIT-INLINE-FETCH
+    COMPILE-POP   \ addr -> ( addr )
+    \ GEP: ( builder ctx ptr offset -- ptr )
+    CURRENT-BUILDER @ CURRENT-CTX @ PARAM-MEMORY @ 3 PICK LLVM-BUILD-GEP
+    \ ( addr gep-ptr )
+    \ LOAD: ( builder ctx ptr width -- value )
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT 64 LLVM-BUILD-LOAD
+    \ ( addr value )
+    SWAP DROP  \ ( value )
+    COMPILE-PUSH
+;
+
+\ Emit inline ! (store): pop addr, pop value, store i64 to memory[addr]
+\ ( -- )
+: EMIT-INLINE-STORE
+    COMPILE-POP   \ addr -> ( addr )
+    COMPILE-POP   \ value -> ( addr value )
+    OVER >R       \ Save addr to R -> ( addr value ) R:( addr )
+    \ GEP: ( builder ctx ptr offset -- ptr )
+    CURRENT-BUILDER @ CURRENT-CTX @ PARAM-MEMORY @ R> LLVM-BUILD-GEP
+    \ ( addr value gep-ptr )
+    \ STORE: ( builder value ptr -- )
+    CURRENT-BUILDER @ ROT ROT LLVM-BUILD-STORE
+    \ ( addr )
+    DROP
+;
+
+\ Emit inline C@ (c-fetch): pop addr, load i8 from memory[addr], sext to i64, push
+\ ( -- )
+: EMIT-INLINE-C-FETCH
+    COMPILE-POP   \ addr -> ( addr )
+    \ GEP: ( builder ctx ptr offset -- ptr )
+    CURRENT-BUILDER @ CURRENT-CTX @ PARAM-MEMORY @ 3 PICK LLVM-BUILD-GEP
+    \ ( addr gep-ptr )
+    \ LOAD i8: ( builder ctx ptr width -- value )
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT 8 LLVM-BUILD-LOAD
+    \ ( addr i8-val )
+    \ SEXT i8->i64: ( builder ctx value -- value )
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT LLVM-BUILD-SEXT
+    \ ( addr i64-val )
+    SWAP DROP  \ ( i64-val )
+    COMPILE-PUSH
+;
+
+\ Emit inline C! (c-store): pop addr, pop value, truncate to i8, store to memory[addr]
+\ ( -- )
+: EMIT-INLINE-C-STORE
+    COMPILE-POP   \ addr -> ( addr )
+    COMPILE-POP   \ value -> ( addr value )
+    \ TRUNC i64->i8: ( builder ctx value width -- i8-val )
+    CURRENT-BUILDER @ CURRENT-CTX @ 2 PICK 8 LLVM-BUILD-TRUNC
+    \ ( addr value i8-val )
+    ROT >R        \ Save addr -> ( value i8-val ) R:( addr )
+    \ GEP: ( builder ctx ptr offset -- ptr )
+    CURRENT-BUILDER @ CURRENT-CTX @ PARAM-MEMORY @ R> LLVM-BUILD-GEP
+    \ ( value i8-val gep-ptr )
+    \ STORE: ( builder value ptr -- )
+    CURRENT-BUILDER @ ROT ROT LLVM-BUILD-STORE
+    \ ( value )
+    DROP
+;
+
+\ Emit inline +! (add-store): pop addr, pop n, add n to memory[addr]
+\ ( -- )
+: EMIT-INLINE-ADD-STORE
+    COMPILE-POP   \ addr -> ( addr )
+    COMPILE-POP   \ n -> ( addr n )
+    OVER >R       \ Save addr -> ( addr n ) R:( addr )
+    \ GEP: ( builder ctx ptr offset -- ptr )
+    CURRENT-BUILDER @ CURRENT-CTX @ PARAM-MEMORY @ R> LLVM-BUILD-GEP
+    \ ( addr n gep-ptr )
+    DUP >R        \ Save gep-ptr -> ( addr n gep-ptr ) R:( gep-ptr )
+    \ LOAD: ( builder ctx ptr width -- old )
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT 64 LLVM-BUILD-LOAD
+    \ ( addr n old )
+    \ ADD: ( builder lhs rhs -- sum )
+    CURRENT-BUILDER @ ROT ROT LLVM-BUILD-ADD
+    \ ( addr sum )
+    \ STORE: ( builder value ptr -- )
+    R> CURRENT-BUILDER @ ROT ROT LLVM-BUILD-STORE
+    \ ( addr )
+    DROP
+;
 
 \ =============================================================================
 \ AST COMPILATION
@@ -1017,6 +1476,308 @@ VARIABLE PARAM-RP      \ rp pointer parameter
         WORD-NAME-BUFFER AST-GET-WORD
         \ Stack: ( name-len )
 
+        \ Check if it's an inlinable primitive
+        \ Store "*" at COMPILER-SCRATCH for comparison
+        42 COMPILER-SCRATCH C!  \ ASCII 42 = '*'
+
+        \ Compare with "*"
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 1 STRING-EQUALS? IF
+            \ It's multiplication - emit inline
+            DROP  \ Drop name-len
+            EMIT-INLINE-MUL
+            EXIT
+        THEN
+
+        \ Check for '+'
+        43 COMPILER-SCRATCH C!  \ ASCII 43 = '+'
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 1 STRING-EQUALS? IF
+            DROP  \ Drop name-len
+            EMIT-INLINE-ADD
+            EXIT
+        THEN
+
+        \ Check for '-'
+        45 COMPILER-SCRATCH C!  \ ASCII 45 = '-'
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 1 STRING-EQUALS? IF
+            DROP  \ Drop name-len
+            EMIT-INLINE-SUB
+            EXIT
+        THEN
+
+        \ Check for '/'
+        47 COMPILER-SCRATCH C!  \ ASCII 47 = '/'
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 1 STRING-EQUALS? IF
+            DROP  \ Drop name-len
+            EMIT-INLINE-DIV
+            EXIT
+        THEN
+
+        \ Check for 'MOD'
+        77 COMPILER-SCRATCH C!     \ M
+        79 COMPILER-SCRATCH 1 + C! \ O
+        68 COMPILER-SCRATCH 2 + C! \ D
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 3 STRING-EQUALS? IF
+            DROP  \ Drop name-len
+            EMIT-INLINE-MOD
+            EXIT
+        THEN
+
+        \ Check for 'NEGATE'
+        78  COMPILER-SCRATCH C!     \ N
+        69  COMPILER-SCRATCH 1 + C! \ E
+        71  COMPILER-SCRATCH 2 + C! \ G
+        65  COMPILER-SCRATCH 3 + C! \ A
+        84  COMPILER-SCRATCH 4 + C! \ T
+        69  COMPILER-SCRATCH 5 + C! \ E
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 6 STRING-EQUALS? IF
+            DROP  \ Drop name-len
+            EMIT-INLINE-NEGATE
+            EXIT
+        THEN
+
+        \ Check for 'AND'
+        65 COMPILER-SCRATCH C!     \ A
+        78 COMPILER-SCRATCH 1 + C! \ N
+        68 COMPILER-SCRATCH 2 + C! \ D
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 3 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-AND
+            EXIT
+        THEN
+
+        \ Check for 'OR'
+        79 COMPILER-SCRATCH C!     \ O
+        82 COMPILER-SCRATCH 1 + C! \ R
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 2 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-OR
+            EXIT
+        THEN
+
+        \ Check for 'XOR'
+        88 COMPILER-SCRATCH C!     \ X
+        79 COMPILER-SCRATCH 1 + C! \ O
+        82 COMPILER-SCRATCH 2 + C! \ R
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 3 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-XOR
+            EXIT
+        THEN
+
+        \ Check for 'INVERT'
+        73  COMPILER-SCRATCH C!     \ I
+        78  COMPILER-SCRATCH 1 + C! \ N
+        86  COMPILER-SCRATCH 2 + C! \ V
+        69  COMPILER-SCRATCH 3 + C! \ E
+        82  COMPILER-SCRATCH 4 + C! \ R
+        84  COMPILER-SCRATCH 5 + C! \ T
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 6 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-INVERT
+            EXIT
+        THEN
+
+        \ Check for 'LSHIFT'
+        76  COMPILER-SCRATCH C!     \ L
+        83  COMPILER-SCRATCH 1 + C! \ S
+        72  COMPILER-SCRATCH 2 + C! \ H
+        73  COMPILER-SCRATCH 3 + C! \ I
+        70  COMPILER-SCRATCH 4 + C! \ F
+        84  COMPILER-SCRATCH 5 + C! \ T
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 6 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-LSHIFT
+            EXIT
+        THEN
+
+        \ Check for 'RSHIFT'
+        82  COMPILER-SCRATCH C!     \ R
+        83  COMPILER-SCRATCH 1 + C! \ S
+        72  COMPILER-SCRATCH 2 + C! \ H
+        73  COMPILER-SCRATCH 3 + C! \ I
+        70  COMPILER-SCRATCH 4 + C! \ F
+        84  COMPILER-SCRATCH 5 + C! \ T
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 6 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-RSHIFT
+            EXIT
+        THEN
+
+        \ Check for '<'
+        60 COMPILER-SCRATCH C!  \ <
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 1 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-LT
+            EXIT
+        THEN
+
+        \ Check for '>'
+        62 COMPILER-SCRATCH C!  \ >
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 1 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-GT
+            EXIT
+        THEN
+
+        \ Check for '='
+        61 COMPILER-SCRATCH C!  \ =
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 1 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-EQ
+            EXIT
+        THEN
+
+        \ Check for '<>'
+        60 COMPILER-SCRATCH C!      \ <
+        62 COMPILER-SCRATCH 1 + C!  \ >
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 2 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-NE
+            EXIT
+        THEN
+
+        \ Check for '<='
+        60 COMPILER-SCRATCH C!      \ <
+        61 COMPILER-SCRATCH 1 + C!  \ =
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 2 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-LE
+            EXIT
+        THEN
+
+        \ Check for '>='
+        62 COMPILER-SCRATCH C!      \ >
+        61 COMPILER-SCRATCH 1 + C!  \ =
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 2 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-GE
+            EXIT
+        THEN
+
+        \ Check for '0='
+        48 COMPILER-SCRATCH C!      \ 0
+        61 COMPILER-SCRATCH 1 + C!  \ =
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 2 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-0EQ
+            EXIT
+        THEN
+
+        \ Check for '0<'
+        48 COMPILER-SCRATCH C!      \ 0
+        60 COMPILER-SCRATCH 1 + C!  \ <
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 2 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-0LT
+            EXIT
+        THEN
+
+        \ Check for '0>'
+        48 COMPILER-SCRATCH C!      \ 0
+        62 COMPILER-SCRATCH 1 + C!  \ >
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 2 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-0GT
+            EXIT
+        THEN
+
+        \ Check for 'DUP'
+        68 COMPILER-SCRATCH C!      \ D
+        85 COMPILER-SCRATCH 1 + C!  \ U
+        80 COMPILER-SCRATCH 2 + C!  \ P
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 3 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-DUP
+            EXIT
+        THEN
+
+        \ Check for 'DROP'
+        68 COMPILER-SCRATCH C!      \ D
+        82 COMPILER-SCRATCH 1 + C!  \ R
+        79 COMPILER-SCRATCH 2 + C!  \ O
+        80 COMPILER-SCRATCH 3 + C!  \ P
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 4 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-DROP
+            EXIT
+        THEN
+
+        \ Check for 'SWAP'
+        83 COMPILER-SCRATCH C!      \ S
+        87 COMPILER-SCRATCH 1 + C!  \ W
+        65 COMPILER-SCRATCH 2 + C!  \ A
+        80 COMPILER-SCRATCH 3 + C!  \ P
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 4 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-SWAP
+            EXIT
+        THEN
+
+        \ Check for 'OVER'
+        79 COMPILER-SCRATCH C!      \ O
+        86 COMPILER-SCRATCH 1 + C!  \ V
+        69 COMPILER-SCRATCH 2 + C!  \ E
+        82 COMPILER-SCRATCH 3 + C!  \ R
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 4 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-OVER
+            EXIT
+        THEN
+
+        \ Check for 'ROT'
+        82 COMPILER-SCRATCH C!      \ R
+        79 COMPILER-SCRATCH 1 + C!  \ O
+        84 COMPILER-SCRATCH 2 + C!  \ T
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 3 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-ROT
+            EXIT
+        THEN
+
+        \ Check for '@' (fetch)
+        64 COMPILER-SCRATCH C!      \ @
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 1 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-FETCH
+            EXIT
+        THEN
+
+        \ Check for '!' (store)
+        33 COMPILER-SCRATCH C!      \ !
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 1 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-STORE
+            EXIT
+        THEN
+
+        \ Check for 'C@'
+        67 COMPILER-SCRATCH C!      \ C
+        64 COMPILER-SCRATCH 1 + C!  \ @
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 2 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-C-FETCH
+            EXIT
+        THEN
+
+        \ Check for 'C!'
+        67 COMPILER-SCRATCH C!      \ C
+        33 COMPILER-SCRATCH 1 + C!  \ !
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 2 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-C-STORE
+            EXIT
+        THEN
+
+        \ Check for '+!'
+        43 COMPILER-SCRATCH C!      \ +
+        33 COMPILER-SCRATCH 1 + C!  \ !
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 2 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-ADD-STORE
+            EXIT
+        THEN
+
+        \ Not an inlinable primitive - do normal function call
         \ Map to primitive name
         WORD-NAME-BUFFER SWAP MAP-WORD-NAME
         \ Stack: ( prim-addr prim-len )
@@ -1582,6 +2343,35 @@ VARIABLE PARAM-RP      \ rp pointer parameter
     114 COMPILER-SCRATCH 6 + C! 95 COMPILER-SCRATCH 7 + C! 116 COMPILER-SCRATCH 8 + C!
     121 COMPILER-SCRATCH 9 + C! 112 COMPILER-SCRATCH 10 + C! 101 COMPILER-SCRATCH 11 + C!
     COMPILER-SCRATCH 12 DECLARE-PRIMITIVE
+
+    \ I/O - quarter_dot
+    113 COMPILER-SCRATCH 0 + C! 117 COMPILER-SCRATCH 1 + C! 97 COMPILER-SCRATCH 2 + C!
+    114 COMPILER-SCRATCH 3 + C! 116 COMPILER-SCRATCH 4 + C! 101 COMPILER-SCRATCH 5 + C!
+    114 COMPILER-SCRATCH 6 + C! 95 COMPILER-SCRATCH 7 + C! 100 COMPILER-SCRATCH 8 + C!
+    111 COMPILER-SCRATCH 9 + C! 116 COMPILER-SCRATCH 10 + C!
+    COMPILER-SCRATCH 11 DECLARE-PRIMITIVE
+
+    \ I/O - quarter_cr
+    113 COMPILER-SCRATCH 0 + C! 117 COMPILER-SCRATCH 1 + C! 97 COMPILER-SCRATCH 2 + C!
+    114 COMPILER-SCRATCH 3 + C! 116 COMPILER-SCRATCH 4 + C! 101 COMPILER-SCRATCH 5 + C!
+    114 COMPILER-SCRATCH 6 + C! 95 COMPILER-SCRATCH 7 + C! 99 COMPILER-SCRATCH 8 + C!
+    114 COMPILER-SCRATCH 9 + C!
+    COMPILER-SCRATCH 10 DECLARE-PRIMITIVE
+
+    \ I/O - quarter_emit
+    113 COMPILER-SCRATCH 0 + C! 117 COMPILER-SCRATCH 1 + C! 97 COMPILER-SCRATCH 2 + C!
+    114 COMPILER-SCRATCH 3 + C! 116 COMPILER-SCRATCH 4 + C! 101 COMPILER-SCRATCH 5 + C!
+    114 COMPILER-SCRATCH 6 + C! 95 COMPILER-SCRATCH 7 + C! 101 COMPILER-SCRATCH 8 + C!
+    109 COMPILER-SCRATCH 9 + C! 105 COMPILER-SCRATCH 10 + C! 116 COMPILER-SCRATCH 11 + C!
+    COMPILER-SCRATCH 12 DECLARE-PRIMITIVE
+
+    \ I/O - quarter_space
+    113 COMPILER-SCRATCH 0 + C! 117 COMPILER-SCRATCH 1 + C! 97 COMPILER-SCRATCH 2 + C!
+    114 COMPILER-SCRATCH 3 + C! 116 COMPILER-SCRATCH 4 + C! 101 COMPILER-SCRATCH 5 + C!
+    114 COMPILER-SCRATCH 6 + C! 95 COMPILER-SCRATCH 7 + C! 115 COMPILER-SCRATCH 8 + C!
+    112 COMPILER-SCRATCH 9 + C! 97 COMPILER-SCRATCH 10 + C! 99 COMPILER-SCRATCH 11 + C!
+    101 COMPILER-SCRATCH 12 + C!
+    COMPILER-SCRATCH 13 DECLARE-PRIMITIVE
 ;
 
 \ =============================================================================

@@ -64,6 +64,7 @@ fn register_quarter_symbols() -> usize {
         crate::words::quarter_j as usize,
         // I/O operations
         crate::words::quarter_emit as usize,
+        crate::words::quarter_space as usize,
         crate::words::quarter_key as usize,
         crate::words::quarter_cr as usize,
         crate::words::quarter_dot as usize,
@@ -392,6 +393,7 @@ impl LLVMRegistry {
 
         // Select type based on bit width
         let load_type = match bit_width {
+            8 => context.i8_type().as_basic_type_enum(),
             32 => context.i32_type().as_basic_type_enum(),
             64 => context.i64_type().as_basic_type_enum(),
             _ => return Err(format!("Unsupported bit width for load: {}", bit_width)),
@@ -546,6 +548,174 @@ impl LLVMRegistry {
         Ok(handle)
     }
 
+    /// Build integer signed div instruction
+    pub fn build_sdiv(&mut self,
+                     builder_handle: BuilderHandle,
+                     lhs_handle: ValueHandle,
+                     rhs_handle: ValueHandle) -> Result<ValueHandle, String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let lhs = self.values.get(&lhs_handle)
+            .ok_or_else(|| format!("Invalid LHS handle: {}", lhs_handle))?
+            .into_int_value();
+
+        let rhs = self.values.get(&rhs_handle)
+            .ok_or_else(|| format!("Invalid RHS handle: {}", rhs_handle))?
+            .into_int_value();
+
+        let result = builder.build_int_signed_div(lhs, rhs, "div")
+            .map_err(|e| format!("Failed to build sdiv: {}", e))?;
+
+        let handle = self.next_handle();
+        self.values.insert(handle, result.into());
+        Ok(handle)
+    }
+
+    /// Build integer signed remainder instruction
+    pub fn build_srem(&mut self,
+                     builder_handle: BuilderHandle,
+                     lhs_handle: ValueHandle,
+                     rhs_handle: ValueHandle) -> Result<ValueHandle, String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let lhs = self.values.get(&lhs_handle)
+            .ok_or_else(|| format!("Invalid LHS handle: {}", lhs_handle))?
+            .into_int_value();
+
+        let rhs = self.values.get(&rhs_handle)
+            .ok_or_else(|| format!("Invalid RHS handle: {}", rhs_handle))?
+            .into_int_value();
+
+        let result = builder.build_int_signed_rem(lhs, rhs, "rem")
+            .map_err(|e| format!("Failed to build srem: {}", e))?;
+
+        let handle = self.next_handle();
+        self.values.insert(handle, result.into());
+        Ok(handle)
+    }
+
+    /// Build bitwise AND instruction
+    pub fn build_and(&mut self,
+                    builder_handle: BuilderHandle,
+                    lhs_handle: ValueHandle,
+                    rhs_handle: ValueHandle) -> Result<ValueHandle, String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let lhs = self.values.get(&lhs_handle)
+            .ok_or_else(|| format!("Invalid LHS handle: {}", lhs_handle))?
+            .into_int_value();
+
+        let rhs = self.values.get(&rhs_handle)
+            .ok_or_else(|| format!("Invalid RHS handle: {}", rhs_handle))?
+            .into_int_value();
+
+        let result = builder.build_and(lhs, rhs, "and")
+            .map_err(|e| format!("Failed to build and: {}", e))?;
+
+        let handle = self.next_handle();
+        self.values.insert(handle, result.into());
+        Ok(handle)
+    }
+
+    /// Build bitwise OR instruction
+    pub fn build_or(&mut self,
+                   builder_handle: BuilderHandle,
+                   lhs_handle: ValueHandle,
+                   rhs_handle: ValueHandle) -> Result<ValueHandle, String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let lhs = self.values.get(&lhs_handle)
+            .ok_or_else(|| format!("Invalid LHS handle: {}", lhs_handle))?
+            .into_int_value();
+
+        let rhs = self.values.get(&rhs_handle)
+            .ok_or_else(|| format!("Invalid RHS handle: {}", rhs_handle))?
+            .into_int_value();
+
+        let result = builder.build_or(lhs, rhs, "or")
+            .map_err(|e| format!("Failed to build or: {}", e))?;
+
+        let handle = self.next_handle();
+        self.values.insert(handle, result.into());
+        Ok(handle)
+    }
+
+    /// Build bitwise XOR instruction
+    pub fn build_xor(&mut self,
+                    builder_handle: BuilderHandle,
+                    lhs_handle: ValueHandle,
+                    rhs_handle: ValueHandle) -> Result<ValueHandle, String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let lhs = self.values.get(&lhs_handle)
+            .ok_or_else(|| format!("Invalid LHS handle: {}", lhs_handle))?
+            .into_int_value();
+
+        let rhs = self.values.get(&rhs_handle)
+            .ok_or_else(|| format!("Invalid RHS handle: {}", rhs_handle))?
+            .into_int_value();
+
+        let result = builder.build_xor(lhs, rhs, "xor")
+            .map_err(|e| format!("Failed to build xor: {}", e))?;
+
+        let handle = self.next_handle();
+        self.values.insert(handle, result.into());
+        Ok(handle)
+    }
+
+    /// Build left shift instruction
+    pub fn build_shl(&mut self,
+                    builder_handle: BuilderHandle,
+                    lhs_handle: ValueHandle,
+                    rhs_handle: ValueHandle) -> Result<ValueHandle, String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let lhs = self.values.get(&lhs_handle)
+            .ok_or_else(|| format!("Invalid LHS handle: {}", lhs_handle))?
+            .into_int_value();
+
+        let rhs = self.values.get(&rhs_handle)
+            .ok_or_else(|| format!("Invalid RHS handle: {}", rhs_handle))?
+            .into_int_value();
+
+        let result = builder.build_left_shift(lhs, rhs, "shl")
+            .map_err(|e| format!("Failed to build shl: {}", e))?;
+
+        let handle = self.next_handle();
+        self.values.insert(handle, result.into());
+        Ok(handle)
+    }
+
+    /// Build arithmetic right shift instruction (sign-preserving)
+    pub fn build_ashr(&mut self,
+                     builder_handle: BuilderHandle,
+                     lhs_handle: ValueHandle,
+                     rhs_handle: ValueHandle) -> Result<ValueHandle, String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let lhs = self.values.get(&lhs_handle)
+            .ok_or_else(|| format!("Invalid LHS handle: {}", lhs_handle))?
+            .into_int_value();
+
+        let rhs = self.values.get(&rhs_handle)
+            .ok_or_else(|| format!("Invalid RHS handle: {}", rhs_handle))?
+            .into_int_value();
+
+        let result = builder.build_right_shift(lhs, rhs, true, "ashr")
+            .map_err(|e| format!("Failed to build ashr: {}", e))?;
+
+        let handle = self.next_handle();
+        self.values.insert(handle, result.into());
+        Ok(handle)
+    }
+
     /// Build unconditional branch
     pub fn build_br(&mut self,
                    builder_handle: BuilderHandle,
@@ -615,6 +785,60 @@ impl LLVMRegistry {
 
         let result = builder.build_int_compare(pred, lhs, rhs, "cmp")
             .map_err(|e| format!("Failed to build comparison: {}", e))?;
+
+        let handle = self.next_handle();
+        self.values.insert(handle, result.into());
+        Ok(handle)
+    }
+
+    /// Build sign-extend instruction (i1 -> i64 for Forth booleans)
+    pub fn build_sext(&mut self,
+                     builder_handle: BuilderHandle,
+                     ctx_handle: ContextHandle,
+                     value_handle: ValueHandle) -> Result<ValueHandle, String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let context = self.contexts.get(&ctx_handle)
+            .ok_or_else(|| format!("Invalid context handle: {}", ctx_handle))?;
+
+        let value = self.values.get(&value_handle)
+            .ok_or_else(|| format!("Invalid value handle: {}", value_handle))?
+            .into_int_value();
+
+        let i64_type = context.i64_type();
+        let result = builder.build_int_s_extend(value, i64_type, "sext")
+            .map_err(|e| format!("Failed to build sext: {}", e))?;
+
+        let handle = self.next_handle();
+        self.values.insert(handle, result.into());
+        Ok(handle)
+    }
+
+    /// Build truncate instruction (i64 -> i8 for byte operations)
+    pub fn build_trunc(&mut self,
+                      builder_handle: BuilderHandle,
+                      ctx_handle: ContextHandle,
+                      value_handle: ValueHandle,
+                      bit_width: i64) -> Result<ValueHandle, String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let context = self.contexts.get(&ctx_handle)
+            .ok_or_else(|| format!("Invalid context handle: {}", ctx_handle))?;
+
+        let value = self.values.get(&value_handle)
+            .ok_or_else(|| format!("Invalid value handle: {}", value_handle))?
+            .into_int_value();
+
+        let target_type = match bit_width {
+            8 => context.i8_type(),
+            32 => context.i32_type(),
+            _ => return Err(format!("Unsupported bit width for trunc: {}", bit_width)),
+        };
+
+        let result = builder.build_int_truncate(value, target_type, "trunc")
+            .map_err(|e| format!("Failed to build trunc: {}", e))?;
 
         let handle = self.next_handle();
         self.values.insert(handle, result.into());
@@ -887,6 +1111,69 @@ pub fn llvm_build_mul(builder_handle: i64, lhs_handle: i64, rhs_handle: i64) -> 
     })
 }
 
+/// Build sdiv instruction
+/// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
+pub fn llvm_build_sdiv(builder_handle: i64, lhs_handle: i64, rhs_handle: i64) -> Result<i64, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_sdiv(builder_handle, lhs_handle, rhs_handle)
+    })
+}
+
+/// Build srem instruction
+/// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
+pub fn llvm_build_srem(builder_handle: i64, lhs_handle: i64, rhs_handle: i64) -> Result<i64, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_srem(builder_handle, lhs_handle, rhs_handle)
+    })
+}
+
+/// Build and instruction
+/// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
+pub fn llvm_build_and(builder_handle: i64, lhs_handle: i64, rhs_handle: i64) -> Result<i64, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_and(builder_handle, lhs_handle, rhs_handle)
+    })
+}
+
+/// Build or instruction
+/// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
+pub fn llvm_build_or(builder_handle: i64, lhs_handle: i64, rhs_handle: i64) -> Result<i64, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_or(builder_handle, lhs_handle, rhs_handle)
+    })
+}
+
+/// Build xor instruction
+/// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
+pub fn llvm_build_xor(builder_handle: i64, lhs_handle: i64, rhs_handle: i64) -> Result<i64, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_xor(builder_handle, lhs_handle, rhs_handle)
+    })
+}
+
+/// Build shl (shift left) instruction
+/// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
+pub fn llvm_build_shl(builder_handle: i64, lhs_handle: i64, rhs_handle: i64) -> Result<i64, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_shl(builder_handle, lhs_handle, rhs_handle)
+    })
+}
+
+/// Build ashr (arithmetic shift right) instruction
+/// Stack: ( builder-handle lhs-handle rhs-handle -- result-handle )
+pub fn llvm_build_ashr(builder_handle: i64, lhs_handle: i64, rhs_handle: i64) -> Result<i64, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_ashr(builder_handle, lhs_handle, rhs_handle)
+    })
+}
+
 /// Build unconditional branch
 /// Stack: ( builder-handle block-handle -- )
 pub fn llvm_build_br(builder_handle: i64, block_handle: i64) -> Result<(), String> {
@@ -912,6 +1199,24 @@ pub fn llvm_build_icmp(builder_handle: i64, predicate: i64, lhs_handle: i64, rhs
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.build_icmp(builder_handle, predicate, lhs_handle, rhs_handle)
+    })
+}
+
+/// Build sign-extend instruction (i1 -> i64 for Forth booleans)
+/// Stack: ( builder-handle ctx-handle value-handle -- result-handle )
+pub fn llvm_build_sext(builder_handle: i64, ctx_handle: i64, value_handle: i64) -> Result<i64, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_sext(builder_handle, ctx_handle, value_handle)
+    })
+}
+
+/// Build truncate instruction (i64 -> i8 for byte operations)
+/// Stack: ( builder-handle ctx-handle value-handle bit-width -- result-handle )
+pub fn llvm_build_trunc(builder_handle: i64, ctx_handle: i64, value_handle: i64, bit_width: i64) -> Result<i64, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_trunc(builder_handle, ctx_handle, value_handle, bit_width)
     })
 }
 

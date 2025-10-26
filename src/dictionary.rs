@@ -47,7 +47,12 @@ impl Dictionary {
         dict.add_primitive("<", words::less_than);
         dict.add_primitive(">", words::greater_than);
         dict.add_primitive("=", words::equal);
-        // <>, <=, >= now defined in core.fth
+        dict.add_primitive("<>", words::not_equal);
+        dict.add_primitive("<=", words::less_equal);
+        dict.add_primitive(">=", words::greater_equal);
+        dict.add_primitive("0=", words::zero_equal);
+        dict.add_primitive("0<", words::zero_less);
+        dict.add_primitive("0>", words::zero_greater);
         dict.add_primitive("NEGATE", words::negate);
         dict.add_primitive("ABS", words::abs);
         dict.add_primitive("MIN", words::min);
@@ -58,15 +63,17 @@ impl Dictionary {
         dict.add_primitive("2/", words::two_slash);
         dict.add_primitive("CR", words::cr);
         dict.add_primitive("DROP", words::drop);
+        dict.add_primitive("OVER", words::over);
+        dict.add_primitive("ROT", words::rot);
         dict.add_primitive("DEPTH", words::depth);
-        // OVER now defined in core.fth
         dict.add_primitive("/MOD", words::slash_modulo);
+        dict.add_primitive("MOD", words::mod_word);
         dict.add_primitive("I", words::loop_i);
         dict.add_primitive("J", words::loop_j);
         dict.add_primitive("EMIT", words::emit);
+        dict.add_primitive("SPACE", words::space);
         dict.add_primitive("TYPE", words::type_word);
         dict.add_primitive("KEY", words::key);
-        // SPACE now defined in io.fth
         dict.add_primitive("AND", words::and);
         dict.add_primitive("OR", words::or);
         dict.add_primitive("XOR", words::xor);
@@ -76,7 +83,6 @@ impl Dictionary {
         dict.add_primitive(">R", words::to_r);
         dict.add_primitive("R>", words::r_from);
         dict.add_primitive("R@", words::r_fetch);
-        // 0=, 0<, 0> now defined in comparison.fth
         // TRUE, FALSE now defined in core.fth as constants
         dict.add_primitive("!", words::store);
         dict.add_primitive("@", words::fetch);
@@ -114,9 +120,18 @@ impl Dictionary {
         dict.add_primitive("LLVM-BUILD-ADD", words::llvm_build_add_word);
         dict.add_primitive("LLVM-BUILD-SUB", words::llvm_build_sub_word);
         dict.add_primitive("LLVM-BUILD-MUL", words::llvm_build_mul_word);
+        dict.add_primitive("LLVM-BUILD-SDIV", words::llvm_build_sdiv_word);
+        dict.add_primitive("LLVM-BUILD-SREM", words::llvm_build_srem_word);
+        dict.add_primitive("LLVM-BUILD-AND", words::llvm_build_and_word);
+        dict.add_primitive("LLVM-BUILD-OR", words::llvm_build_or_word);
+        dict.add_primitive("LLVM-BUILD-XOR", words::llvm_build_xor_word);
+        dict.add_primitive("LLVM-BUILD-SHL", words::llvm_build_shl_word);
+        dict.add_primitive("LLVM-BUILD-ASHR", words::llvm_build_ashr_word);
         dict.add_primitive("LLVM-BUILD-BR", words::llvm_build_br_word);
         dict.add_primitive("LLVM-BUILD-COND-BR", words::llvm_build_cond_br_word);
         dict.add_primitive("LLVM-BUILD-ICMP", words::llvm_build_icmp_word);
+        dict.add_primitive("LLVM-BUILD-SEXT", words::llvm_build_sext_word);
+        dict.add_primitive("LLVM-BUILD-TRUNC", words::llvm_build_trunc_word);
         dict.add_primitive("LLVM-BUILD-CALL", words::llvm_build_call_word);
         dict.add_primitive("LLVM-GET-PARAM", words::llvm_get_param_word);
         dict.add_primitive("LLVM-BUILD-PHI", words::llvm_build_phi_word);
