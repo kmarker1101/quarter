@@ -185,6 +185,40 @@ impl Dictionary {
         self.words.get(word)
     }
 
+    /// Check if an AST node is a tail-recursive call to the given word
+    fn is_tail_recursive_call(node: &AstNode, word_name: &str) -> bool {
+        match node {
+            AstNode::CallWord(name) => name.to_uppercase() == word_name.to_uppercase(),
+            AstNode::Sequence(nodes) => {
+                // Only the last node can be a tail call
+                if let Some(last) = nodes.last() {
+                    Self::is_tail_recursive_call(last, word_name)
+                } else {
+                    false
+                }
+            }
+            AstNode::IfThenElse { then_branch, else_branch } => {
+                // Check if BOTH branches end with tail calls
+                let then_tail = if let Some(last) = then_branch.last() {
+                    Self::is_tail_recursive_call(last, word_name)
+                } else {
+                    false
+                };
+                let else_tail = if let Some(else_nodes) = else_branch {
+                    if let Some(last) = else_nodes.last() {
+                        Self::is_tail_recursive_call(last, word_name)
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                };
+                then_tail || else_tail
+            }
+            _ => false,
+        }
+    }
+
     pub fn execute_word(
         &self,
         word: &str,
@@ -200,10 +234,33 @@ impl Dictionary {
                     Ok(())
                 }
                 Word::Compiled(ast) => {
-                    // Execute the AST, catching EXIT to convert it to Ok
-                    match ast.execute(stack, self, loop_stack, return_stack, memory) {
-                        Err(msg) if msg == "EXIT" => Ok(()),
-                        result => result,
+                    // Check if this is a tail-recursive function
+                    if Self::is_tail_recursive_call(ast, word) {
+                        // Tail call optimization: execute in a loop instead of recursion
+                        loop {
+                            match ast.execute_with_tco_check(stack, self, loop_stack, return_stack, memory, word) {
+                                Ok(true) => {
+                                    // Tail call detected, continue loop
+                                    continue;
+                                }
+                                Ok(false) => {
+                                    // Normal completion
+                                    return Ok(());
+                                }
+                                Err(msg) if msg == "EXIT" => {
+                                    return Ok(());
+                                }
+                                Err(e) => {
+                                    return Err(e);
+                                }
+                            }
+                        }
+                    } else {
+                        // No tail recursion, execute normally
+                        match ast.execute(stack, self, loop_stack, return_stack, memory) {
+                            Err(msg) if msg == "EXIT" => Ok(()),
+                            result => result,
+                        }
                     }
                 }
                 Word::JITCompiled(jit_fn) => {
