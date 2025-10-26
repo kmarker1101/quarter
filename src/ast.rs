@@ -206,6 +206,12 @@ impl AstNode {
             AstNode::DoLoop { body, increment } => {
                 // Pop limit and start from stack ( limit start -- )
                 if let (Some(start), Some(limit)) = (stack.pop(memory), stack.pop(memory)) {
+                    // Check if we should execute at all (start < limit)
+                    if start >= limit {
+                        // Don't execute - loop would run 0 times
+                        return Ok(());
+                    }
+
                     loop_stack.push_loop(start, limit);
 
                     let result = loop {

@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use quarter::{execute_line, Dictionary, LoopStack, Memory, ReturnStack, Stack};
 
 #[test]
@@ -20,6 +21,8 @@ fn test_s_quote_basic() {
         false,
         false,
         false,
+        false,
+        &mut HashSet::new(),
     )
     .unwrap();
 
@@ -35,6 +38,8 @@ fn test_s_quote_basic() {
         false,
         false,
         false,
+        false,
+        &mut HashSet::new(),
     )
     .unwrap();
 
@@ -66,6 +71,8 @@ fn test_s_quote_fetch_string() {
         false,
         false,
         false,
+        false,
+        &mut HashSet::new(),
     )
     .unwrap();
 
@@ -80,6 +87,8 @@ fn test_s_quote_fetch_string() {
         false,
         false,
         false,
+        false,
+        &mut HashSet::new(),
     )
     .unwrap();
 
@@ -113,6 +122,8 @@ fn test_s_quote_multiple_strings() {
         false,
         false,
         false,
+        false,
+        &mut HashSet::new(),
     )
     .unwrap();
 
@@ -127,6 +138,8 @@ fn test_s_quote_multiple_strings() {
         false,
         false,
         false,
+        false,
+        &mut HashSet::new(),
     )
     .unwrap();
 
@@ -142,6 +155,8 @@ fn test_s_quote_multiple_strings() {
         false,
         false,
         false,
+        false,
+        &mut HashSet::new(),
     )
     .unwrap();
 
@@ -160,6 +175,8 @@ fn test_s_quote_multiple_strings() {
         false,
         false,
         false,
+        false,
+        &mut HashSet::new(),
     )
     .unwrap();
 
@@ -191,6 +208,8 @@ fn test_s_quote_empty_string() {
         false,
         false,
         false,
+        false,
+        &mut HashSet::new(),
     )
     .unwrap();
 
@@ -205,6 +224,8 @@ fn test_s_quote_empty_string() {
         false,
         false,
         false,
+        false,
+        &mut HashSet::new(),
     )
     .unwrap();
 
@@ -233,6 +254,8 @@ fn test_s_quote_with_spaces() {
         false,
         false,
         false,
+        false,
+        &mut HashSet::new(),
     )
     .unwrap();
 
@@ -247,6 +270,8 @@ fn test_s_quote_with_spaces() {
         false,
         false,
         false,
+        false,
+        &mut HashSet::new(),
     )
     .unwrap();
 
@@ -282,6 +307,8 @@ fn test_s_quote_advances_here() {
         false,
         false,
         false,
+        false,
+        &mut HashSet::new(),
     )
     .unwrap();
 
@@ -300,6 +327,8 @@ fn test_s_quote_advances_here() {
         false,
         false,
         false,
+        false,
+        &mut HashSet::new(),
     )
     .unwrap();
 
@@ -330,6 +359,8 @@ fn test_s_quote_with_special_chars() {
         false,
         false,
         false,
+        false,
+        &mut HashSet::new(),
     )
     .unwrap();
 
@@ -344,6 +375,8 @@ fn test_s_quote_with_special_chars() {
         false,
         false,
         false,
+        false,
+        &mut HashSet::new(),
     )
     .unwrap();
 

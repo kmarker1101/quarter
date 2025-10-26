@@ -1,6 +1,6 @@
 use crate::words;
 use crate::{ast::AstNode, stack::Stack};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 // Type alias for JIT-compiled Forth functions
 // Function signature: void word(u8* memory, usize* sp, usize* rp)
@@ -17,6 +17,7 @@ pub enum Word {
 
 pub struct Dictionary {
     words: HashMap<String, Word>,
+    frozen_words: HashSet<String>,
 }
 
 impl Default for Dictionary {
@@ -29,6 +30,7 @@ impl Dictionary {
     pub fn new() -> Self {
         let mut dict = Dictionary {
             words: HashMap::new(),
+            frozen_words: HashSet::new(),
         };
 
         // Register built-in words as Primitives
@@ -183,6 +185,21 @@ impl Dictionary {
 
     pub fn get_word(&self, word: &str) -> Option<&Word> {
         self.words.get(word)
+    }
+
+    /// Get all words with their names (for batch compilation)
+    pub fn get_all_words(&self) -> Vec<(String, &Word)> {
+        self.words.iter().map(|(k, v)| (k.clone(), v)).collect()
+    }
+
+    /// Freeze a word to prevent re-definition (used after JIT compilation)
+    pub fn freeze_word(&mut self, name: &str) {
+        self.frozen_words.insert(name.to_uppercase());
+    }
+
+    /// Check if a word is frozen (cannot be re-defined)
+    pub fn is_frozen(&self, name: &str) -> bool {
+        self.frozen_words.contains(&name.to_uppercase())
     }
 
     /// Check if an AST node is a tail-recursive call to the given word

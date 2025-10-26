@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use quarter::{execute_line, Dictionary, LoopStack, Memory, ReturnStack, Stack};
 
 #[test]
@@ -20,6 +21,8 @@ fn test_u_dot() {
         false,
         false,
         false,
+        false,
+        &mut HashSet::new(),
     )
     .unwrap();
     assert!(stack.is_empty());
@@ -36,6 +39,8 @@ fn test_u_dot() {
         false,
         false,
         false,
+        false,
+        &mut HashSet::new(),
     )
     .unwrap();
     assert!(stack.is_empty());
@@ -61,6 +66,8 @@ fn test_dot_r() {
         false,
         false,
         false,
+        false,
+        &mut HashSet::new(),
     )
     .unwrap();
     assert!(stack.is_empty());
@@ -77,6 +84,8 @@ fn test_dot_r() {
         false,
         false,
         false,
+        false,
+        &mut HashSet::new(),
     )
     .unwrap();
     assert!(stack.is_empty());
@@ -93,6 +102,8 @@ fn test_dot_r() {
         false,
         false,
         false,
+        false,
+        &mut HashSet::new(),
     )
     .unwrap();
     assert!(stack.is_empty());
@@ -118,6 +129,8 @@ fn test_u_dot_r() {
         false,
         false,
         false,
+        false,
+        &mut HashSet::new(),
     )
     .unwrap();
     assert!(stack.is_empty());
@@ -134,6 +147,8 @@ fn test_u_dot_r() {
         false,
         false,
         false,
+        false,
+        &mut HashSet::new(),
     )
     .unwrap();
     assert!(stack.is_empty());

@@ -1,6 +1,10 @@
 \ Basic tests for Quarter Forth primitives
-\ Load with: ./quarter tests/basic_tests.fth
+\
+\ Interpreted mode: ./quarter tests/basic_tests.fth
+\ JIT mode: ./quarter tests/run-all-tests.fth --jit
 
+\ Load test framework if not already loaded
+\ (run-all-tests.fth loads it once for all tests)
 S" stdlib/test-framework.fth" INCLUDED
 
 \ =============================================================================
