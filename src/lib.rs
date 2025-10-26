@@ -284,7 +284,7 @@ impl Memory {
     }
 }
 
-pub fn parse_tokens(tokens: &[&str], dict: &crate::Dictionary) -> Result<AstNode, String> {
+pub fn parse_tokens(tokens: &[&str], dict: &crate::Dictionary, current_word: Option<&str>) -> Result<AstNode, String> {
     let mut nodes = Vec::new();
     let mut i = 0;
 
@@ -293,6 +293,15 @@ pub fn parse_tokens(tokens: &[&str], dict: &crate::Dictionary) -> Result<AstNode
         let token_upper = token.to_uppercase();
 
         match token_upper.as_str() {
+            "RECURSE" => {
+                // RECURSE - compile-only word for recursion
+                if let Some(word_name) = current_word {
+                    nodes.push(AstNode::CallWord(word_name.to_string()));
+                    i += 1;
+                } else {
+                    return Err("RECURSE can only be used inside a word definition".to_string());
+                }
+            }
             ".\"" => {
                 // Handle string literals: collect tokens until closing "
                 let mut string_parts: Vec<String> = Vec::new();
@@ -369,7 +378,7 @@ pub fn parse_tokens(tokens: &[&str], dict: &crate::Dictionary) -> Result<AstNode
                 if end_keyword == "UNTIL" {
                     // BEGIN...UNTIL loop
                     let body_tokens = &tokens[i + 1..i + 1 + end_pos.0];
-                    let body_ast = parse_tokens(body_tokens, dict)?;
+                    let body_ast = parse_tokens(body_tokens, dict, current_word)?;
 
                     nodes.push(AstNode::BeginUntil {
                         body: if let AstNode::Sequence(v) = body_ast {
@@ -386,8 +395,8 @@ pub fn parse_tokens(tokens: &[&str], dict: &crate::Dictionary) -> Result<AstNode
                         let condition_tokens = &tokens[i + 1..i + 1 + while_pos];
                         let body_tokens = &tokens[i + 1 + while_pos + 1..i + 1 + end_pos.0];
 
-                        let condition_ast = parse_tokens(condition_tokens, dict)?;
-                        let body_ast = parse_tokens(body_tokens, dict)?;
+                        let condition_ast = parse_tokens(condition_tokens, dict, current_word)?;
+                        let body_ast = parse_tokens(body_tokens, dict, current_word)?;
 
                         nodes.push(AstNode::BeginWhileRepeat {
                             condition: if let AstNode::Sequence(v) = condition_ast {
@@ -416,7 +425,7 @@ pub fn parse_tokens(tokens: &[&str], dict: &crate::Dictionary) -> Result<AstNode
                 let loop_keyword = tokens[i + 1 + loop_pos];
 
                 let body_tokens = &tokens[i + 1..i + 1 + loop_pos];
-                let body_ast = parse_tokens(body_tokens, dict)?;
+                let body_ast = parse_tokens(body_tokens, dict, current_word)?;
 
                 let increment = if loop_keyword == "+LOOP" {
                     0 // Special marker for +LOOP (stack-based increment)
@@ -445,12 +454,12 @@ pub fn parse_tokens(tokens: &[&str], dict: &crate::Dictionary) -> Result<AstNode
                 } else {
                     &tokens[i + 1..i + 1 + then_end]
                 };
-                let then_branch = parse_tokens(then_tokens, dict)?;
+                let then_branch = parse_tokens(then_tokens, dict, current_word)?;
 
                 // Parse ELSE branch if it exists (from after ELSE to THEN)
                 let else_branch = if let Some(else_pos) = else_start {
                     let else_tokens = &tokens[i + 1 + else_pos + 1..i + 1 + then_end];
-                    Some(parse_tokens(else_tokens, dict)?)
+                    Some(parse_tokens(else_tokens, dict, current_word)?)
                 } else {
                     None
                 };
@@ -769,7 +778,7 @@ pub fn execute_line(
 
                 let word_tokens = &tokens[i + 2..end];
 
-                let ast = parse_tokens(word_tokens, dict)?;
+                let ast = parse_tokens(word_tokens, dict, Some(&word_name))?;
                 // Validate that all words in the AST exist (allow forward reference for recursion)
                 ast.validate_with_name(dict, Some(&word_name))?;
 
@@ -927,7 +936,7 @@ pub fn execute_line(
                         return Err("Control flow and string words (IF/THEN/ELSE/BEGIN/UNTIL/WHILE/REPEAT/DO/LOOP/LEAVE/EXIT/INLINE/.\") are compile-only".to_string());
                     }
 
-                    let ast = parse_tokens(&exec_tokens, dict)?;
+                    let ast = parse_tokens(&exec_tokens, dict, None)?;
                     ast.execute(stack, dict, loop_stack, return_stack, memory)?;
                 }
             }

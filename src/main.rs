@@ -320,7 +320,7 @@ fn main() {
                         let word_name = all_tokens[1].to_uppercase();
                         let word_tokens = &all_tokens[2..all_tokens.len() - 1];
 
-                        match parse_tokens(word_tokens, &dict) {
+                        match parse_tokens(word_tokens, &dict, Some(&word_name)) {
                             Ok(ast) => {
                                 // Validate that all words in the AST exist (allow forward reference for recursion)
                                 if let Err(e) = ast.validate_with_name(&dict, Some(&word_name)) {
@@ -408,7 +408,7 @@ fn main() {
                         let word_name = tokens[1].to_uppercase();
                         let word_tokens = &tokens[2..tokens.len() - 1];
 
-                        match parse_tokens(word_tokens, &dict) {
+                        match parse_tokens(word_tokens, &dict, Some(&word_name)) {
                             Ok(ast) => {
                                 // Validate that all words in the AST exist (allow forward reference for recursion)
                                 if let Err(e) = ast.validate_with_name(&dict, Some(&word_name)) {
@@ -481,7 +481,7 @@ fn main() {
                 {
                     // <value> CONSTANT <name>
                     // Parse and push the value first
-                    match parse_tokens(&tokens[0..1], &dict) {
+                    match parse_tokens(&tokens[0..1], &dict, None) {
                         Ok(ast) => {
                             match ast.execute(
                                 &mut stack,
@@ -580,7 +580,7 @@ fn main() {
                             "Error: Control flow and string words are compile-only (use inside : ; definitions)"
                         );
                     } else {
-                        match parse_tokens(&tokens, &dict) {
+                        match parse_tokens(&tokens, &dict, None) {
                             Ok(ast) => match ast.execute(
                                 &mut stack,
                                 &dict,
