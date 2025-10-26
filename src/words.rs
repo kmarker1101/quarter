@@ -580,6 +580,17 @@ pub fn emit(
     }
 }
 
+/// SPACE: Print a space character
+/// Stack: ( -- )
+pub fn space(
+    _stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    _memory: &mut crate::Memory,
+) {
+    print!(" ");
+}
+
 /// TYPE: Print string from memory
 /// Stack: ( addr len -- )
 pub fn type_word(
@@ -1816,6 +1827,13 @@ pub extern "C" fn quarter_emit(memory: *mut u8, sp: *mut usize, _rp: *mut usize)
         }
         *sp = sp_val - 8;
     }
+}
+
+/// JIT-callable space: ( -- )
+/// Outputs a space character
+#[unsafe(no_mangle)]
+pub extern "C" fn quarter_space(_memory: *mut u8, _sp: *mut usize, _rp: *mut usize) {
+    print!(" ");
 }
 
 /// JIT-callable key: ( -- c )

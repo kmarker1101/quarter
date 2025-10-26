@@ -64,6 +64,7 @@ fn register_quarter_symbols() -> usize {
         crate::words::quarter_j as usize,
         // I/O operations
         crate::words::quarter_emit as usize,
+        crate::words::quarter_space as usize,
         crate::words::quarter_key as usize,
         crate::words::quarter_cr as usize,
         crate::words::quarter_dot as usize,

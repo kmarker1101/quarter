@@ -55,7 +55,7 @@
 \ INPUT/OUTPUT
 \ =============================================================================
 
-: SPACE BL EMIT ;
+\ SPACE is now an inline LLVM primitive
 
 : SPACES ( n -- )
     DUP 0 > IF
