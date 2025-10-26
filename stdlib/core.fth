@@ -20,12 +20,11 @@
 \ STACK MANIPULATION
 \ =============================================================================
 
-: OVER ( x1 x2 -- x1 x2 x1 ) >R DUP R> SWAP ;
+\ OVER and ROT are now inline LLVM primitives
 : NIP ( n1 n2 -- n2 ) SWAP DROP ;
 : TUCK ( n1 n2 -- n2 n1 n2 ) SWAP OVER ;
 
 \ Double-cell stack operations
-: ROT ( x1 x2 x3 -- x2 x3 x1 ) >R SWAP R> SWAP ;
 : -ROT ( x1 x2 x3 -- x3 x1 x2 ) ROT ROT ;
 : 2DUP ( a b -- a b a b ) OVER OVER ;
 : 2DROP ( a b -- ) DROP DROP ;

@@ -1064,6 +1064,69 @@ VARIABLE PARAM-RP      \ rp pointer parameter
     CURRENT-BUILDER @ CURRENT-CTX @ ROT LLVM-BUILD-SEXT
     COMPILE-PUSH ;
 
+\ Emit inline DUP: pop a, push a, push a
+\ ( -- )
+: EMIT-INLINE-DUP
+    COMPILE-POP   \ Pop value
+    DUP           \ Duplicate the handle
+    COMPILE-PUSH  \ Push first copy
+    COMPILE-PUSH  \ Push second copy
+;
+
+\ Emit inline DROP: pop a
+\ ( -- )
+: EMIT-INLINE-DROP
+    COMPILE-POP   \ Pop and discard
+    DROP          \ Drop the handle
+;
+
+\ Emit inline SWAP: pop b, pop a, push b, push a
+\ ( -- )
+: EMIT-INLINE-SWAP
+    COMPILE-POP   \ b
+    COMPILE-POP   \ a
+    SWAP          \ Now: b a
+    COMPILE-PUSH  \ Push b
+    COMPILE-PUSH  \ Push a
+;
+
+\ Emit inline OVER: pop x2, pop x1, push x1, push x2, push x1
+\ ( -- )
+: EMIT-INLINE-OVER
+    COMPILE-POP   \ x2 -> stack: ( x2h )
+    COMPILE-POP   \ x1 -> stack: ( x2h x1h )
+    DUP           \ stack: ( x2h x1h x1h )
+    COMPILE-PUSH  \ push x1 -> stack: ( x2h x1h )
+    SWAP          \ stack: ( x1h x2h )
+    DUP           \ stack: ( x1h x2h x2h )
+    COMPILE-PUSH  \ push x2 -> stack: ( x1h x2h )
+    DROP          \ stack: ( x1h )
+    COMPILE-PUSH  \ push x1
+;
+
+\ Emit inline ROT: pop x3, pop x2, pop x1, push x2, push x3, push x1
+\ ( -- )
+: EMIT-INLINE-ROT
+    COMPILE-POP   \ x3 -> stack: ( x3h )
+    COMPILE-POP   \ x2 -> stack: ( x3h x2h )
+    COMPILE-POP   \ x1 -> stack: ( x3h x2h x1h )
+    \ Need to push: x2h, x3h, x1h
+    >R            \ Save x1h -> stack: ( x3h x2h ) R: ( x1h )
+    SWAP          \ stack: ( x2h x3h )
+    DUP           \ stack: ( x2h x3h x3h )
+    >R            \ Save x3h -> stack: ( x2h x3h ) R: ( x1h x3h )
+    DROP          \ stack: ( x2h )
+    DUP           \ stack: ( x2h x2h )
+    COMPILE-PUSH  \ push x2 -> stack: ( x2h )
+    DROP          \ stack: ( )
+    R>            \ Get x3h -> stack: ( x3h )
+    DUP           \ stack: ( x3h x3h )
+    COMPILE-PUSH  \ push x3 -> stack: ( x3h )
+    DROP          \ stack: ( )
+    R>            \ Get x1h -> stack: ( x1h )
+    COMPILE-PUSH  \ push x1
+;
+
 \ =============================================================================
 \ AST COMPILATION
 \ =============================================================================
@@ -1529,6 +1592,59 @@ VARIABLE PARAM-RP      \ rp pointer parameter
         WORD-NAME-BUFFER OVER COMPILER-SCRATCH 2 STRING-EQUALS? IF
             DROP
             EMIT-INLINE-0GT
+            EXIT
+        THEN
+
+        \ Check for 'DUP'
+        68 COMPILER-SCRATCH C!      \ D
+        85 COMPILER-SCRATCH 1 + C!  \ U
+        80 COMPILER-SCRATCH 2 + C!  \ P
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 3 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-DUP
+            EXIT
+        THEN
+
+        \ Check for 'DROP'
+        68 COMPILER-SCRATCH C!      \ D
+        82 COMPILER-SCRATCH 1 + C!  \ R
+        79 COMPILER-SCRATCH 2 + C!  \ O
+        80 COMPILER-SCRATCH 3 + C!  \ P
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 4 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-DROP
+            EXIT
+        THEN
+
+        \ Check for 'SWAP'
+        83 COMPILER-SCRATCH C!      \ S
+        87 COMPILER-SCRATCH 1 + C!  \ W
+        65 COMPILER-SCRATCH 2 + C!  \ A
+        80 COMPILER-SCRATCH 3 + C!  \ P
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 4 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-SWAP
+            EXIT
+        THEN
+
+        \ Check for 'OVER'
+        79 COMPILER-SCRATCH C!      \ O
+        86 COMPILER-SCRATCH 1 + C!  \ V
+        69 COMPILER-SCRATCH 2 + C!  \ E
+        82 COMPILER-SCRATCH 3 + C!  \ R
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 4 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-OVER
+            EXIT
+        THEN
+
+        \ Check for 'ROT'
+        82 COMPILER-SCRATCH C!      \ R
+        79 COMPILER-SCRATCH 1 + C!  \ O
+        84 COMPILER-SCRATCH 2 + C!  \ T
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 3 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-ROT
             EXIT
         THEN
 

@@ -63,8 +63,9 @@ impl Dictionary {
         dict.add_primitive("2/", words::two_slash);
         dict.add_primitive("CR", words::cr);
         dict.add_primitive("DROP", words::drop);
+        dict.add_primitive("OVER", words::over);
+        dict.add_primitive("ROT", words::rot);
         dict.add_primitive("DEPTH", words::depth);
-        // OVER now defined in core.fth
         dict.add_primitive("/MOD", words::slash_modulo);
         dict.add_primitive("MOD", words::mod_word);
         dict.add_primitive("I", words::loop_i);

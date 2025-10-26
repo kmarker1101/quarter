@@ -195,6 +195,40 @@ pub fn swap(
     }
 }
 
+pub fn over(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    // OVER ( x1 x2 -- x1 x2 x1 )
+    // Copy the second item to top
+    if let (Some(a), Some(b)) = (stack.pop(memory), stack.pop(memory)) {
+        stack.push(b, memory);
+        stack.push(a, memory);
+        stack.push(b, memory);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn rot(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    // ROT ( x1 x2 x3 -- x2 x3 x1 )
+    // Rotate top three items
+    if let (Some(x3), Some(x2), Some(x1)) = (stack.pop(memory), stack.pop(memory), stack.pop(memory)) {
+        stack.push(x2, memory);
+        stack.push(x3, memory);
+        stack.push(x1, memory);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
 pub fn pick(
     stack: &mut Stack,
     _loop_stack: &LoopStack,
