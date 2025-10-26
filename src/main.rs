@@ -1,6 +1,7 @@
 use quarter::{Dictionary, LoopStack, Stack, load_file, load_stdlib, parse_tokens};
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
+use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Track whether the Forth compiler has been loaded
@@ -16,16 +17,18 @@ fn try_forth_compile(
     loop_stack: &mut quarter::LoopStack,
     return_stack: &mut quarter::ReturnStack,
     memory: &mut quarter::Memory,
-    use_forth_compiler: bool,
+    _use_batch: bool,  // Unused - batch compilation only
     no_jit: bool,
     dump_ir: bool,
     verify_ir: bool,
+    _included_files: &mut HashSet<String>,  // Unused - function returns immediately
 ) -> bool {
-    if !use_forth_compiler {
-        return false;
-    }
+    // Incremental compilation disabled - use batch_compile_all_words() instead
+    let _ = (name, ast, dict, stack, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir, _included_files);
+    return false;
 
     // Load the Forth compiler if not already loaded
+    #[allow(unreachable_code)]
     if !FORTH_COMPILER_LOADED.load(Ordering::Relaxed) {
         // Stdlib is already loaded by main(), no need to reload it here
         // Load compiler
@@ -40,6 +43,8 @@ fn try_forth_compile(
             dump_ir,
             verify_ir,
             false,
+            false,  // Not define-only
+            _included_files,
         ) {
             eprintln!("Failed to load Forth compiler: {}", e);
             return false;
@@ -57,6 +62,7 @@ fn try_forth_compile(
             dump_ir,
             verify_ir,
             true,
+            _included_files,
         ) {
             eprintln!("Warning: Failed to JIT-compile stdlib: {}", e);
             // Continue anyway with interpreted stdlib
@@ -119,13 +125,15 @@ fn main() {
     let mut loop_stack = LoopStack::new();
     let mut return_stack = quarter::ReturnStack::new();
     let mut memory = quarter::Memory::new();
+    let mut included_files: HashSet<String> = HashSet::new();
 
     // Parse command line arguments
     let args: Vec<String> = std::env::args().collect();
     let mut no_jit = false;
     let mut dump_ir = false;
     let mut verify_ir = false;
-    let mut use_forth_compiler = false;
+    let mut compile_stdlib = false;
+    let mut jit_mode = false;
     let mut filename: Option<String> = None;
 
     for arg in args.iter().skip(1) {
@@ -135,27 +143,18 @@ fn main() {
             dump_ir = true;
         } else if arg == "--verify-ir" {
             verify_ir = true;
-        } else if arg == "--forth-compiler" {
-            use_forth_compiler = true;
+        } else if arg == "--compile-stdlib" {
+            compile_stdlib = true;
+        } else if arg == "--jit" {
+            jit_mode = true;
+            compile_stdlib = true;  // JIT mode implies compile stdlib
         } else if !arg.starts_with("--") {
             filename = Some(arg.clone());
         }
     }
 
-    if no_jit {
-        println!("JIT compilation disabled");
-    }
-    if dump_ir {
-        println!("IR dump enabled");
-    }
-    if verify_ir {
-        println!("IR verification enabled");
-    }
-    if use_forth_compiler {
-        println!("Using Forth self-hosting compiler");
-    }
 
-    // Load standard library initially as interpreted (will be recompiled later if using Forth compiler)
+    // Load standard library (always interpreted initially)
     if let Err(e) = load_stdlib(
         &mut stack,
         &mut dict,
@@ -165,10 +164,30 @@ fn main() {
         no_jit,
         dump_ir,
         verify_ir,
-        false,
+        false,  // Always load interpreted
+        &mut included_files,
     ) {
         eprintln!("Error loading stdlib: {}", e);
         std::process::exit(1);
+    }
+
+    // Compile stdlib if requested (only for --compile-stdlib mode, not --jit)
+    // In --jit mode, we batch compile everything together after loading user code
+    if compile_stdlib && !jit_mode {
+        if let Err(e) = quarter::batch_compile_all_words(
+            &mut dict,
+            &mut stack,
+            &mut loop_stack,
+            &mut return_stack,
+            &mut memory,
+            no_jit,
+            dump_ir,
+            verify_ir,
+            &mut included_files,
+        ) {
+            eprintln!("Failed to compile stdlib: {}", e);
+            std::process::exit(1);
+        }
     }
 
     println!("Forth Interpreter v0.2");
@@ -177,6 +196,8 @@ fn main() {
     // Supported extensions: .qtr, .fth, .forth, .quarter
     if let Some(file) = filename {
         println!("Loading {}", file);
+
+        // Load file - in JIT mode, only load definitions without executing
         match load_file(
             &file,
             &mut stack,
@@ -187,9 +208,54 @@ fn main() {
             no_jit,
             dump_ir,
             verify_ir,
-            use_forth_compiler,
+            false,
+            jit_mode,  // define_only = true in JIT mode
+            &mut included_files,
         ) {
             Ok(_) => {
+                // If JIT mode, batch compile user words now
+                if jit_mode {
+                    if let Err(e) = quarter::batch_compile_all_words(
+                        &mut dict,
+                        &mut stack,
+                        &mut loop_stack,
+                        &mut return_stack,
+                        &mut memory,
+                        no_jit,
+                        dump_ir,
+                        verify_ir,
+                        &mut included_files,
+                    ) {
+                        eprintln!("Batch compilation failed: {}", e);
+                        std::process::exit(1);
+                    }
+
+                    // Clear the stack before executing
+                    while stack.pop(&mut memory).is_some() {}
+
+                    // Remove the main file from included_files so it can be loaded again in pass 2
+                    // (Dependencies loaded via INCLUDED remain in the set and won't be re-loaded)
+                    included_files.remove(&file);
+
+                    // Now execute the file with JIT-compiled code
+                    if let Err(e) = load_file(
+                        &file,
+                        &mut stack,
+                        &mut dict,
+                        &mut loop_stack,
+                        &mut return_stack,
+                        &mut memory,
+                        no_jit,
+                        dump_ir,
+                        verify_ir,
+                        false,
+                        false,  // define_only = false, now execute everything
+                        &mut included_files,
+                    ) {
+                        eprintln!("JIT execution failed: {}", e);
+                        std::process::exit(1);
+                    }
+                }
                 return;
             }
             Err(e) => {
@@ -273,10 +339,11 @@ fn main() {
                                             &mut loop_stack,
                                             &mut return_stack,
                                             &mut memory,
-                                            use_forth_compiler,
+                                            false,  // Batch compilation only
                                             no_jit,
                                             dump_ir,
                                             verify_ir,
+                                            &mut included_files,
                                         );
 
                                         if !compiled {
@@ -318,7 +385,9 @@ fn main() {
                         no_jit,
                         dump_ir,
                         verify_ir,
-                        use_forth_compiler,
+                        false,
+                        false,  // Not define-only in REPL
+                        &mut included_files,
                     ) {
                         Ok(_) => {
                             println!("ok");
@@ -358,10 +427,11 @@ fn main() {
                                             &mut loop_stack,
                                             &mut return_stack,
                                             &mut memory,
-                                            use_forth_compiler,
+                                            false,  // Batch compilation only
                                             no_jit,
                                             dump_ir,
                                             verify_ir,
+                                            &mut included_files,
                                         );
 
                                         if !compiled {
@@ -477,7 +547,9 @@ fn main() {
                             no_jit,
                             dump_ir,
                             verify_ir,
-                            use_forth_compiler,
+                            false,
+                            false,  // Not define-only in REPL
+                            &mut included_files,
                         ) {
                             Ok(_) => println!("ok"),
                             Err(e) => println!("{}", e),

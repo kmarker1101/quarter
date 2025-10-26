@@ -43,6 +43,30 @@ VARIABLE PARAM-RP      \ rp pointer parameter
 302000 CONSTANT CURRENT-WORD-NAME  \ Buffer for current word being compiled
 VARIABLE CURRENT-WORD-LEN          \ Length of current word name
 
+\ Batch compilation support
+VARIABLE BATCH-MODE                \ Flag: 0 = single word, -1 = batch mode
+VARIABLE BATCH-JIT                 \ JIT engine handle for batch mode
+VARIABLE CURRENT-AST-HANDLE        \ Temporary storage for AST handle during compilation
+
+\ DO/LOOP compilation temporaries
+VARIABLE LOOP-BODY-HANDLE          \ AST handle for loop body
+VARIABLE LOOP-INCREMENT            \ Loop increment value
+VARIABLE LOOP-START-VALUE          \ Start value handle
+VARIABLE LOOP-LIMIT-VALUE          \ Limit value handle
+VARIABLE LOOP-PRELOOP-BLOCK        \ Pre-loop block handle
+VARIABLE LOOP-LOOP-BLOCK           \ Loop body block handle
+VARIABLE LOOP-EXIT-BLOCK           \ Exit block handle
+VARIABLE LOOP-PHI-NODE             \ PHI node for loop index
+VARIABLE LOOP-END-BLOCK            \ Loop-end block handle
+
+\ IF/THEN/ELSE compilation temporaries
+VARIABLE IF-THEN-HANDLE            \ AST handle for then branch
+VARIABLE IF-ELSE-HANDLE            \ AST handle for else branch (0 if no else)
+VARIABLE IF-COND-VALUE             \ Condition value handle
+VARIABLE IF-THEN-BLOCK             \ Then block handle
+VARIABLE IF-ELSE-BLOCK             \ Else block handle (if present)
+VARIABLE IF-MERGE-BLOCK            \ Merge block handle
+
 \ =============================================================================
 \ HELPER FUNCTIONS
 \ =============================================================================
@@ -1227,21 +1251,19 @@ VARIABLE CURRENT-WORD-LEN          \ Length of current word name
 \ Compile DO/LOOP (type 7)
 \ Stack: ( ast-handle -- )
 : COMPILE-DO-LOOP
-    \ Get loop body and increment
-    DUP AST-LOOP-BODY SWAP AST-LOOP-INCREMENT
-    \ Stack: ( body-handle increment )
+    \ Get loop body and increment, store in variables
+    DUP AST-LOOP-BODY LOOP-BODY-HANDLE !
+    AST-LOOP-INCREMENT LOOP-INCREMENT !
 
     \ Pop start and limit from runtime stack
-    COMPILE-POP COMPILE-POP  \ start, limit
-    \ Stack: ( body increment start-handle limit-handle )
+    COMPILE-POP LOOP-START-VALUE !
+    COMPILE-POP LOOP-LIMIT-VALUE !
 
-    \ Get pre-loop block
-    CURRENT-BUILDER @ LLVM-GET-INSERT-BLOCK
-    \ Stack: ( body increment start limit preloop-block )
+    \ Save pre-loop block
+    CURRENT-BUILDER @ LLVM-GET-INSERT-BLOCK LOOP-PRELOOP-BLOCK !
 
     \ Create loop block
     CURRENT-CTX @ CURRENT-FUNCTION @
-    \ Write "do_loop" to WORD-NAME-BUFFER
     100 WORD-NAME-BUFFER 0 + C!  \ 'd'
     111 WORD-NAME-BUFFER 1 + C!  \ 'o'
     95  WORD-NAME-BUFFER 2 + C!  \ '_'
@@ -1249,11 +1271,10 @@ VARIABLE CURRENT-WORD-LEN          \ Length of current word name
     111 WORD-NAME-BUFFER 4 + C!  \ 'o'
     111 WORD-NAME-BUFFER 5 + C!  \ 'o'
     112 WORD-NAME-BUFFER 6 + C!  \ 'p'
-    WORD-NAME-BUFFER 7 LLVM-CREATE-BLOCK
+    WORD-NAME-BUFFER 7 LLVM-CREATE-BLOCK LOOP-LOOP-BLOCK !
 
     \ Create exit block
     CURRENT-CTX @ CURRENT-FUNCTION @
-    \ Write "do_exit" to WORD-NAME-BUFFER
     100 WORD-NAME-BUFFER 0 + C!  \ 'd'
     111 WORD-NAME-BUFFER 1 + C!  \ 'o'
     95  WORD-NAME-BUFFER 2 + C!  \ '_'
@@ -1261,53 +1282,74 @@ VARIABLE CURRENT-WORD-LEN          \ Length of current word name
     120 WORD-NAME-BUFFER 4 + C!  \ 'x'
     105 WORD-NAME-BUFFER 5 + C!  \ 'i'
     116 WORD-NAME-BUFFER 6 + C!  \ 't'
-    WORD-NAME-BUFFER 7 LLVM-CREATE-BLOCK
-    \ Stack: ( body incr start limit preloop loop-block exit-block )
+    WORD-NAME-BUFFER 7 LLVM-CREATE-BLOCK LOOP-EXIT-BLOCK !
 
-    \ Jump to loop
-    2 PICK CURRENT-BUILDER @ SWAP LLVM-BUILD-BR
+    \ Check if we should enter loop: start < limit
+    \ Compare: start < limit (SLT=2)
+    CURRENT-BUILDER @ 2 LOOP-START-VALUE @ LOOP-LIMIT-VALUE @ LLVM-BUILD-ICMP
+    \ Stack: ( cond-value )
 
-    \ Position at loop
-    OVER CURRENT-BUILDER @ SWAP LLVM-POSITION-AT-END
+    \ Conditional branch from preloop: if start < limit goto loop, else goto exit
+    CURRENT-BUILDER @ SWAP LOOP-LOOP-BLOCK @ LOOP-EXIT-BLOCK @ LLVM-BUILD-COND-BR
+
+    \ Position at loop block
+    CURRENT-BUILDER @ LOOP-LOOP-BLOCK @ LLVM-POSITION-AT-END
 
     \ Create PHI for loop index
     CURRENT-BUILDER @ CURRENT-CTX @
-    \ Write "i" to WORD-NAME-BUFFER
-    105 WORD-NAME-BUFFER C!
-    WORD-NAME-BUFFER 1 LLVM-BUILD-PHI
-    \ Stack: ( body incr start limit preloop loop exit phi )
+    105 WORD-NAME-BUFFER C!  \ 'i'
+    WORD-NAME-BUFFER 1 LLVM-BUILD-PHI LOOP-PHI-NODE !
 
-    \ Add incoming from preloop
-    DUP 7 PICK 6 PICK LLVM-PHI-ADD-INCOMING
+    \ Add incoming edge from preloop (start value)
+    LOOP-PHI-NODE @ LOOP-START-VALUE @ LOOP-PRELOOP-BLOCK @ LLVM-PHI-ADD-INCOMING
 
-    \ Compile body
-    7 PICK COMPILE-AST-NODE
+    \ Save loop state on return stack before recursive compilation
+    LOOP-PHI-NODE @ >R
+    LOOP-START-VALUE @ >R
+    LOOP-LIMIT-VALUE @ >R
+    LOOP-INCREMENT @ >R
+    LOOP-LOOP-BLOCK @ >R
+    LOOP-EXIT-BLOCK @ >R
 
-    \ Get loop-end block
-    CURRENT-BUILDER @ LLVM-GET-INSERT-BLOCK
-    \ Stack: ( body incr start limit preloop loop exit phi loop-end )
+    \ Compile loop body (may contain nested loops)
+    LOOP-BODY-HANDLE @ COMPILE-AST-NODE
+
+    \ Restore loop state from return stack
+    R> LOOP-EXIT-BLOCK !
+    R> LOOP-LOOP-BLOCK !
+    R> LOOP-INCREMENT !
+    R> LOOP-LIMIT-VALUE !
+    R> LOOP-START-VALUE !
+    R> LOOP-PHI-NODE !
+
+    \ Get block after body compilation
+    CURRENT-BUILDER @ LLVM-GET-INSERT-BLOCK LOOP-END-BLOCK !
 
     \ Increment: next = phi + increment
-    CURRENT-BUILDER @ 2 PICK
-    CURRENT-CTX @ 9 PICK 32 LLVM-BUILD-CONST-INT
+    CURRENT-BUILDER @ LOOP-PHI-NODE @
+    CURRENT-CTX @ LOOP-INCREMENT @ 32 LLVM-BUILD-CONST-INT
     LLVM-BUILD-ADD
-    \ Stack: ( body incr start limit preloop loop exit phi loop-end next )
+    \ Stack: ( next-value )
+
+    DUP  \ Duplicate for PHI and comparison
+    \ Stack: ( next-value next-value )
 
     \ Compare: next < limit (SLT=2)
-    CURRENT-BUILDER @ 2 2 PICK 8 PICK LLVM-BUILD-ICMP
-    \ Stack: ( body incr start limit preloop loop exit phi loop-end next cond )
+    CURRENT-BUILDER @ 2 ROT LOOP-LIMIT-VALUE @ LLVM-BUILD-ICMP
+    \ Stack: ( next-value cond-result )
 
-    \ Add PHI incoming from loop-end
-    4 PICK 3 PICK 4 PICK LLVM-PHI-ADD-INCOMING
+    SWAP  \ Swap for PHI incoming
+    \ Stack: ( cond-result next-value )
 
-    \ Conditional branch
-    CURRENT-BUILDER @ SWAP 7 PICK 4 PICK LLVM-BUILD-COND-BR
+    \ Add PHI incoming from loop-end (next value)
+    LOOP-PHI-NODE @ SWAP LOOP-END-BLOCK @ LLVM-PHI-ADD-INCOMING
+    \ Stack: ( cond-result )
+
+    \ Conditional branch: if true goto loop, else goto exit
+    CURRENT-BUILDER @ SWAP LOOP-LOOP-BLOCK @ LOOP-EXIT-BLOCK @ LLVM-BUILD-COND-BR
 
     \ Position at exit
-    3 PICK CURRENT-BUILDER @ SWAP LLVM-POSITION-AT-END
-
-    \ Clean up
-    DROP DROP DROP DROP DROP DROP DROP DROP DROP DROP ;
+    CURRENT-BUILDER @ LOOP-EXIT-BLOCK @ LLVM-POSITION-AT-END ;
 
 \ Compile BEGIN/UNTIL loop (type 5)
 \ Executes body repeatedly until condition on stack is true (non-zero)
@@ -1370,50 +1412,49 @@ VARIABLE CURRENT-WORD-LEN          \ Length of current word name
 \ Compile IF/THEN/ELSE (type 4)
 \ Stack effect: ( ast-handle -- )
 : COMPILE-IF-THEN-ELSE
-    \ Get then and else branches
-    DUP AST-IF-THEN ( ast then-handle )
-    SWAP AST-IF-ELSE ( then-handle else-handle-or-0 )
+    \ Get branches and store in variables
+    DUP AST-IF-THEN IF-THEN-HANDLE !
+    AST-IF-ELSE IF-ELSE-HANDLE !
 
-    \ Pop condition from stack (generates LLVM IR)
-    COMPILE-POP ( then-handle else-handle cond-value-handle )
+    \ Pop condition from runtime stack
+    COMPILE-POP IF-COND-VALUE !
 
-    \ Compare to zero (Forth: 0=false, nonzero=true)
-    \ LLVM-BUILD-ICMP needs: builder predicate lhs rhs -> result
-    \ Predicate 1 = NE (not equal)
-    CURRENT-BUILDER @ 1  ( then else cond builder pred )
-    ROT ( then else builder pred cond )
-    CURRENT-CTX @ 0 32 LLVM-BUILD-CONST-INT ( then else builder pred cond zero )
-    LLVM-BUILD-ICMP ( then else bool-handle )
+    \ Compare condition to zero (0=false, nonzero=true)
+    CURRENT-BUILDER @ 1 IF-COND-VALUE @
+    CURRENT-CTX @ 0 32 LLVM-BUILD-CONST-INT
+    LLVM-BUILD-ICMP IF-COND-VALUE !
 
-    \ Create basic blocks
+    \ Create then block
     CURRENT-CTX @ CURRENT-FUNCTION @
-    \ Write "then" to WORD-NAME-BUFFER
     116 WORD-NAME-BUFFER 0 + C!  \ 't'
     104 WORD-NAME-BUFFER 1 + C!  \ 'h'
     101 WORD-NAME-BUFFER 2 + C!  \ 'e'
     110 WORD-NAME-BUFFER 3 + C!  \ 'n'
-    WORD-NAME-BUFFER 4 LLVM-CREATE-BLOCK ( then else bool then-block )
+    WORD-NAME-BUFFER 4 LLVM-CREATE-BLOCK IF-THEN-BLOCK !
 
+    \ Create merge block
     CURRENT-CTX @ CURRENT-FUNCTION @
-    \ Write "merge" to WORD-NAME-BUFFER
     109 WORD-NAME-BUFFER 0 + C!  \ 'm'
     101 WORD-NAME-BUFFER 1 + C!  \ 'e'
     114 WORD-NAME-BUFFER 2 + C!  \ 'r'
     103 WORD-NAME-BUFFER 3 + C!  \ 'g'
     101 WORD-NAME-BUFFER 4 + C!  \ 'e'
-    WORD-NAME-BUFFER 5 LLVM-CREATE-BLOCK ( then else bool then-block merge-block )
+    WORD-NAME-BUFFER 5 LLVM-CREATE-BLOCK IF-MERGE-BLOCK !
 
     \ Check if we have else branch
-    OVER 0 = IF
-        \ No ELSE: build conditional branch to then or merge
-        2SWAP DROP ( bool then-block merge-block )
-        2 PICK CURRENT-BUILDER @ SWAP ( bool then merge bool builder )
-        -ROT ( bool builder bool then merge )
-        LLVM-BUILD-COND-BR
+    IF-ELSE-HANDLE @ 0 = IF
+        \ No ELSE: branch to then or merge
+        CURRENT-BUILDER @ IF-COND-VALUE @ IF-THEN-BLOCK @ IF-MERGE-BLOCK @ LLVM-BUILD-COND-BR
 
-        \ Compile THEN branch
-        OVER CURRENT-BUILDER @ SWAP LLVM-POSITION-AT-END
-        SWAP COMPILE-AST-NODE
+        \ Save merge block on return stack (will be used after recursion)
+        IF-MERGE-BLOCK @ >R
+
+        \ Compile then branch
+        CURRENT-BUILDER @ IF-THEN-BLOCK @ LLVM-POSITION-AT-END
+        IF-THEN-HANDLE @ COMPILE-AST-NODE
+
+        \ Restore merge block from return stack
+        R>
 
         \ Branch to merge
         DUP CURRENT-BUILDER @ SWAP LLVM-BUILD-BR
@@ -1421,46 +1462,44 @@ VARIABLE CURRENT-WORD-LEN          \ Length of current word name
         \ Position at merge
         CURRENT-BUILDER @ SWAP LLVM-POSITION-AT-END
     ELSE
-        \ Have ELSE: create else block too
+        \ Create else block
         CURRENT-CTX @ CURRENT-FUNCTION @
-        \ Write "else" to WORD-NAME-BUFFER
         101 WORD-NAME-BUFFER 0 + C!  \ 'e'
         108 WORD-NAME-BUFFER 1 + C!  \ 'l'
         115 WORD-NAME-BUFFER 2 + C!  \ 's'
         101 WORD-NAME-BUFFER 3 + C!  \ 'e'
-        WORD-NAME-BUFFER 4 LLVM-CREATE-BLOCK ( then else bool then-block merge-block else-block )
+        WORD-NAME-BUFFER 4 LLVM-CREATE-BLOCK IF-ELSE-BLOCK !
 
-        \ Build conditional branch (if bool then then-block else else-block)
-        5 PICK CURRENT-BUILDER @ ( then else bool then merge else bool builder )
-        SWAP 4 PICK ( then else bool then merge else builder bool then )
-        SWAP OVER ( then else bool then merge else builder then bool )
-        PICK ( then else bool then merge else builder bool then else )
-        LLVM-BUILD-COND-BR
+        \ Branch to then or else
+        CURRENT-BUILDER @ IF-COND-VALUE @ IF-THEN-BLOCK @ IF-ELSE-BLOCK @ LLVM-BUILD-COND-BR
 
-        \ Compile THEN branch
-        2 PICK ( then else bool then merge else then )
-        CURRENT-BUILDER @ SWAP LLVM-POSITION-AT-END
-        5 PICK COMPILE-AST-NODE
+        \ Save blocks on return stack (will be used after recursion)
+        IF-MERGE-BLOCK @ >R
+        IF-ELSE-BLOCK @ >R
 
-        \ Branch to merge
-        2 PICK CURRENT-BUILDER @ SWAP LLVM-BUILD-BR
-
-        \ Compile ELSE branch
-        DUP CURRENT-BUILDER @ SWAP LLVM-POSITION-AT-END
-        3 PICK COMPILE-AST-NODE
+        \ Compile then branch
+        CURRENT-BUILDER @ IF-THEN-BLOCK @ LLVM-POSITION-AT-END
+        IF-THEN-HANDLE @ COMPILE-AST-NODE
 
         \ Branch to merge
-        2 PICK CURRENT-BUILDER @ SWAP LLVM-BUILD-BR
+        CURRENT-BUILDER @ R@ LLVM-BUILD-BR
+
+        \ Compile else branch
+        CURRENT-BUILDER @ R> LLVM-POSITION-AT-END
+        IF-ELSE-HANDLE @ COMPILE-AST-NODE
+
+        \ Restore merge block and branch to it
+        R>
+        DUP CURRENT-BUILDER @ SWAP LLVM-BUILD-BR
 
         \ Position at merge
-        NIP NIP NIP ( then merge )
         CURRENT-BUILDER @ SWAP LLVM-POSITION-AT-END
-        DROP
     THEN ;
 
 \ Main compiler - handles all AST node types recursively
 \ Redefine the forward-declared COMPILE-AST-NODE
 : COMPILE-AST-NODE ( ast-handle -- )
+    \ DUP . CR  \ Uncomment to debug
     DUP AST-TYPE
 
     \ AST-PUSH-NUMBER (type 1)
@@ -1782,13 +1821,43 @@ VARIABLE CURRENT-WORD-LEN          \ Length of current word name
         THEN
 
         \ Not an inlinable primitive - do normal function call
-        \ Map to primitive name
-        WORD-NAME-BUFFER SWAP MAP-WORD-NAME
-        \ Stack: ( prim-addr prim-len )
+        \ Try compiled function first: "_fn_WORDNAME"
+        \ Stack: ( name-len )
+        DUP >R  \ Save name-len to return stack
 
-        \ Look up function in module
-        CURRENT-MODULE @ -ROT
+        \ Build "_fn_" prefix + word name in COMPILER-SCRATCH
+        95  COMPILER-SCRATCH  0 + C!  \ _
+        102 COMPILER-SCRATCH  1 + C!  \ f
+        110 COMPILER-SCRATCH  2 + C!  \ n
+        95  COMPILER-SCRATCH  3 + C!  \ _
+
+        \ Copy word name after prefix
+        DUP 0 DO
+            WORD-NAME-BUFFER I + C@
+            COMPILER-SCRATCH 4 I + + C!
+        LOOP
+        DROP  \ Drop name-len - we're done with it
+        \ Stack: ( )
+
+        \ Try to look up "_fn_WORDNAME"
+        \ Need: ( module-handle name-addr name-len+4 -- fn-handle )
+        CURRENT-MODULE @
+        COMPILER-SCRATCH
+        R@ 4 +
         LLVM-MODULE-GET-FUNCTION
+        \ Stack: ( fn-handle )
+
+        \ Check if lookup succeeded (non-zero)
+        DUP 0= IF
+            \ Failed - try primitive name
+            DROP
+            WORD-NAME-BUFFER R@ MAP-WORD-NAME
+            \ Stack: ( prim-addr prim-len )
+            CURRENT-MODULE @ -ROT
+            LLVM-MODULE-GET-FUNCTION
+        THEN
+
+        R> DROP  \ Clean up return stack
 
         \ Stack: ( fn-handle )
 
@@ -2380,53 +2449,164 @@ VARIABLE CURRENT-WORD-LEN          \ Length of current word name
 ;
 
 \ =============================================================================
+\ BATCH COMPILATION SUPPORT
+\ =============================================================================
+
+\ Initialize batch compilation mode - creates one global module
+: INIT-BATCH-COMPILER
+    \ Create LLVM context
+    LLVM-CREATE-CONTEXT CURRENT-CTX !
+
+    \ Create global module
+    CURRENT-CTX @
+    \ Write "batch_module" to WORD-NAME-BUFFER
+    98  WORD-NAME-BUFFER  0 + C!  \ 'b'
+    97  WORD-NAME-BUFFER  1 + C!  \ 'a'
+    116 WORD-NAME-BUFFER  2 + C!  \ 't'
+    99  WORD-NAME-BUFFER  3 + C!  \ 'c'
+    104 WORD-NAME-BUFFER  4 + C!  \ 'h'
+    95  WORD-NAME-BUFFER  5 + C!  \ '_'
+    109 WORD-NAME-BUFFER  6 + C!  \ 'm'
+    111 WORD-NAME-BUFFER  7 + C!  \ 'o'
+    100 WORD-NAME-BUFFER  8 + C!  \ 'd'
+    117 WORD-NAME-BUFFER  9 + C!  \ 'u'
+    108 WORD-NAME-BUFFER 10 + C!  \ 'l'
+    101 WORD-NAME-BUFFER 11 + C!  \ 'e'
+    WORD-NAME-BUFFER 12 LLVM-CREATE-MODULE CURRENT-MODULE !
+
+    \ Declare all primitive functions
+    DECLARE-ALL-PRIMITIVES
+
+    \ Create global builder
+    CURRENT-CTX @ LLVM-CREATE-BUILDER CURRENT-BUILDER !
+
+    \ Set batch mode flag
+    -1 BATCH-MODE !
+;
+
+\ Finalize batch compilation - creates JIT and returns handle
+\ Returns JIT engine handle
+: FINALIZE-BATCH ( -- jit-handle )
+    \ Create JIT execution engine
+    CURRENT-MODULE @ LLVM-CREATE-JIT
+
+    \ Clear batch mode flag
+    0 BATCH-MODE !
+;
+
+\ =============================================================================
 \ COMPILER ENTRY POINT
 \ =============================================================================
 
+\ Declare a function signature without compiling the body
+\ Used in pass 1 of batch compilation to create forward references
+\ ( name-addr name-len -- )
+: DECLARE-FUNCTION
+    \ Copy name to buffer
+    DUP CURRENT-WORD-LEN !
+    OVER OVER
+    0 DO
+        DUP I + C@
+        CURRENT-WORD-NAME I + C!
+    LOOP
+    DROP DROP
+
+    \ Build function name: "_fn_WORDNAME"
+    95  WORD-NAME-BUFFER 0 + C!  \ _
+    102 WORD-NAME-BUFFER 1 + C!  \ f
+    110 WORD-NAME-BUFFER 2 + C!  \ n
+    95  WORD-NAME-BUFFER 3 + C!  \ _
+
+    \ Copy word name after prefix
+    CURRENT-WORD-LEN @ 0 DO
+        CURRENT-WORD-NAME I + C@
+        WORD-NAME-BUFFER 4 I + + C!
+    LOOP
+
+    \ Create function in module
+    CURRENT-MODULE @
+    CURRENT-CTX @
+    WORD-NAME-BUFFER
+    CURRENT-WORD-LEN @ 4 +
+    LLVM-CREATE-FUNCTION
+
+    \ Don't save the function handle - we'll look it up later
+    DROP ;
+
 \ Compile a word from its AST
-\ Returns JIT function pointer
+\ Returns JIT function pointer (or 0 in batch mode - get from JIT later)
 : COMPILE-WORD ( ast-handle name-addr name-len -- fn-ptr )
-    \ Save word name for tail call detection
+    \ Save name length and copy name to buffer
     DUP CURRENT-WORD-LEN !  \ Store length
-    \ Copy name to CURRENT-WORD-NAME buffer
+    \ Stack: ( ast name-addr name-len )
     OVER OVER  \ ( ast name-addr name-len name-addr name-len )
     0 DO
         DUP I + C@  \ Get byte from source
         CURRENT-WORD-NAME I + C!  \ Store to buffer
     LOOP
     DROP  \ Drop name-addr copy
+    \ Stack: ( ast name-addr name-len )
 
-    \ Save name for later (we'll need it for JIT lookup)
+    \ Save name and AST handle before any complex stack operations
     >R >R  \ Save name-addr and name-len on return stack
+    \ Stack: ( ast-handle )
+    CURRENT-AST-HANDLE !  \ Store AST handle to variable
+    \ Stack: ( )
 
-    \ Create LLVM context
-    LLVM-CREATE-CONTEXT CURRENT-CTX !
+    \ Check if in batch mode
+    BATCH-MODE @ IF
+        \ In batch mode - use existing global context/module
+        \ Skip context and module creation
+    ELSE
+        \ Not in batch mode - create context and module per word
+        \ Create LLVM context
+        LLVM-CREATE-CONTEXT CURRENT-CTX !
 
-    \ Create module
-    CURRENT-CTX @
-    \ Write "module" to WORD-NAME-BUFFER
-    109 WORD-NAME-BUFFER 0 + C!  \ 'm'
-    111 WORD-NAME-BUFFER 1 + C!  \ 'o'
-    100 WORD-NAME-BUFFER 2 + C!  \ 'd'
-    117 WORD-NAME-BUFFER 3 + C!  \ 'u'
-    108 WORD-NAME-BUFFER 4 + C!  \ 'l'
-    101 WORD-NAME-BUFFER 5 + C!  \ 'e'
-    WORD-NAME-BUFFER 6 LLVM-CREATE-MODULE CURRENT-MODULE !
+        \ Create module
+        CURRENT-CTX @
+        \ Write "module" to WORD-NAME-BUFFER
+        109 WORD-NAME-BUFFER 0 + C!  \ 'm'
+        111 WORD-NAME-BUFFER 1 + C!  \ 'o'
+        100 WORD-NAME-BUFFER 2 + C!  \ 'd'
+        117 WORD-NAME-BUFFER 3 + C!  \ 'u'
+        108 WORD-NAME-BUFFER 4 + C!  \ 'l'
+        101 WORD-NAME-BUFFER 5 + C!  \ 'e'
+        WORD-NAME-BUFFER 6 LLVM-CREATE-MODULE CURRENT-MODULE !
 
-    \ Declare all primitive functions
-    DECLARE-ALL-PRIMITIVES
+        \ Declare all primitive functions
+        DECLARE-ALL-PRIMITIVES
 
-    \ Create builder
-    CURRENT-CTX @ LLVM-CREATE-BUILDER CURRENT-BUILDER !
+        \ Create builder
+        CURRENT-CTX @ LLVM-CREATE-BUILDER CURRENT-BUILDER !
+    THEN
 
-    \ Create function
-    CURRENT-MODULE @ CURRENT-CTX @
-    \ Write "func" to WORD-NAME-BUFFER
-    102 WORD-NAME-BUFFER 0 + C!  \ 'f'
-    117 WORD-NAME-BUFFER 1 + C!  \ 'u'
-    110 WORD-NAME-BUFFER 2 + C!  \ 'n'
-    99 WORD-NAME-BUFFER 3 + C!  \ 'c'
-    WORD-NAME-BUFFER 4 LLVM-CREATE-FUNCTION CURRENT-FUNCTION !
+    \ Get or create function
+    BATCH-MODE @ IF
+        \ Batch mode: look up function that was declared in pass 1
+        95 WORD-NAME-BUFFER 0 + C!   \ '_'
+        102 WORD-NAME-BUFFER 1 + C!  \ 'f'
+        110 WORD-NAME-BUFFER 2 + C!  \ 'n'
+        95 WORD-NAME-BUFFER 3 + C!   \ '_'
+        \ Append word name
+        CURRENT-WORD-LEN @ 0 DO
+            CURRENT-WORD-NAME I + C@
+            WORD-NAME-BUFFER 4 + I + C!
+        LOOP
+        \ Look up existing function
+        CURRENT-MODULE @
+        WORD-NAME-BUFFER
+        CURRENT-WORD-LEN @ 4 +
+        LLVM-MODULE-GET-FUNCTION CURRENT-FUNCTION !
+    ELSE
+        \ Single word mode: create new function
+        102 WORD-NAME-BUFFER 0 + C!  \ 'f'
+        117 WORD-NAME-BUFFER 1 + C!  \ 'u'
+        110 WORD-NAME-BUFFER 2 + C!  \ 'n'
+        99 WORD-NAME-BUFFER 3 + C!  \ 'c'
+        CURRENT-MODULE @ CURRENT-CTX @
+        WORD-NAME-BUFFER 4
+        LLVM-CREATE-FUNCTION CURRENT-FUNCTION !
+    THEN
 
     \ Get function parameters
     CURRENT-FUNCTION @ 0 LLVM-GET-PARAM PARAM-MEMORY !
@@ -2446,31 +2626,37 @@ VARIABLE CURRENT-WORD-LEN          \ Length of current word name
     \ Position at entry
     CURRENT-BUILDER @ CURRENT-BLOCK @ LLVM-POSITION-AT-END
 
-    \ Compile the AST
-    COMPILE-AST-NODE
+    \ Retrieve AST handle from variable and compile
+    CURRENT-AST-HANDLE @ COMPILE-AST-NODE
 
     \ Add return
     CURRENT-BUILDER @ LLVM-BUILD-RET-VOID
 
-    \ Create JIT execution engine
-    CURRENT-MODULE @ LLVM-CREATE-JIT
+    \ Check if in batch mode
+    BATCH-MODE @ IF
+        \ Batch mode: don't create JIT yet, return 0 as placeholder
+        \ Restore name from return stack and drop
+        R> DROP R> DROP
+        0  \ Return 0 as placeholder
+    ELSE
+        \ Single word mode: create JIT and get function pointer
+        CURRENT-MODULE @ LLVM-CREATE-JIT
 
-    \ Stack: ( jit-engine-handle )
+        \ Stack: ( jit-engine-handle )
 
-    \ Get function pointer for "func"
-    \ Write "func" to WORD-NAME-BUFFER
-    102 WORD-NAME-BUFFER 0 + C!  \ 'f'
-    117 WORD-NAME-BUFFER 1 + C!  \ 'u'
-    110 WORD-NAME-BUFFER 2 + C!  \ 'n'
-    99  WORD-NAME-BUFFER 3 + C!  \ 'c'
-    WORD-NAME-BUFFER 4 LLVM-GET-FUNCTION
+        \ Get function pointer for "func"
+        \ Write "func" to WORD-NAME-BUFFER
+        102 WORD-NAME-BUFFER 0 + C!  \ 'f'
+        117 WORD-NAME-BUFFER 1 + C!  \ 'u'
+        110 WORD-NAME-BUFFER 2 + C!  \ 'n'
+        99  WORD-NAME-BUFFER 3 + C!  \ 'c'
+        WORD-NAME-BUFFER 4 LLVM-GET-FUNCTION
 
-    \ Stack: ( fn-ptr )
+        \ Stack: ( fn-ptr )
 
-    \ Restore name from return stack and drop (we don't need it anymore)
-    R> DROP R> DROP
-
-    \ Return function pointer
+        \ Restore name from return stack and drop
+        R> DROP R> DROP
+    THEN
     ;
 
 \ =============================================================================

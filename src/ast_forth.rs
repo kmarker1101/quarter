@@ -32,7 +32,22 @@ impl AstRegistry {
     fn register_node(&mut self, node: AstNode) -> AstHandle {
         let handle = self.next_id;
         self.next_id += 1;
+        let _node_desc = match &node {
+            AstNode::PushNumber(n) => format!("PushNumber({})", n),
+            AstNode::CallWord(w) => format!("CallWord({})", w),
+            AstNode::Sequence(v) => format!("Sequence({})", v.len()),
+            AstNode::IfThenElse { .. } => "IfThenElse".to_string(),
+            AstNode::BeginUntil { .. } => "BeginUntil".to_string(),
+            AstNode::BeginWhileRepeat { .. } => "BeginWhileRepeat".to_string(),
+            AstNode::DoLoop { .. } => "DoLoop".to_string(),
+            AstNode::PrintString(_) => "PrintString".to_string(),
+            AstNode::StackString(_) => "StackString".to_string(),
+            AstNode::Leave => "Leave".to_string(),
+            AstNode::Exit => "Exit".to_string(),
+            AstNode::InlineInstruction(_) => "InlineInstruction".to_string(),
+        };
         self.nodes.insert(handle, node);
+        // eprintln!("[AST-REG] Registered handle {} = {} (total: {})", handle, _node_desc, self.nodes.len());
         handle
     }
 
@@ -40,8 +55,12 @@ impl AstRegistry {
     /// 1=PushNumber, 2=CallWord, 3=Sequence, 4=IfThenElse, 5=BeginUntil,
     /// 6=BeginWhileRepeat, 7=DoLoop, 8=PrintString, 9=StackString, 10=Leave, 11=Exit, 12=InlineInstruction
     fn get_node_type(&self, handle: AstHandle) -> Result<i64, String> {
+        // eprintln!("[AST-LOOKUP] Looking up handle {} (registry has {} nodes, next_id={})", handle, self.nodes.len(), self.next_id);
         let node = self.nodes.get(&handle)
-            .ok_or_else(|| format!("Invalid AST handle: {}", handle))?;
+            .ok_or_else(|| {
+                // eprintln!("[AST-LOOKUP] Handle {} NOT FOUND! Available handles: {:?}", handle, self.nodes.keys().collect::<Vec<_>>());
+                format!("Invalid AST handle: {}", handle)
+            })?;
 
         Ok(match node {
             AstNode::PushNumber(_) => 1,

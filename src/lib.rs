@@ -648,7 +648,17 @@ pub fn load_file(
     dump_ir: bool,
     verify_ir: bool,
     use_forth_compiler: bool,
+    define_only: bool,
+    included_files: &mut std::collections::HashSet<String>,
 ) -> Result<(), String> {
+    // Check if file has already been included
+    if included_files.contains(filename) {
+        return Ok(());
+    }
+
+    // Mark this file as included
+    included_files.insert(filename.to_string());
+
     let contents = fs::read_to_string(filename).map_err(|e| format!("Cannot read file: {}", e))?;
 
     // Process file as token stream to support multi-line definitions
@@ -676,6 +686,8 @@ pub fn load_file(
         dump_ir,
         verify_ir,
         use_forth_compiler,
+        define_only,
+        included_files,
     )?;
 
     Ok(())
@@ -693,6 +705,8 @@ pub fn execute_line(
     dump_ir: bool,
     verify_ir: bool,
     use_forth_compiler: bool,
+    define_only: bool,
+    included_files: &mut std::collections::HashSet<String>,
 ) -> Result<(), String> {
     // Strip comments from input
     let input = strip_comments(input);
@@ -713,6 +727,7 @@ pub fn execute_line(
             }
 
             let filename = tokens[i + 1];
+            // INCLUDE always executes (not define-only) because it's used for dependencies
             load_file(
                 filename,
                 stack,
@@ -724,6 +739,8 @@ pub fn execute_line(
                 dump_ir,
                 verify_ir,
                 use_forth_compiler,
+                false,  // Always execute included files
+                included_files,
             )?;
             i += 2;
         } else if token_upper == ":" {
@@ -743,6 +760,13 @@ pub fn execute_line(
 
                 // Store word names in uppercase for case-insensitive lookup
                 let word_name = tokens[i + 1].to_uppercase();
+
+                // Check if word is frozen (JIT-compiled) - if so, skip re-definition
+                if dict.is_frozen(&word_name) {
+                    i = end + 1;
+                    continue;
+                }
+
                 let word_tokens = &tokens[i + 2..end];
 
                 let ast = parse_tokens(word_tokens, dict)?;
@@ -754,7 +778,7 @@ pub fn execute_line(
                 if use_forth_compiler && !is_redefinition {
                     // Try to JIT compile - if successful, try_forth_compile will add it to dict
                     // If it fails, we fall back to interpreted mode below
-                    if crate::try_forth_compile_word(word_name.clone(), &ast, dict, stack, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir) {
+                    if crate::try_forth_compile_word(word_name.clone(), &ast, dict, stack, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir, included_files) {
                         // JIT compilation succeeded, word is already in dictionary
                         i = end + 1;
                         continue;
@@ -831,7 +855,8 @@ pub fn execute_line(
             let filename =
                 String::from_utf8(filename_bytes).map_err(|_| "Invalid UTF-8 in filename")?;
 
-            // Load the file
+            // Load the file - INCLUDED always executes (not define-only)
+            // because it's used for loading dependencies that need to run
             load_file(
                 &filename,
                 stack,
@@ -843,6 +868,8 @@ pub fn execute_line(
                 dump_ir,
                 verify_ir,
                 use_forth_compiler,
+                false,  // Always execute included files
+                included_files,
             )?;
             i += 1;
         } else {
@@ -864,29 +891,45 @@ pub fn execute_line(
             }
 
             if !exec_tokens.is_empty() {
-                // Check for compile-only words (case-insensitive)
-                if exec_tokens.iter().any(|&t| {
-                    let upper = t.to_uppercase();
-                    upper == "IF"
-                        || upper == "THEN"
-                        || upper == "ELSE"
-                        || upper == "BEGIN"
-                        || upper == "UNTIL"
-                        || upper == "WHILE"
-                        || upper == "REPEAT"
-                        || upper == "DO"
-                        || upper == "LOOP"
-                        || upper == "+LOOP"
-                        || upper == "LEAVE"
-                        || upper == "EXIT"
-                        || upper == "INLINE"
-                        || upper == ".\""
-                }) {
-                    return Err("Control flow and string words (IF/THEN/ELSE/BEGIN/UNTIL/WHILE/REPEAT/DO/LOOP/LEAVE/EXIT/INLINE/.\") are compile-only".to_string());
-                }
+                // In define_only mode, still execute if:
+                // 1. The last collected token is INCLUDE or INCLUDED
+                // 2. The NEXT token (not yet collected) is INCLUDED
+                // This handles both "INCLUDE file" and "S\" file\" INCLUDED" patterns
+                let next_token_is_included = i < tokens.len() &&
+                    tokens[i].to_uppercase() == "INCLUDED";
 
-                let ast = parse_tokens(&exec_tokens, dict)?;
-                ast.execute(stack, dict, loop_stack, return_stack, memory)?;
+                let should_execute = !define_only ||
+                    next_token_is_included ||
+                    exec_tokens.last().map(|t| {
+                        let upper = t.to_uppercase();
+                        upper == "INCLUDED" || upper == "INCLUDE"
+                    }).unwrap_or(false);
+
+                if should_execute {
+                    // Check for compile-only words (case-insensitive)
+                    if exec_tokens.iter().any(|&t| {
+                        let upper = t.to_uppercase();
+                        upper == "IF"
+                            || upper == "THEN"
+                            || upper == "ELSE"
+                            || upper == "BEGIN"
+                            || upper == "UNTIL"
+                            || upper == "WHILE"
+                            || upper == "REPEAT"
+                            || upper == "DO"
+                            || upper == "LOOP"
+                            || upper == "+LOOP"
+                            || upper == "LEAVE"
+                            || upper == "EXIT"
+                            || upper == "INLINE"
+                            || upper == ".\""
+                    }) {
+                        return Err("Control flow and string words (IF/THEN/ELSE/BEGIN/UNTIL/WHILE/REPEAT/DO/LOOP/LEAVE/EXIT/INLINE/.\") are compile-only".to_string());
+                    }
+
+                    let ast = parse_tokens(&exec_tokens, dict)?;
+                    ast.execute(stack, dict, loop_stack, return_stack, memory)?;
+                }
             }
         }
     }
@@ -922,6 +965,7 @@ pub fn load_stdlib(
     dump_ir: bool,
     verify_ir: bool,
     use_forth_compiler: bool,
+    included_files: &mut std::collections::HashSet<String>,
 ) -> Result<(), String> {
     // Load core definitions
     let core_processed = process_stdlib_content(CORE_FTH);
@@ -936,6 +980,8 @@ pub fn load_stdlib(
         dump_ir,
         verify_ir,
         use_forth_compiler,
+        false,  // Not define-only for stdlib
+        included_files,
     )?;
 
     // TODO: Load test framework - currently has issues with DEPTH in loops
@@ -945,6 +991,143 @@ pub fn load_stdlib(
     // TODO: Load test suite - temporarily disabled to debug segfault
     // let tests_processed = process_stdlib_content(TESTS_FTH);
     // execute_line(&tests_processed, stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir)?;
+
+    Ok(())
+}
+
+/// Batch compile all Word::Compiled entries in the dictionary to JIT
+/// This creates one global LLVM module with all functions, then JITs them all at once
+pub fn batch_compile_all_words(
+    dict: &mut Dictionary,
+    stack: &mut Stack,
+    loop_stack: &mut LoopStack,
+    return_stack: &mut ReturnStack,
+    memory: &mut Memory,
+    no_jit: bool,
+    dump_ir: bool,
+    verify_ir: bool,
+    included_files: &mut std::collections::HashSet<String>,
+) -> Result<(), String> {
+    // IMPORTANT: Get list of words to compile BEFORE loading the compiler
+    // Otherwise we'll try to compile the compiler's internal words too!
+    let all_words = dict.get_all_words();
+    let mut words_to_compile: Vec<(String, AstNode)> = Vec::new();
+
+    for (name, word) in all_words {
+        if let crate::dictionary::Word::Compiled(ast) = word {
+            words_to_compile.push((name, ast.clone()));
+        }
+    }
+
+    // Load the Forth compiler if not already loaded (after capturing words to compile)
+    if !FORTH_COMPILER_LOADED.load(Ordering::Relaxed) {
+        // Load compiler
+        if let Err(e) = load_file("forth/compiler.fth", stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir, false, false, included_files) {
+            return Err(format!("Failed to load Forth compiler: {}", e));
+        }
+        FORTH_COMPILER_LOADED.store(true, Ordering::Relaxed);
+    }
+
+    if words_to_compile.is_empty() {
+        return Ok(());
+    }
+
+    // Step 1: Initialize batch compiler
+    dict.execute_word("INIT-BATCH-COMPILER", stack, loop_stack, return_stack, memory)?;
+
+    // Step 2: Declare all functions (pass 1 - forward references)
+    for (name, _ast) in &words_to_compile {
+        // Store word name in memory at HERE
+        let here = memory.here() as usize;
+        let name_bytes = name.as_bytes();
+        for (i, &byte) in name_bytes.iter().enumerate() {
+            memory.store_byte(here + i, byte as i64)?;
+        }
+
+        // Push name address and length
+        stack.push(here as i64, memory);
+        stack.push(name_bytes.len() as i64, memory);
+
+        // Call DECLARE-FUNCTION (creates function signature)
+        dict.execute_word("DECLARE-FUNCTION", stack, loop_stack, return_stack, memory)
+            .map_err(|e| format!("Declaration failed for {}: {}", name, e))?;
+    }
+
+    // Step 3: Compile each word body (pass 2 - now all functions exist)
+    for (name, ast) in &words_to_compile {
+        // Register AST node to get a handle
+        let ast_handle = crate::ast_forth::ast_register_node(ast.clone());
+
+        // Store word name in memory at HERE
+        let here = memory.here() as usize;
+        let name_bytes = name.as_bytes();
+        for (i, &byte) in name_bytes.iter().enumerate() {
+            memory.store_byte(here + i, byte as i64)?;
+        }
+
+        // Push AST handle
+        stack.push(ast_handle as i64, memory);
+
+        // Push name address and length
+        stack.push(here as i64, memory);
+        stack.push(name_bytes.len() as i64, memory);
+
+        // Call COMPILE-WORD (returns 0 in batch mode)
+        dict.execute_word("COMPILE-WORD", stack, loop_stack, return_stack, memory)
+            .map_err(|e| format!("Compilation failed for {}: {}", name, e))?;
+        // Pop and discard the result (0 in batch mode)
+        stack.pop(memory);
+    }
+
+    // Step 4: Finalize batch compilation (create JIT)
+    dict.execute_word("FINALIZE-BATCH", stack, loop_stack, return_stack, memory)?;
+
+    // Stack now has JIT handle
+    let jit_handle = stack.peek(memory).ok_or("Failed to get JIT handle")?;
+
+    // Step 5: Get function pointers and update dictionary
+    for (name, _ast) in &words_to_compile {
+        // Store word name in memory
+        let here = memory.here() as usize;
+        let name_bytes = name.as_bytes();
+        for (i, &byte) in name_bytes.iter().enumerate() {
+            memory.store_byte(here + i, byte as i64)?;
+        }
+
+        // Push JIT handle (duplicate from stack)
+        stack.push(jit_handle, memory);
+
+        // Push function name: "_fn_WORDNAME"
+        let fn_name = format!("_fn_{}", name);
+        let fn_name_bytes = fn_name.as_bytes();
+        let fn_name_addr = here + name_bytes.len() + 100; // Offset to avoid collision
+        for (i, &byte) in fn_name_bytes.iter().enumerate() {
+            memory.store_byte(fn_name_addr + i, byte as i64)?;
+        }
+
+        stack.push(fn_name_addr as i64, memory);
+        stack.push(fn_name_bytes.len() as i64, memory);
+
+        // Call LLVM-GET-FUNCTION (returns low and high words)
+        dict.execute_word("LLVM-GET-FUNCTION", stack, loop_stack, return_stack, memory)?;
+
+        // Get function pointer (two 32-bit values: low, then high)
+        let high = stack.pop(memory).ok_or(format!("Failed to get function pointer high word for {}", name))?;
+        let low = stack.pop(memory).ok_or(format!("Failed to get function pointer low word for {}", name))?;
+
+        // Combine into 64-bit pointer
+        let fn_ptr = ((high as u64) << 32) | (low as u64 & 0xFFFFFFFF);
+
+        // Convert to JITFunction type and update dictionary
+        let jit_fn: crate::dictionary::JITFunction = unsafe { std::mem::transmute(fn_ptr as usize) };
+        dict.add_jit_compiled(name.clone(), jit_fn);
+
+        // Freeze this word to prevent re-definition
+        dict.freeze_word(name);
+    }
+
+    // Pop JIT handle from stack
+    stack.pop(memory);
 
     Ok(())
 }
@@ -963,16 +1146,17 @@ pub fn try_forth_compile_word(
     no_jit: bool,
     dump_ir: bool,
     verify_ir: bool,
+    included_files: &mut std::collections::HashSet<String>,
 ) -> bool {
     // Load the Forth compiler if not already loaded
     if !FORTH_COMPILER_LOADED.load(Ordering::Relaxed) {
         // Load stdlib first
-        if let Err(e) = load_file("stdlib/core.fth", stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir, false) {
+        if let Err(e) = load_file("stdlib/core.fth", stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir, false, false, included_files) {
             eprintln!("Failed to load stdlib for Forth compiler: {}", e);
             return false;
         }
         // Load compiler
-        if let Err(e) = load_file("forth/compiler.fth", stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir, false) {
+        if let Err(e) = load_file("forth/compiler.fth", stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir, false, false, included_files) {
             eprintln!("Failed to load Forth compiler: {}", e);
             return false;
         }

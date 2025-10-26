@@ -2266,10 +2266,17 @@ pub fn llvm_module_get_function_word(
             Ok(name) => {
                 match crate::llvm_forth::llvm_get_function(module_handle, &name) {
                     Ok(handle) => stack.push(handle, memory),
-                    Err(e) => eprintln!("LLVM-MODULE-GET-FUNCTION error: {}", e),
+                    Err(_) => {
+                        // Function not found - this is expected when looking up words
+                        // that may or may not be JIT-compiled. Push 0 so Forth can detect it.
+                        stack.push(0, memory);
+                    }
                 }
             }
-            Err(e) => eprintln!("LLVM-MODULE-GET-FUNCTION string error: {}", e),
+            Err(e) => {
+                eprintln!("LLVM-MODULE-GET-FUNCTION string error: {}", e);
+                stack.push(0, memory); // Push 0 on failure
+            }
         }
     } else {
         eprintln!("LLVM-MODULE-GET-FUNCTION: Stack underflow");
@@ -2420,7 +2427,12 @@ pub fn llvm_get_function_word(
                         stack.push(low, memory);
                         stack.push(high, memory);
                     }
-                    Err(e) => eprintln!("LLVM-GET-FUNCTION error: {}", e),
+                    Err(e) => {
+                        eprintln!("LLVM-GET-FUNCTION error: {}", e);
+                        // Push 0 to indicate failure
+                        stack.push(0, memory);
+                        stack.push(0, memory);
+                    }
                 }
             }
             Err(e) => eprintln!("LLVM-GET-FUNCTION string error: {}", e),
@@ -2982,6 +2994,10 @@ pub fn ast_get_type_word(
     memory: &mut crate::Memory,
 ) {
     if let Some(handle) = stack.pop(memory) {
+        // eprintln!("[AST-TYPE-WORD] Popped handle={} (as char='{}', as u8={})",
+        //     handle,
+        //     if handle >= 0 && handle <= 127 { (handle as u8) as char } else { '?' },
+        //     handle as u8);
         match crate::ast_forth::ast_get_type(handle) {
             Ok(node_type) => stack.push(node_type, memory),
             Err(e) => eprintln!("AST-TYPE error: {}", e),
