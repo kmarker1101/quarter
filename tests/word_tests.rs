@@ -782,3 +782,104 @@ fn test_exit_in_if() {
     assert_eq!(stack.pop(&mut memory), Some(42));
     assert!(stack.is_empty()); // 99 should not be pushed
 }
+
+#[test]
+fn test_pick() {
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+    let mut return_stack = ReturnStack::new();
+    let mut memory = Memory::new();
+
+    // 1 2 3 0 PICK → 1 2 3 3 (copy top element)
+    stack.push(1, &mut memory);
+    stack.push(2, &mut memory);
+    stack.push(3, &mut memory);
+    stack.push(0, &mut memory);
+    dict.execute_word("PICK", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
+        .unwrap();
+    assert_eq!(stack.pop(&mut memory), Some(3));
+    assert_eq!(stack.pop(&mut memory), Some(3));
+    assert_eq!(stack.pop(&mut memory), Some(2));
+    assert_eq!(stack.pop(&mut memory), Some(1));
+
+    // 1 2 3 1 PICK → 1 2 3 2 (copy second element)
+    stack.push(1, &mut memory);
+    stack.push(2, &mut memory);
+    stack.push(3, &mut memory);
+    stack.push(1, &mut memory);
+    dict.execute_word("PICK", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
+        .unwrap();
+    assert_eq!(stack.pop(&mut memory), Some(2));
+    assert_eq!(stack.pop(&mut memory), Some(3));
+    assert_eq!(stack.pop(&mut memory), Some(2));
+    assert_eq!(stack.pop(&mut memory), Some(1));
+
+    // 1 2 3 2 PICK → 1 2 3 1 (copy third element)
+    stack.push(1, &mut memory);
+    stack.push(2, &mut memory);
+    stack.push(3, &mut memory);
+    stack.push(2, &mut memory);
+    dict.execute_word("PICK", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
+        .unwrap();
+    assert_eq!(stack.pop(&mut memory), Some(1));
+    assert_eq!(stack.pop(&mut memory), Some(3));
+    assert_eq!(stack.pop(&mut memory), Some(2));
+    assert_eq!(stack.pop(&mut memory), Some(1));
+}
+
+#[test]
+fn test_depth() {
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+    let mut return_stack = ReturnStack::new();
+    let mut memory = Memory::new();
+
+    // Empty stack: DEPTH → 0
+    dict.execute_word("DEPTH", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
+        .unwrap();
+    assert_eq!(stack.pop(&mut memory), Some(0));
+
+    // 1 DEPTH → 1 1
+    stack.push(1, &mut memory);
+    dict.execute_word("DEPTH", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
+        .unwrap();
+    assert_eq!(stack.pop(&mut memory), Some(1)); // depth
+    assert_eq!(stack.pop(&mut memory), Some(1)); // original value
+
+    // 1 2 3 DEPTH → 1 2 3 3
+    stack.push(1, &mut memory);
+    stack.push(2, &mut memory);
+    stack.push(3, &mut memory);
+    dict.execute_word("DEPTH", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
+        .unwrap();
+    assert_eq!(stack.pop(&mut memory), Some(3)); // depth
+    assert_eq!(stack.pop(&mut memory), Some(3)); // values
+    assert_eq!(stack.pop(&mut memory), Some(2));
+    assert_eq!(stack.pop(&mut memory), Some(1));
+}
+
+#[test]
+fn test_cr() {
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+    let mut return_stack = ReturnStack::new();
+    let mut memory = Memory::new();
+
+    // CR should not modify the stack and not error
+    assert!(
+        dict.execute_word("CR", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
+            .is_ok()
+    );
+    assert!(stack.is_empty());
+
+    // CR should work even with values on the stack
+    stack.push(42, &mut memory);
+    assert!(
+        dict.execute_word("CR", &mut stack, &mut loop_stack, &mut return_stack, &mut memory)
+            .is_ok()
+    );
+    assert_eq!(stack.pop(&mut memory), Some(42));
+}
