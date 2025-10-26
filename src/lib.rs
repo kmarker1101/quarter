@@ -949,6 +949,35 @@ pub fn load_stdlib(
     Ok(())
 }
 
+/// Batch compile all Word::Compiled entries in the dictionary to JIT
+/// This creates one global LLVM module with all functions, then JITs them all at once
+pub fn batch_compile_all_words(
+    dict: &mut Dictionary,
+    stack: &mut Stack,
+    loop_stack: &mut LoopStack,
+    return_stack: &mut ReturnStack,
+    memory: &mut Memory,
+    no_jit: bool,
+    dump_ir: bool,
+    verify_ir: bool,
+) -> Result<(), String> {
+    // Load the Forth compiler if not already loaded
+    if !FORTH_COMPILER_LOADED.load(Ordering::Relaxed) {
+        // Load compiler
+        if let Err(e) = load_file("forth/compiler.fth", stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir, false) {
+            return Err(format!("Failed to load Forth compiler: {}", e));
+        }
+        FORTH_COMPILER_LOADED.store(true, Ordering::Relaxed);
+    }
+
+    println!("Batch compiling all words to JIT...");
+
+    // TODO: Implement batch compilation logic
+    // For now, just a placeholder
+
+    Ok(())
+}
+
 /// Attempt to compile a word using the Forth self-hosting compiler
 /// Loads the compiler if not already loaded
 /// Returns true if successful, false otherwise

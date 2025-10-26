@@ -177,6 +177,8 @@ fn main() {
     // Supported extensions: .qtr, .fth, .forth, .quarter
     if let Some(file) = filename {
         println!("Loading {}", file);
+
+        // Load file in interpreted mode (don't JIT yet if using forth compiler)
         match load_file(
             &file,
             &mut stack,
@@ -187,9 +189,25 @@ fn main() {
             no_jit,
             dump_ir,
             verify_ir,
-            use_forth_compiler,
+            false,  // Always load interpreted first for batch compilation
         ) {
             Ok(_) => {
+                // If using forth compiler, batch compile all words now
+                if use_forth_compiler {
+                    if let Err(e) = quarter::batch_compile_all_words(
+                        &mut dict,
+                        &mut stack,
+                        &mut loop_stack,
+                        &mut return_stack,
+                        &mut memory,
+                        no_jit,
+                        dump_ir,
+                        verify_ir,
+                    ) {
+                        eprintln!("Batch compilation failed: {}", e);
+                        std::process::exit(1);
+                    }
+                }
                 return;
             }
             Err(e) => {
