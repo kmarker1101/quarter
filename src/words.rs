@@ -987,7 +987,7 @@ unsafe fn check_sp_write(sp_val: usize, bytes_to_add: usize) -> bool {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_dup(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_dup(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
 
@@ -1008,7 +1008,7 @@ pub extern "C" fn quarter_dup(memory: *mut u8, sp: *mut usize, _rp: *mut usize) 
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_drop(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_drop(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
 
@@ -1024,7 +1024,7 @@ pub extern "C" fn quarter_drop(memory: *mut u8, sp: *mut usize, _rp: *mut usize)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_swap(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_swap(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
 
@@ -1045,7 +1045,7 @@ pub extern "C" fn quarter_swap(memory: *mut u8, sp: *mut usize, _rp: *mut usize)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_add(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_add(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
 
@@ -1067,7 +1067,7 @@ pub extern "C" fn quarter_add(memory: *mut u8, sp: *mut usize, _rp: *mut usize) 
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_sub(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_sub(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
 
@@ -1089,7 +1089,7 @@ pub extern "C" fn quarter_sub(memory: *mut u8, sp: *mut usize, _rp: *mut usize) 
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_mul(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_mul(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
 
@@ -1111,7 +1111,7 @@ pub extern "C" fn quarter_mul(memory: *mut u8, sp: *mut usize, _rp: *mut usize) 
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_div(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_div(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
 
@@ -1137,7 +1137,7 @@ pub extern "C" fn quarter_div(memory: *mut u8, sp: *mut usize, _rp: *mut usize) 
 /// JIT-callable less than comparison: ( a b -- flag )
 /// Pops two values, pushes -1 if a < b, 0 otherwise
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_less_than(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_less_than(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
 
@@ -1161,7 +1161,7 @@ pub extern "C" fn quarter_less_than(memory: *mut u8, sp: *mut usize, _rp: *mut u
 /// JIT-callable greater than comparison: ( a b -- flag )
 /// Pops two values, pushes -1 if a > b, 0 otherwise
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_gt(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_gt(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 16) {
@@ -1178,14 +1178,16 @@ pub extern "C" fn quarter_gt(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
 
 /// JIT-callable less than (alias for quarter_less_than): ( a b -- flag )
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_lt(memory: *mut u8, sp: *mut usize, rp: *mut usize) {
-    quarter_less_than(memory, sp, rp);
+pub unsafe extern "C" fn quarter_lt(memory: *mut u8, sp: *mut usize, rp: *mut usize) {
+    unsafe {
+        quarter_less_than(memory, sp, rp);
+    }
 }
 
 /// JIT-callable equal comparison: ( a b -- flag )
 /// Pops two values, pushes -1 if a == b, 0 otherwise
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_equal(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_equal(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 16) {
@@ -1202,7 +1204,7 @@ pub extern "C" fn quarter_equal(memory: *mut u8, sp: *mut usize, _rp: *mut usize
 
 /// quarter_not_equal: ( a b -- flag )
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_not_equal(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_not_equal(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 16) {
@@ -1219,7 +1221,7 @@ pub extern "C" fn quarter_not_equal(memory: *mut u8, sp: *mut usize, _rp: *mut u
 
 /// quarter_less_equal: ( a b -- flag )
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_less_equal(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_less_equal(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 16) {
@@ -1236,7 +1238,7 @@ pub extern "C" fn quarter_less_equal(memory: *mut u8, sp: *mut usize, _rp: *mut 
 
 /// quarter_greater_equal: ( a b -- flag )
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_greater_equal(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_greater_equal(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 16) {
@@ -1253,7 +1255,7 @@ pub extern "C" fn quarter_greater_equal(memory: *mut u8, sp: *mut usize, _rp: *m
 
 /// quarter_negate: ( n -- -n )
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_negate(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_negate(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 8) {
@@ -1267,7 +1269,7 @@ pub extern "C" fn quarter_negate(memory: *mut u8, sp: *mut usize, _rp: *mut usiz
 
 /// quarter_abs: ( n -- |n| )
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_abs(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_abs(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 8) {
@@ -1281,7 +1283,7 @@ pub extern "C" fn quarter_abs(memory: *mut u8, sp: *mut usize, _rp: *mut usize) 
 
 /// quarter_min: ( n1 n2 -- min )
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_min(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_min(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 16) {
@@ -1298,7 +1300,7 @@ pub extern "C" fn quarter_min(memory: *mut u8, sp: *mut usize, _rp: *mut usize) 
 
 /// quarter_max: ( n1 n2 -- max )
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_max(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_max(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 16) {
@@ -1315,7 +1317,7 @@ pub extern "C" fn quarter_max(memory: *mut u8, sp: *mut usize, _rp: *mut usize) 
 
 /// quarter_1plus: ( n -- n+1 )
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_1plus(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_1plus(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 8) {
@@ -1329,7 +1331,7 @@ pub extern "C" fn quarter_1plus(memory: *mut u8, sp: *mut usize, _rp: *mut usize
 
 /// quarter_1minus: ( n -- n-1 )
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_1minus(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_1minus(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 8) {
@@ -1343,7 +1345,7 @@ pub extern "C" fn quarter_1minus(memory: *mut u8, sp: *mut usize, _rp: *mut usiz
 
 /// quarter_2star: ( n -- n*2 )
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_2star(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_2star(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 8) {
@@ -1357,7 +1359,7 @@ pub extern "C" fn quarter_2star(memory: *mut u8, sp: *mut usize, _rp: *mut usize
 
 /// quarter_2slash: ( n -- n/2 )
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_2slash(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_2slash(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 8) {
@@ -1376,7 +1378,7 @@ pub extern "C" fn quarter_2slash(memory: *mut u8, sp: *mut usize, _rp: *mut usiz
 /// JIT-callable store: ( n addr -- )
 /// Stores n at address addr (8-byte cell)
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_store(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_store(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 16) {
@@ -1402,7 +1404,7 @@ pub extern "C" fn quarter_store(memory: *mut u8, sp: *mut usize, _rp: *mut usize
 /// JIT-callable fetch: ( addr -- n )
 /// Fetches 8-byte cell from address addr
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_fetch(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_fetch(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 8) {
@@ -1426,7 +1428,7 @@ pub extern "C" fn quarter_fetch(memory: *mut u8, sp: *mut usize, _rp: *mut usize
 /// JIT-callable c-store: ( c addr -- )
 /// Stores byte c at address addr
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_c_store(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_c_store(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 16) {
@@ -1452,7 +1454,7 @@ pub extern "C" fn quarter_c_store(memory: *mut u8, sp: *mut usize, _rp: *mut usi
 /// JIT-callable c-fetch: ( addr -- c )
 /// Fetches byte from address addr
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_c_fetch(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_c_fetch(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 8) {
@@ -1478,7 +1480,7 @@ pub extern "C" fn quarter_c_fetch(memory: *mut u8, sp: *mut usize, _rp: *mut usi
 
 /// JIT-callable and: ( a b -- a&b )
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_and(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_and(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 16) {
@@ -1495,7 +1497,7 @@ pub extern "C" fn quarter_and(memory: *mut u8, sp: *mut usize, _rp: *mut usize) 
 
 /// JIT-callable or: ( a b -- a|b )
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_or(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_or(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 16) {
@@ -1512,7 +1514,7 @@ pub extern "C" fn quarter_or(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
 
 /// JIT-callable xor: ( a b -- a^b )
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_xor(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_xor(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 16) {
@@ -1529,7 +1531,7 @@ pub extern "C" fn quarter_xor(memory: *mut u8, sp: *mut usize, _rp: *mut usize) 
 
 /// JIT-callable invert: ( a -- ~a )
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_invert(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_invert(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 8) {
@@ -1542,7 +1544,7 @@ pub extern "C" fn quarter_invert(memory: *mut u8, sp: *mut usize, _rp: *mut usiz
 
 /// JIT-callable lshift: ( a u -- a<<u )
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_lshift(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_lshift(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 16) {
@@ -1559,7 +1561,7 @@ pub extern "C" fn quarter_lshift(memory: *mut u8, sp: *mut usize, _rp: *mut usiz
 
 /// JIT-callable rshift: ( a u -- a>>u )
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_rshift(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_rshift(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 16) {
@@ -1581,7 +1583,7 @@ pub extern "C" fn quarter_rshift(memory: *mut u8, sp: *mut usize, _rp: *mut usiz
 /// JIT-callable >R: ( n -- ) (R: -- n)
 /// Moves value from data stack to return stack
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_to_r(memory: *mut u8, sp: *mut usize, rp: *mut usize) {
+pub unsafe extern "C" fn quarter_to_r(memory: *mut u8, sp: *mut usize, rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         let rp_val = *rp;
@@ -1610,7 +1612,7 @@ pub extern "C" fn quarter_to_r(memory: *mut u8, sp: *mut usize, rp: *mut usize) 
 /// JIT-callable R>: ( -- n ) (R: n -- )
 /// Moves value from return stack to data stack
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_r_from(memory: *mut u8, sp: *mut usize, rp: *mut usize) {
+pub unsafe extern "C" fn quarter_r_from(memory: *mut u8, sp: *mut usize, rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         let rp_val = *rp;
@@ -1640,7 +1642,7 @@ pub extern "C" fn quarter_r_from(memory: *mut u8, sp: *mut usize, rp: *mut usize
 /// JIT-callable R@: ( -- n ) (R: n -- n)
 /// Copies top of return stack to data stack
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_r_fetch(memory: *mut u8, sp: *mut usize, rp: *mut usize) {
+pub unsafe extern "C" fn quarter_r_fetch(memory: *mut u8, sp: *mut usize, rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         let rp_val = *rp;
@@ -1673,7 +1675,7 @@ pub extern "C" fn quarter_r_fetch(memory: *mut u8, sp: *mut usize, rp: *mut usiz
 /// JIT-callable over: ( a b -- a b a )
 /// Copies second stack item to top
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_over(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_over(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 16) {
@@ -1691,7 +1693,7 @@ pub extern "C" fn quarter_over(memory: *mut u8, sp: *mut usize, _rp: *mut usize)
 /// JIT-callable rot: ( a b c -- b c a )
 /// Rotates top three stack items
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_rot(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_rot(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 24) {
@@ -1714,7 +1716,7 @@ pub extern "C" fn quarter_rot(memory: *mut u8, sp: *mut usize, _rp: *mut usize) 
 /// JIT-callable pick: ( ... n -- ... xn )
 /// Copies nth stack item to top (0=top)
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_pick(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_pick(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 8) {
@@ -1739,7 +1741,7 @@ pub extern "C" fn quarter_pick(memory: *mut u8, sp: *mut usize, _rp: *mut usize)
 /// JIT-callable depth: ( -- n )
 /// Returns number of items on stack
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_depth(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_depth(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         let depth = sp_val / 8;  // Each cell is 8 bytes
@@ -1755,7 +1757,7 @@ pub extern "C" fn quarter_depth(memory: *mut u8, sp: *mut usize, _rp: *mut usize
 
 /// JIT-callable /mod: ( n1 n2 -- remainder quotient )
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_slash_mod(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_slash_mod(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 16) {
@@ -1783,7 +1785,7 @@ pub extern "C" fn quarter_slash_mod(memory: *mut u8, sp: *mut usize, _rp: *mut u
 /// JIT-callable i: ( -- n ) (L: index limit -- index limit)
 /// Returns current loop index
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_i(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_i(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     // Note: This needs loop stack access which isn't passed to JIT functions
     // For now, mark as unimplemented - this will need special handling
     unsafe {
@@ -1797,7 +1799,7 @@ pub extern "C" fn quarter_i(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
 /// JIT-callable j: ( -- n ) (L: ... outer_index outer_limit ... -- ...)
 /// Returns outer loop index
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_j(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_j(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     // Note: Same issue as quarter_i - needs loop stack access
     unsafe {
         let sp_val = *sp;
@@ -1814,7 +1816,7 @@ pub extern "C" fn quarter_j(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
 /// JIT-callable emit: ( c -- )
 /// Outputs character
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_emit(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_emit(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 8) {
@@ -1832,14 +1834,14 @@ pub extern "C" fn quarter_emit(memory: *mut u8, sp: *mut usize, _rp: *mut usize)
 /// JIT-callable space: ( -- )
 /// Outputs a space character
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_space(_memory: *mut u8, _sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_space(_memory: *mut u8, _sp: *mut usize, _rp: *mut usize) {
     print!(" ");
 }
 
 /// JIT-callable key: ( -- c )
 /// Reads character (placeholder - needs proper I/O handling)
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_key(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_key(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         let dest = memory.add(sp_val) as *mut i64;
@@ -1851,7 +1853,7 @@ pub extern "C" fn quarter_key(memory: *mut u8, sp: *mut usize, _rp: *mut usize) 
 /// JIT-callable cr: ( -- )
 /// Outputs newline
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_cr(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_cr(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     print!("\n");
     let _ = (memory, sp, _rp);  // Suppress warnings
 }
@@ -1859,7 +1861,7 @@ pub extern "C" fn quarter_cr(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
 /// JIT-callable dot: ( n -- )
 /// Prints number
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_dot(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_dot(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 8) {
@@ -1875,7 +1877,7 @@ pub extern "C" fn quarter_dot(memory: *mut u8, sp: *mut usize, _rp: *mut usize) 
 /// JIT-callable u_dot: ( u -- )
 /// Prints unsigned number
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_u_dot(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_u_dot(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 8) {
@@ -1892,7 +1894,7 @@ pub extern "C" fn quarter_u_dot(memory: *mut u8, sp: *mut usize, _rp: *mut usize
 /// JIT-callable dot_r: ( n width -- )
 /// Prints number right-justified in field of width
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_dot_r(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_dot_r(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 16) {
@@ -1916,7 +1918,7 @@ pub extern "C" fn quarter_dot_r(memory: *mut u8, sp: *mut usize, _rp: *mut usize
 /// JIT-callable u_dot_r: ( u width -- )
 /// Prints unsigned number right-justified in field of width
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_u_dot_r(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_u_dot_r(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 16) {
@@ -1941,7 +1943,7 @@ pub extern "C" fn quarter_u_dot_r(memory: *mut u8, sp: *mut usize, _rp: *mut usi
 /// JIT-callable type: ( addr len -- )
 /// Prints string from memory
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_type(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_type(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 16) {
@@ -1980,7 +1982,7 @@ pub extern "C" fn quarter_type(memory: *mut u8, sp: *mut usize, _rp: *mut usize)
 /// JIT-callable sp_fetch: ( -- addr )
 /// Push current stack pointer onto stack
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_sp_fetch(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_sp_fetch(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         // Push sp value onto stack
@@ -1993,7 +1995,7 @@ pub extern "C" fn quarter_sp_fetch(memory: *mut u8, sp: *mut usize, _rp: *mut us
 /// JIT-callable sp_store: ( addr -- )
 /// Set stack pointer from top of stack
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_sp_store(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_sp_store(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 8) {
@@ -2009,7 +2011,7 @@ pub extern "C" fn quarter_sp_store(memory: *mut u8, sp: *mut usize, _rp: *mut us
 /// JIT-callable rp_fetch: ( -- addr )
 /// Push current return stack pointer onto data stack
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_rp_fetch(memory: *mut u8, sp: *mut usize, rp: *mut usize) {
+pub unsafe extern "C" fn quarter_rp_fetch(memory: *mut u8, sp: *mut usize, rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         let rp_val = *rp;
@@ -2023,7 +2025,7 @@ pub extern "C" fn quarter_rp_fetch(memory: *mut u8, sp: *mut usize, rp: *mut usi
 /// JIT-callable rp_store: ( addr -- )
 /// Set return stack pointer from top of data stack
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_rp_store(memory: *mut u8, sp: *mut usize, rp: *mut usize) {
+pub unsafe extern "C" fn quarter_rp_store(memory: *mut u8, sp: *mut usize, rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 8) {
@@ -2040,7 +2042,7 @@ pub extern "C" fn quarter_rp_store(memory: *mut u8, sp: *mut usize, rp: *mut usi
 /// JIT-callable here: ( -- addr )
 /// Push current dictionary pointer
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_here(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_here(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         // Read dp from fixed memory location (0x01FFF8)
         const DP_ADDR: usize = 0x01FFF8;
@@ -2058,7 +2060,7 @@ pub extern "C" fn quarter_here(memory: *mut u8, sp: *mut usize, _rp: *mut usize)
 /// JIT-callable allot: ( n -- )
 /// Allocate n bytes in dictionary space
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_allot(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_allot(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 8) {
@@ -2092,7 +2094,7 @@ pub extern "C" fn quarter_allot(memory: *mut u8, sp: *mut usize, _rp: *mut usize
 /// JIT-callable comma: ( n -- )
 /// Store n at HERE and advance dictionary pointer by 8 bytes
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_comma(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_comma(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
         if !check_sp_read(sp_val, 8) {
