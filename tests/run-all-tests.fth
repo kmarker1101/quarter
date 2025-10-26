@@ -9,6 +9,7 @@ S" stdlib/test-framework.fth" INCLUDED
 
 \ Load all test files (these just execute tests using the framework)
 S" tests/basic_tests.fth" INCLUDED
+S" tests/comparison_tests.fth" INCLUDED
 
 \ Note: jit_primitives_tests.fth is excluded - it uses raw output, not the test framework
 \ Run it separately: ./quarter tests/jit_primitives_tests.fth --jit
