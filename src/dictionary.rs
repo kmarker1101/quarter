@@ -62,6 +62,7 @@ impl Dictionary {
             "-" => words::subtract,
             "*" => words::multiply,
             "/" => words::divide,
+            "*/" => words::star_slash,
             "/MOD" => words::slash_modulo,
             "MOD" => words::mod_word,
             "NEGATE" => words::negate,
@@ -80,12 +81,14 @@ impl Dictionary {
             "<>" => words::not_equal,
             "<=" => words::less_equal,
             ">=" => words::greater_equal,
+            "U<" => words::u_less_than,
             "0=" => words::zero_equal,
             "0<" => words::zero_less,
             "0>" => words::zero_greater,
 
             // Stack operations
             "DUP" => words::dup,
+            "?DUP" => words::question_dup,
             "DROP" => words::drop,
             "SWAP" => words::swap,
             "OVER" => words::over,
@@ -122,6 +125,7 @@ impl Dictionary {
             "HERE" => words::here,
             "ALLOT" => words::allot,
             "," => words::comma,
+            "BASE" => words::base,
 
             // Loop operations
             "I" => words::loop_i,
@@ -161,6 +165,7 @@ impl Dictionary {
             "LLVM-BUILD-COND-BR" => words::llvm_build_cond_br_word,
             "LLVM-BUILD-ICMP" => words::llvm_build_icmp_word,
             "LLVM-BUILD-SEXT" => words::llvm_build_sext_word,
+            "LLVM-BUILD-SELECT" => words::llvm_build_select_word,
             "LLVM-BUILD-TRUNC" => words::llvm_build_trunc_word,
             "LLVM-BUILD-CALL" => words::llvm_build_call_word,
             "LLVM-GET-PARAM" => words::llvm_get_param_word,

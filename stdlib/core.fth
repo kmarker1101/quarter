@@ -63,3 +63,18 @@
     ELSE
       DROP
     THEN ;
+
+\ Numeric base helpers
+: DECIMAL ( -- )
+    10 BASE ! ;
+
+: HEX ( -- )
+    16 BASE ! ;
+
+: BINARY ( -- )
+    2 BASE ! ;
+
+\ WITHIN word for range checking
+\ ( n lo hi -- flag ) Tests if lo <= n < hi (half-open interval)
+: WITHIN ( n lo hi -- flag )
+    OVER - >R - R> U< ;

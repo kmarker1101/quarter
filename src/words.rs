@@ -175,6 +175,32 @@ pub fn slash_modulo(
     }
 }
 
+// */: Multiply-divide with intermediate product
+pub fn star_slash(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    // */ ( n1 n2 n3 -- n1*n2/n3 )
+    // Multiply n1 by n2, then divide by n3
+    // Uses i128 intermediate to prevent overflow
+    if let (Some(n3), Some(n2), Some(n1)) = (stack.pop(memory), stack.pop(memory), stack.pop(memory)) {
+        if n3 == 0 {
+            println!("Division by zero!");
+            stack.push(n1, memory);
+            stack.push(n2, memory);
+            stack.push(n3, memory);
+        } else {
+            let product = (n1 as i128) * (n2 as i128);
+            let result = (product / n3 as i128) as i64;
+            stack.push(result, memory);
+        }
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
 // Stack manipulation
 pub fn dup(
     stack: &mut Stack,
@@ -184,6 +210,23 @@ pub fn dup(
 ) {
     if let Some(value) = stack.peek(memory) {
         stack.push(value, memory);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn question_dup(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    // ?DUP ( x -- 0 | x x )
+    // Duplicate top of stack if non-zero
+    if let Some(value) = stack.peek(memory) {
+        if value != 0 {
+            stack.push(value, memory);
+        }
     } else {
         println!("Stack underflow!");
     }
@@ -345,6 +388,23 @@ pub fn greater_equal(
 ) {
     if let (Some(b), Some(a)) = (stack.pop(memory), stack.pop(memory)) {
         stack.push(if a >= b { -1 } else { 0 }, memory);
+    } else {
+        println!("Stack underflow!");
+    }
+}
+
+pub fn u_less_than(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    // U< ( u1 u2 -- flag )
+    // Unsigned less than comparison
+    if let (Some(b), Some(a)) = (stack.pop(memory), stack.pop(memory)) {
+        let ua = a as u64;
+        let ub = b as u64;
+        stack.push(if ua < ub { -1 } else { 0 }, memory);
     } else {
         println!("Stack underflow!");
     }
@@ -971,6 +1031,17 @@ pub fn comma(
     } else {
         println!("Stack underflow!");
     }
+}
+
+pub fn base(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    // BASE ( -- addr )
+    // Push address of numeric base variable (default 10)
+    stack.push(memory.base(), memory);
 }
 
 // =============================================================================
@@ -2514,7 +2585,7 @@ pub fn llvm_build_cond_br_word(
 
 /// LLVM-BUILD-ICMP: Integer comparison
 /// Stack: ( builder-handle predicate lhs-handle rhs-handle -- value-handle )
-/// Predicates: 0=EQ 1=NE 2=SLT 3=SLE 4=SGT 5=SGE
+/// Predicates: 0=EQ 1=NE 2=SLT 3=SLE 4=SGT 5=SGE 6=ULT 7=ULE 8=UGT 9=UGE
 pub fn llvm_build_icmp_word(
     stack: &mut crate::Stack,
     _loop_stack: &crate::LoopStack,
@@ -2555,6 +2626,29 @@ pub fn llvm_build_sext_word(
         }
     } else {
         eprintln!("LLVM-BUILD-SEXT: Stack underflow");
+    }
+}
+
+/// LLVM-BUILD-SELECT: Conditional selection (ternary operator)
+/// Stack: ( builder-handle cond-handle true-value false-value -- result-handle )
+pub fn llvm_build_select_word(
+    stack: &mut crate::Stack,
+    _loop_stack: &crate::LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(false_handle), Some(true_handle), Some(cond_handle), Some(builder_handle)) = (
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+    ) {
+        match crate::llvm_forth::llvm_build_select(builder_handle, cond_handle, true_handle, false_handle) {
+            Ok(handle) => stack.push(handle, memory),
+            Err(e) => eprintln!("LLVM-BUILD-SELECT error: {}", e),
+        }
+    } else {
+        eprintln!("LLVM-BUILD-SELECT: Stack underflow");
     }
 }
 

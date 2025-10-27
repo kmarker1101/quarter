@@ -289,8 +289,35 @@ T{ 10 2/ -> 5 }T
 S" MIN returns smaller value" TEST:
 T{ 5 3 MIN -> 3 }T
 
+S" MIN with negative numbers" TEST:
+T{ -5 -10 MIN -> -10 }T
+
+S" MIN with mixed signs" TEST:
+T{ -5 3 MIN -> -5 }T
+
+S" MIN with equal values" TEST:
+T{ 7 7 MIN -> 7 }T
+
+S" MIN with zero" TEST:
+T{ 0 5 MIN -> 0 }T
+
 S" MAX returns larger value" TEST:
 T{ 5 3 MAX -> 5 }T
+
+S" MAX with negative numbers" TEST:
+T{ -5 -10 MAX -> -5 }T
+
+S" MAX with mixed signs" TEST:
+T{ -5 3 MAX -> 3 }T
+
+S" MAX with equal values" TEST:
+T{ 7 7 MAX -> 7 }T
+
+S" MAX with zero" TEST:
+T{ 0 5 MAX -> 5 }T
+
+S" ABS of zero" TEST:
+T{ 0 ABS -> 0 }T
 
 S" ROT rotates three values" TEST:
 T{ 1 2 3 ROT -> 2 3 1 }T
@@ -323,6 +350,215 @@ T{ 52 +!-TEST ! -5 +!-TEST +! +!-TEST @ -> 47 }T
 
 S" +! adds 0 to stored value" TEST:
 T{ 47 +!-TEST ! 0 +!-TEST +! +!-TEST @ -> 47 }T
+
+\ =============================================================================
+\ INLINE PRIMITIVE TESTS (Issue #60 - 12 High Priority Primitives)
+\ =============================================================================
+
+\ 1+ tests (additional edge cases)
+S" Large number 1+" TEST:
+T{ 1000000 1+ -> 1000001 }T
+
+S" Negative number 1+" TEST:
+T{ -100 1+ -> -99 }T
+
+\ 1- tests (additional edge cases)
+S" Large number 1-" TEST:
+T{ 1000000 1- -> 999999 }T
+
+S" Negative number 1-" TEST:
+T{ -100 1- -> -101 }T
+
+\ 2* tests (additional)
+S" Large number 2*" TEST:
+T{ 500 2* -> 1000 }T
+
+\ 2/ tests (additional)
+S" Odd number 2/" TEST:
+T{ 11 2/ -> 5 }T
+
+S" Negative odd 2/" TEST:
+T{ -11 2/ -> -5 }T
+
+\ MIN tests (comprehensive already added earlier)
+\ MAX tests (comprehensive already added earlier)
+\ ABS tests (comprehensive already added earlier)
+
+\ =============================================================================
+\ RETURN STACK TESTS (>R, R>, R@)
+\ =============================================================================
+
+S" >R and R> basic" TEST:
+T{ 42 >R R> -> 42 }T
+
+S" >R and R> with addition" TEST:
+T{ 10 20 >R R> + -> 30 }T
+
+S" R@ peeks without popping" TEST:
+T{ 99 >R R@ R> + -> 198 }T
+
+S" >R R> order (LIFO)" TEST:
+T{ 1 >R 2 >R 3 >R R> R> R> -> 3 2 1 }T
+
+S" Complex return stack usage" TEST:
+T{ 5 >R 10 >R R> R> + -> 15 }T
+
+S" R@ doesn't modify return stack" TEST:
+T{ 42 >R R@ DROP R> -> 42 }T
+
+\ =============================================================================
+\ LOOP INDEX TESTS (I and J)
+\ =============================================================================
+
+\ Note: Loop tests with I and J are in tests/word_tests.rs
+\ because they require DO/LOOP which is compile-only and cannot
+\ be used in the test framework's interpreted mode.
+
+\ =============================================================================
+\ MULTIPLY-DIVIDE (*/) TESTS
+\ =============================================================================
+
+TESTING
+
+S" */ basic operation" TEST:
+T{ 6 7 2 */ -> 21 }T
+
+S" */ with large intermediate" TEST:
+T{ 1000000 1000000 2 */ -> 500000000000 }T
+
+S" */ exact division" TEST:
+T{ 12 15 3 */ -> 60 }T
+
+S" */ with negative numbers" TEST:
+T{ -10 6 3 */ -> -20 }T
+
+S" */ preventing overflow" TEST:
+T{ 2147483647 2 2 */ -> 2147483647 }T
+
+\ =============================================================================
+\ UNSIGNED LESS THAN (U<) TESTS
+\ =============================================================================
+
+S" U< with positive numbers" TEST:
+T{ 5 10 U< -> -1 }T
+
+S" U< equal numbers" TEST:
+T{ 10 10 U< -> 0 }T
+
+S" U< greater number" TEST:
+T{ 20 10 U< -> 0 }T
+
+S" U< treats negative as large unsigned" TEST:
+T{ -1 0 U< -> 0 }T
+
+S" U< positive vs negative" TEST:
+T{ 5 -1 U< -> -1 }T
+
+S" U< both negative" TEST:
+T{ -2 -1 U< -> -1 }T
+
+S" U< negative less negative" TEST:
+T{ -10 -5 U< -> -1 }T
+
+S" U< max unsigned values" TEST:
+T{ 0 -1 U< -> -1 }T
+
+\ =============================================================================
+\ BASE TESTS
+\ =============================================================================
+
+S" BASE returns address" TEST:
+T{ BASE @ 10 = -> -1 }T
+
+S" DECIMAL sets base to 10" TEST:
+T{ DECIMAL BASE @ -> 10 }T
+
+S" HEX sets base to 16" TEST:
+T{ HEX BASE @ -> 16 }T
+
+S" BINARY sets base to 2" TEST:
+T{ BINARY BASE @ -> 2 }T
+
+S" BASE can be modified" TEST:
+T{ 8 BASE ! BASE @ -> 8 }T
+
+S" Reset to decimal" TEST:
+T{ DECIMAL BASE @ -> 10 }T
+
+\ =============================================================================
+\ WITHIN TESTS (using WITHIN from core.fth)
+\ =============================================================================
+
+S" WITHIN in range" TEST:
+T{ 5 3 10 WITHIN -> -1 }T
+
+S" WITHIN at lower bound" TEST:
+T{ 3 3 10 WITHIN -> -1 }T
+
+S" WITHIN at upper bound" TEST:
+T{ 10 3 10 WITHIN -> 0 }T
+
+S" WITHIN below range" TEST:
+T{ 2 3 10 WITHIN -> 0 }T
+
+S" WITHIN above range" TEST:
+T{ 15 3 10 WITHIN -> 0 }T
+
+S" WITHIN negative range" TEST:
+T{ -5 -10 0 WITHIN -> -1 }T
+
+S" WITHIN inverted bounds" TEST:
+T{ 5 10 3 WITHIN -> 0 }T
+
+S" WITHIN single value range" TEST:
+T{ 5 5 6 WITHIN -> -1 }T
+
+S" WITHIN single value at bound" TEST:
+T{ 5 5 5 WITHIN -> 0 }T
+
+S" WITHIN zero in positive range" TEST:
+T{ 0 -5 5 WITHIN -> -1 }T
+
+S" WITHIN wraparound unsigned" TEST:
+T{ 0 -1 10 WITHIN -> -1 }T
+
+S" WITHIN large numbers" TEST:
+T{ 1000000 0 2000000 WITHIN -> -1 }T
+
+S" WITHIN negative numbers" TEST:
+T{ -50 -100 -10 WITHIN -> -1 }T
+
+S" WITHIN edge of negative" TEST:
+T{ -10 -100 -10 WITHIN -> 0 }T
+
+S" WITHIN full range" TEST:
+T{ 0 -2147483648 2147483647 WITHIN -> -1 }T
+
+\ =============================================================================
+\ ?DUP TESTS
+\ =============================================================================
+
+S" ?DUP with zero" TEST:
+T{ 0 ?DUP -> 0 }T
+
+S" ?DUP with positive" TEST:
+T{ 5 ?DUP -> 5 5 }T
+
+S" ?DUP with negative" TEST:
+T{ -3 ?DUP -> -3 -3 }T
+
+S" ?DUP with one" TEST:
+T{ 1 ?DUP -> 1 1 }T
+
+S" ?DUP with minus one" TEST:
+T{ -1 ?DUP -> -1 -1 }T
+
+S" ?DUP preserves depth with zero" TEST:
+T{ 10 20 0 ?DUP -> 10 20 0 }T
+
+S" ?DUP increases depth with nonzero" TEST:
+T{ 10 20 5 ?DUP -> 10 20 5 5 }T
+
 \ =============================================================================
 \ REPORT
 \ =============================================================================
