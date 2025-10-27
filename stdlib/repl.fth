@@ -2,13 +2,9 @@
 \ This provides a self-hosting REPL using READLINE primitive
 
 \ Constants for buffer sizes
-4096 CONSTANT INPUT-BUFFER-SIZE
-256 CONSTANT PROMPT-SIZE
 8192 CONSTANT COMPILE-BUFFER-SIZE
 
-\ Allocate buffers
-VARIABLE INPUT-BUFFER INPUT-BUFFER-SIZE ALLOT
-VARIABLE PROMPT-BUFFER PROMPT-SIZE ALLOT
+\ Allocate compilation buffer
 VARIABLE COMPILE-BUFFER COMPILE-BUFFER-SIZE ALLOT
 
 \ Compilation mode state
@@ -21,31 +17,12 @@ VARIABLE COMPILE-POS       \ Current position in compile buffer
   0 COMPILE-POS !
 ;
 
-\ Check if a line contains a word (case-insensitive)
-\ ( addr len word-addr word-len -- flag )
-: LINE-CONTAINS-WORD
-  >R >R  \ Save word address and length
-  BEGIN
-    DUP 0>  \ While line length > 0
-  WHILE
-    \ Check if current position matches word
-    2DUP R@ R> 2SWAP  \ Prepare for comparison
-    >R >R  \ Save word addr/len again
-    \ TODO: Implement case-insensitive comparison
-    \ For now, just scan for space-separated tokens
-    DROP DROP  \ Simplified - just drop for now
-    1 -  \ Decrease line length
-    SWAP 1 + SWAP  \ Advance line pointer
-  REPEAT
-  2DROP R> R> 2DROP
-  0  \ Return false for now (TODO: implement properly)
-;
-
 \ Check if line starts with `:` (entering compilation mode)
 \ ( addr len -- flag )
 : STARTS-WITH-COLON
   DUP 0> IF
     SWAP C@ 58 =  \ Check if first char is ':' (ASCII 58)
+    SWAP DROP  \ Drop the length, keep only the flag
   ELSE
     DROP 0
   THEN
@@ -69,52 +46,41 @@ VARIABLE COMPILE-POS       \ Current position in compile buffer
 \ Append line to compile buffer with space separator
 \ ( line-addr line-len -- )
 : APPEND-TO-COMPILE-BUFFER
-  COMPILE-POS @ >R  \ Save current position
+  \ Save length for later use
+  DUP >R
 
-  \ Copy line to compile buffer
-  COMPILE-BUFFER R@ +  \ Destination
-  SWAP  \ Get length on top
-  DUP >R  \ Save length
+  \ Calculate destination: COMPILE-BUFFER + COMPILE-POS
+  COMPILE-BUFFER COMPILE-POS @ +
+
+  \ Rearrange for CMOVE: src dest count
+  SWAP
+
+  \ Copy line to buffer
   CMOVE
 
   \ Add space after the line
-  COMPILE-BUFFER R> R@ + +  \ Position after copied text
-  32 SWAP C!  \ Store space
+  COMPILE-BUFFER COMPILE-POS @ R@ + +
+  32 SWAP C!
 
-  \ Update compile position
+  \ Update compile position: pos + len + 1 (for space)
   R> 1 + COMPILE-POS @ + COMPILE-POS !
 ;
 
-\ Format the prompt string based on mode
-\ Returns: ( -- addr len )
-: FORMAT-PROMPT
-  COMPILING @ IF
-    S" compiled " PROMPT-BUFFER SWAP
-  ELSE
-    S" quarter> " PROMPT-BUFFER SWAP
-  THEN
-  DUP >R  \ Save length
-  PROMPT-BUFFER SWAP CMOVE
-  PROMPT-BUFFER R>
-;
-
-\ Main REPL loop
-\ Continuously reads and executes input until EOF/interrupt
-: REPL
-  INIT-COMPILE-MODE
+\ Main REPL with multi-line support
+: SIMPLE-REPL
   BEGIN
-    FORMAT-PROMPT READLINE  \ ( -- line-addr line-len flag )
-  WHILE                     \ Continue while flag is true
-    \ We have input: line-addr line-len on stack
-    \ DISABLED FOR DEBUG: 2DUP HISTORY-ADD        \ Add to history
-
     COMPILING @ IF
-      \ In compilation mode - accumulate line
+      S" compiled " READLINE
+    ELSE
+      S" quarter> " READLINE
+    THEN
+  WHILE
+    2DUP HISTORY-ADD
+    COMPILING @ IF
+      \ In compilation mode - accumulate lines
       2DUP APPEND-TO-COMPILE-BUFFER
-
-      \ Check if line contains ;
-      CONTAINS-SEMICOLON IF
-        \ End compilation - evaluate accumulated buffer
+      2DUP CONTAINS-SEMICOLON IF
+        \ End compilation - evaluate buffer
         COMPILE-BUFFER COMPILE-POS @ EVALUATE
         ."  ok" CR
         INIT-COMPILE-MODE
@@ -123,9 +89,8 @@ VARIABLE COMPILE-POS       \ Current position in compile buffer
     ELSE
       \ Normal mode - check if entering compilation
       2DUP STARTS-WITH-COLON IF
-        \ Check if also contains ; (single-line definition)
         2DUP CONTAINS-SEMICOLON IF
-          \ Single-line definition - just evaluate
+          \ Single-line definition
           EVALUATE
           ."  ok" CR
         ELSE
@@ -133,7 +98,6 @@ VARIABLE COMPILE-POS       \ Current position in compile buffer
           -1 COMPILING !
           APPEND-TO-COMPILE-BUFFER
         THEN
-        2DROP
       ELSE
         \ Normal execution
         EVALUATE
@@ -141,20 +105,7 @@ VARIABLE COMPILE-POS       \ Current position in compile buffer
       THEN
     THEN
   REPEAT
-  2DROP                     \ Clean up addr/len from failed READLINE
-;
-
-\ Working simple REPL using recursion
-: SIMPLE-REPL
-  S" quarter> " READLINE
-  IF
-    2DUP HISTORY-ADD
-    EVALUATE
-    ."  ok" CR
-    SIMPLE-REPL  \ Recursive call for next line
-  ELSE
-    2DROP  \ Clean up failed READLINE
-  THEN
+  2DROP  \ Clean up failed READLINE
 ;
 
 \ Initialize and start the REPL
@@ -162,7 +113,10 @@ VARIABLE COMPILE-POS       \ Current position in compile buffer
   \ Load history from home directory
   S" .quarter_history" HISTORY-LOAD DROP
 
-  \ Run simple recursive REPL
+  \ Initialize compilation mode
+  INIT-COMPILE-MODE
+
+  \ Run enhanced REPL with multi-line support
   SIMPLE-REPL
 
   \ Save history on exit
