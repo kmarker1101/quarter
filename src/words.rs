@@ -986,6 +986,155 @@ unsafe fn check_sp_write(sp_val: usize, bytes_to_add: usize) -> bool {
     sp_val < DATA_STACK_END && sp_val + bytes_to_add <= DATA_STACK_END
 }
 
+/// Macro for binary operations (a b -- result)
+/// Takes two values from stack, applies operation, pushes result
+macro_rules! binary_op {
+    ($name:ident, $op:expr) => {
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $name(
+            memory: *mut u8,
+            sp: *mut usize,
+            _rp: *mut usize
+        ) {
+            unsafe {
+                let sp_val = *sp;
+
+                // Bounds check: need at least 2 values (16 bytes)
+                if !check_sp_read(sp_val, 16) {
+                    return;  // Stack underflow
+                }
+
+                // Pop b from sp-8, a from sp-16
+                let addr_a = memory.add(sp_val - 16) as *mut i64;
+                let addr_b = memory.add(sp_val - 8) as *const i64;
+                let a = *addr_a;
+                let b = *addr_b;
+
+                // Apply operation and store result
+                *addr_a = $op(a, b);
+
+                // Decrement sp by 8
+                *sp = sp_val - 8;
+            }
+        }
+    };
+}
+
+/// Macro for unary operations (a -- result)
+/// Takes one value from stack, applies operation, pushes result
+macro_rules! unary_op {
+    ($name:ident, $op:expr) => {
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $name(
+            memory: *mut u8,
+            sp: *mut usize,
+            _rp: *mut usize
+        ) {
+            unsafe {
+                let sp_val = *sp;
+
+                // Bounds check: need at least 1 value (8 bytes)
+                if !check_sp_read(sp_val, 8) {
+                    return;  // Stack underflow
+                }
+
+                // Get address of top value
+                let addr = memory.add(sp_val - 8) as *mut i64;
+                let a = *addr;
+
+                // Apply operation and store result
+                *addr = $op(a);
+            }
+        }
+    };
+}
+
+/// Macro for binary operations that return two results (a b -- result1 result2)
+/// Takes two values from stack, applies operation returning tuple, pushes both results
+macro_rules! two_result_binary_op {
+    ($name:ident, $op:expr) => {
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $name(
+            memory: *mut u8,
+            sp: *mut usize,
+            _rp: *mut usize
+        ) {
+            unsafe {
+                let sp_val = *sp;
+
+                // Bounds check: need at least 2 values (16 bytes)
+                if !check_sp_read(sp_val, 16) {
+                    return;  // Stack underflow
+                }
+
+                // Pop b from sp-8, a from sp-16
+                let addr_a = memory.add(sp_val - 16) as *mut i64;
+                let addr_b = memory.add(sp_val - 8) as *mut i64;
+                let a = addr_a.read_unaligned();
+                let b = addr_b.read_unaligned();
+
+                // Apply operation to get two results
+                let (result1, result2) = $op(a, b);
+
+                // Store result1 at sp-16, result2 at sp-8
+                addr_a.write_unaligned(result1);
+                addr_b.write_unaligned(result2);
+
+                // Stack pointer stays the same (2 inputs -> 2 outputs)
+            }
+        }
+    };
+}
+
+/// Macro for pointer fetch operations (push pointer value onto stack)
+/// Used for SP@, RP@, etc.
+macro_rules! pointer_fetch {
+    ($name:ident, $pointer:ident) => {
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $name(
+            memory: *mut u8,
+            sp: *mut usize,
+            $pointer: *mut usize
+        ) {
+            unsafe {
+                let sp_val = *sp;
+                let ptr_val = *$pointer;
+                // Push pointer value onto data stack
+                let dest = memory.add(sp_val) as *mut i64;
+                dest.write_unaligned(ptr_val as i64);
+                *sp = sp_val + 8;
+            }
+        }
+    };
+}
+
+/// Macro for pointer store operations (pop value and set pointer)
+/// Used for SP!, RP!, etc.
+macro_rules! pointer_store {
+    ($name:ident, $pointer:ident, $update_sp:expr) => {
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $name(
+            memory: *mut u8,
+            sp: *mut usize,
+            $pointer: *mut usize
+        ) {
+            unsafe {
+                let sp_val = *sp;
+                if !check_sp_read(sp_val, 8) {
+                    return;
+                }
+                // Pop value and set pointer
+                let addr_ptr = memory.add(sp_val - 8) as *const i64;
+                let new_ptr_val = addr_ptr.read_unaligned() as usize;
+                if $update_sp {
+                    *sp = sp_val - 8;
+                }
+                *$pointer = new_ptr_val;
+            }
+        }
+    };
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_dup(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
@@ -1044,137 +1193,18 @@ pub unsafe extern "C" fn quarter_swap(memory: *mut u8, sp: *mut usize, _rp: *mut
     }
 }
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_add(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
+// Arithmetic operations using macros
+binary_op!(quarter_add, |a, b| a + b);
+binary_op!(quarter_sub, |a, b| a - b);
+binary_op!(quarter_mul, |a, b| a * b);
+binary_op!(quarter_div, |a, b| if b != 0 { a / b } else { 0 });
 
-        // Bounds check: need at least 2 values (16 bytes)
-        if !check_sp_read(sp_val, 16) {
-            return;  // Stack underflow
-        }
-
-        // Pop b from sp-8, a from sp-16
-        let addr_a = memory.add(sp_val - 16) as *mut i64;
-        let addr_b = memory.add(sp_val - 8) as *const i64;
-        let a = *addr_a;
-        let b = *addr_b;
-        // Store result at sp-8
-        *addr_a = a + b;
-        // Decrement sp by 8
-        *sp = sp_val - 8;
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_sub(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-
-        // Bounds check: need at least 2 values (16 bytes)
-        if !check_sp_read(sp_val, 16) {
-            return;  // Stack underflow
-        }
-
-        // Pop b from sp-8, a from sp-16
-        let addr_a = memory.add(sp_val - 16) as *mut i64;
-        let addr_b = memory.add(sp_val - 8) as *const i64;
-        let a = *addr_a;
-        let b = *addr_b;
-        // Store result at sp-8
-        *addr_a = a - b;
-        // Decrement sp by 8
-        *sp = sp_val - 8;
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_mul(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-
-        // Bounds check: need at least 2 values (16 bytes)
-        if !check_sp_read(sp_val, 16) {
-            return;  // Stack underflow
-        }
-
-        // Pop b from sp-8, a from sp-16
-        let addr_a = memory.add(sp_val - 16) as *mut i64;
-        let addr_b = memory.add(sp_val - 8) as *const i64;
-        let a = *addr_a;
-        let b = *addr_b;
-        // Store result at sp-8
-        *addr_a = a * b;
-        // Decrement sp by 8
-        *sp = sp_val - 8;
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_div(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-
-        // Bounds check: need at least 2 values (16 bytes)
-        if !check_sp_read(sp_val, 16) {
-            return;  // Stack underflow
-        }
-
-        // Pop b from sp-8, a from sp-16
-        let addr_a = memory.add(sp_val - 16) as *mut i64;
-        let addr_b = memory.add(sp_val - 8) as *const i64;
-        let a = *addr_a;
-        let b = *addr_b;
-        // Store result at sp-8 (with division by zero check)
-        if b != 0 {
-            *addr_a = a / b;
-        }
-        // Decrement sp by 8
-        *sp = sp_val - 8;
-    }
-}
-
-/// JIT-callable less than comparison: ( a b -- flag )
-/// Pops two values, pushes -1 if a < b, 0 otherwise
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_less_than(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-
-        // Bounds check: need at least 2 values (16 bytes)
-        if !check_sp_read(sp_val, 16) {
-            return;  // Stack underflow
-        }
-
-        // Pop b from sp-8, a from sp-16
-        let addr_a = memory.add(sp_val - 16) as *mut i64;
-        let addr_b = memory.add(sp_val - 8) as *const i64;
-        let a = *addr_a;
-        let b = *addr_b;
-        // Store result at sp-8: -1 if a < b, 0 otherwise
-        *addr_a = if a < b { -1 } else { 0 };
-        // Decrement sp by 8
-        *sp = sp_val - 8;
-    }
-}
-
-/// JIT-callable greater than comparison: ( a b -- flag )
-/// Pops two values, pushes -1 if a > b, 0 otherwise
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_gt(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 16) {
-            return;
-        }
-        let addr_a = memory.add(sp_val - 16) as *mut i64;
-        let addr_b = memory.add(sp_val - 8) as *const i64;
-        let a = *addr_a;
-        let b = *addr_b;
-        *addr_a = if a > b { -1 } else { 0 };
-        *sp = sp_val - 8;
-    }
-}
+// Comparison operations using macros
+binary_op!(quarter_less_than, |a, b| if a < b { -1 } else { 0 });
+binary_op!(quarter_gt, |a, b| if a > b { -1 } else { 0 });
+binary_op!(quarter_equal, |a, b| if a == b { -1 } else { 0 });
+binary_op!(quarter_not_equal, |a, b| if a != b { -1 } else { 0 });
+binary_op!(quarter_less_equal, |a, b| if a <= b { -1 } else { 0 });
 
 /// JIT-callable less than (alias for quarter_less_than): ( a b -- flag )
 #[unsafe(no_mangle)]
@@ -1184,192 +1214,21 @@ pub unsafe extern "C" fn quarter_lt(memory: *mut u8, sp: *mut usize, rp: *mut us
     }
 }
 
-/// JIT-callable equal comparison: ( a b -- flag )
-/// Pops two values, pushes -1 if a == b, 0 otherwise
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_equal(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 16) {
-            return;
-        }
-        let addr_a = memory.add(sp_val - 16) as *mut i64;
-        let addr_b = memory.add(sp_val - 8) as *const i64;
-        let a = addr_a.read_unaligned();
-        let b = addr_b.read_unaligned();
-        addr_a.write_unaligned(if a == b { -1 } else { 0 });
-        *sp = sp_val - 8;
-    }
-}
+binary_op!(quarter_greater_equal, |a, b| if a >= b { -1 } else { 0 });
 
-/// quarter_not_equal: ( a b -- flag )
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_not_equal(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 16) {
-            return;
-        }
-        let addr_a = memory.add(sp_val - 16) as *mut i64;
-        let addr_b = memory.add(sp_val - 8) as *const i64;
-        let a = addr_a.read_unaligned();
-        let b = addr_b.read_unaligned();
-        addr_a.write_unaligned(if a != b { -1 } else { 0 });
-        *sp = sp_val - 8;
-    }
-}
+// Unary arithmetic operations
+unary_op!(quarter_negate, |a: i64| -a);
+unary_op!(quarter_abs, |a: i64| a.abs());
+unary_op!(quarter_1plus, |a: i64| a + 1);
+unary_op!(quarter_1minus, |a: i64| a - 1);
 
-/// quarter_less_equal: ( a b -- flag )
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_less_equal(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 16) {
-            return;
-        }
-        let addr_a = memory.add(sp_val - 16) as *mut i64;
-        let addr_b = memory.add(sp_val - 8) as *const i64;
-        let a = addr_a.read_unaligned();
-        let b = addr_b.read_unaligned();
-        addr_a.write_unaligned(if a <= b { -1 } else { 0 });
-        *sp = sp_val - 8;
-    }
-}
+// Binary min/max operations
+binary_op!(quarter_min, |a, b| if a < b { a } else { b });
+binary_op!(quarter_max, |a, b| if a > b { a } else { b });
 
-/// quarter_greater_equal: ( a b -- flag )
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_greater_equal(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 16) {
-            return;
-        }
-        let addr_a = memory.add(sp_val - 16) as *mut i64;
-        let addr_b = memory.add(sp_val - 8) as *const i64;
-        let a = addr_a.read_unaligned();
-        let b = addr_b.read_unaligned();
-        addr_a.write_unaligned(if a >= b { -1 } else { 0 });
-        *sp = sp_val - 8;
-    }
-}
-
-/// quarter_negate: ( n -- -n )
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_negate(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 8) {
-            return;
-        }
-        let addr = memory.add(sp_val - 8) as *mut i64;
-        let value = addr.read_unaligned();
-        addr.write_unaligned(-value);
-    }
-}
-
-/// quarter_abs: ( n -- |n| )
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_abs(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 8) {
-            return;
-        }
-        let addr = memory.add(sp_val - 8) as *mut i64;
-        let value = addr.read_unaligned();
-        addr.write_unaligned(value.abs());
-    }
-}
-
-/// quarter_min: ( n1 n2 -- min )
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_min(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 16) {
-            return;
-        }
-        let addr_a = memory.add(sp_val - 16) as *mut i64;
-        let addr_b = memory.add(sp_val - 8) as *const i64;
-        let a = addr_a.read_unaligned();
-        let b = addr_b.read_unaligned();
-        addr_a.write_unaligned(if a < b { a } else { b });
-        *sp = sp_val - 8;
-    }
-}
-
-/// quarter_max: ( n1 n2 -- max )
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_max(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 16) {
-            return;
-        }
-        let addr_a = memory.add(sp_val - 16) as *mut i64;
-        let addr_b = memory.add(sp_val - 8) as *const i64;
-        let a = addr_a.read_unaligned();
-        let b = addr_b.read_unaligned();
-        addr_a.write_unaligned(if a > b { a } else { b });
-        *sp = sp_val - 8;
-    }
-}
-
-/// quarter_1plus: ( n -- n+1 )
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_1plus(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 8) {
-            return;
-        }
-        let addr = memory.add(sp_val - 8) as *mut i64;
-        let value = addr.read_unaligned();
-        addr.write_unaligned(value + 1);
-    }
-}
-
-/// quarter_1minus: ( n -- n-1 )
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_1minus(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 8) {
-            return;
-        }
-        let addr = memory.add(sp_val - 8) as *mut i64;
-        let value = addr.read_unaligned();
-        addr.write_unaligned(value - 1);
-    }
-}
-
-/// quarter_2star: ( n -- n*2 )
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_2star(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 8) {
-            return;
-        }
-        let addr = memory.add(sp_val - 8) as *mut i64;
-        let value = addr.read_unaligned();
-        addr.write_unaligned(value * 2);
-    }
-}
-
-/// quarter_2slash: ( n -- n/2 )
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_2slash(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 8) {
-            return;
-        }
-        let addr = memory.add(sp_val - 8) as *mut i64;
-        let value = addr.read_unaligned();
-        addr.write_unaligned(value / 2);
-    }
-}
+// Multiply/divide by 2 operations
+unary_op!(quarter_2star, |a: i64| a * 2);
+unary_op!(quarter_2slash, |a: i64| a / 2);
 
 // ============================================================================
 // Memory Operations
@@ -1478,103 +1337,13 @@ pub unsafe extern "C" fn quarter_c_fetch(memory: *mut u8, sp: *mut usize, _rp: *
 // Bitwise Operations
 // ============================================================================
 
-/// JIT-callable and: ( a b -- a&b )
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_and(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 16) {
-            return;
-        }
-        let addr_a = memory.add(sp_val - 16) as *mut i64;
-        let addr_b = memory.add(sp_val - 8) as *const i64;
-        let a = *addr_a;
-        let b = *addr_b;
-        *addr_a = a & b;
-        *sp = sp_val - 8;
-    }
-}
-
-/// JIT-callable or: ( a b -- a|b )
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_or(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 16) {
-            return;
-        }
-        let addr_a = memory.add(sp_val - 16) as *mut i64;
-        let addr_b = memory.add(sp_val - 8) as *const i64;
-        let a = *addr_a;
-        let b = *addr_b;
-        *addr_a = a | b;
-        *sp = sp_val - 8;
-    }
-}
-
-/// JIT-callable xor: ( a b -- a^b )
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_xor(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 16) {
-            return;
-        }
-        let addr_a = memory.add(sp_val - 16) as *mut i64;
-        let addr_b = memory.add(sp_val - 8) as *const i64;
-        let a = *addr_a;
-        let b = *addr_b;
-        *addr_a = a ^ b;
-        *sp = sp_val - 8;
-    }
-}
-
-/// JIT-callable invert: ( a -- ~a )
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_invert(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 8) {
-            return;
-        }
-        let addr = memory.add(sp_val - 8) as *mut i64;
-        *addr = !*addr;
-    }
-}
-
-/// JIT-callable lshift: ( a u -- a<<u )
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_lshift(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 16) {
-            return;
-        }
-        let addr_a = memory.add(sp_val - 16) as *mut i64;
-        let addr_u = memory.add(sp_val - 8) as *const i64;
-        let a = *addr_a;
-        let u = *addr_u as u32;
-        *addr_a = a << u;
-        *sp = sp_val - 8;
-    }
-}
-
-/// JIT-callable rshift: ( a u -- a>>u )
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_rshift(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 16) {
-            return;
-        }
-        let addr_a = memory.add(sp_val - 16) as *mut i64;
-        let addr_u = memory.add(sp_val - 8) as *const i64;
-        let a = *addr_a;
-        let u = *addr_u as u32;
-        *addr_a = a >> u;
-        *sp = sp_val - 8;
-    }
-}
+// Bitwise operations using macros
+binary_op!(quarter_and, |a, b| a & b);
+binary_op!(quarter_or, |a, b| a | b);
+binary_op!(quarter_xor, |a, b| a ^ b);
+binary_op!(quarter_lshift, |a, b| a << (b as u32));
+binary_op!(quarter_rshift, |a, b| a >> (b as u32));
+unary_op!(quarter_invert, |a: i64| !a);
 
 // ============================================================================
 // Return Stack Operations
@@ -1755,28 +1524,14 @@ pub unsafe extern "C" fn quarter_depth(memory: *mut u8, sp: *mut usize, _rp: *mu
 // Arithmetic Operations
 // ============================================================================
 
-/// JIT-callable /mod: ( n1 n2 -- remainder quotient )
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_slash_mod(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 16) {
-            return;
-        }
-        let addr_n1 = memory.add(sp_val - 16) as *mut i64;
-        let addr_n2 = memory.add(sp_val - 8) as *const i64;
-        let n1 = addr_n1.read_unaligned();
-        let n2 = addr_n2.read_unaligned();
-
-        if n2 != 0 {
-            let remainder = n1 % n2;
-            let quotient = n1 / n2;
-            addr_n1.write_unaligned(remainder);
-            let quot_addr = memory.add(sp_val - 8) as *mut i64;
-            quot_addr.write_unaligned(quotient);
-        }
+// /MOD operation using two-result macro
+two_result_binary_op!(quarter_slash_mod, |a, b| {
+    if b != 0 {
+        (a % b, a / b)  // (remainder, quotient)
+    } else {
+        (0, 0)  // Division by zero protection
     }
-}
+});
 
 // ============================================================================
 // Loop Access
@@ -1979,65 +1734,15 @@ pub unsafe extern "C" fn quarter_type(memory: *mut u8, sp: *mut usize, _rp: *mut
 // Stack Pointer and Memory Allocation Primitives
 // ============================================================================
 
-/// JIT-callable sp_fetch: ( -- addr )
-/// Push current stack pointer onto stack
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_sp_fetch(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        // Push sp value onto stack
-        let dest = memory.add(sp_val) as *mut i64;
-        dest.write_unaligned(sp_val as i64);
-        *sp = sp_val + 8;
-    }
-}
-
-/// JIT-callable sp_store: ( addr -- )
-/// Set stack pointer from top of stack
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_sp_store(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 8) {
-            return;
-        }
-        // Pop addr and set sp to it
-        let addr_ptr = memory.add(sp_val - 8) as *const i64;
-        let new_sp = addr_ptr.read_unaligned() as usize;
-        *sp = new_sp;
-    }
-}
-
-/// JIT-callable rp_fetch: ( -- addr )
-/// Push current return stack pointer onto data stack
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_rp_fetch(memory: *mut u8, sp: *mut usize, rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        let rp_val = *rp;
-        // Push rp value onto data stack
-        let dest = memory.add(sp_val) as *mut i64;
-        dest.write_unaligned(rp_val as i64);
-        *sp = sp_val + 8;
-    }
-}
-
-/// JIT-callable rp_store: ( addr -- )
-/// Set return stack pointer from top of data stack
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_rp_store(memory: *mut u8, sp: *mut usize, rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 8) {
-            return;
-        }
-        // Pop addr and set rp to it
-        let addr_ptr = memory.add(sp_val - 8) as *const i64;
-        let new_rp = addr_ptr.read_unaligned() as usize;
-        *sp = sp_val - 8;
-        *rp = new_rp;
-    }
-}
+// Stack pointer operations using macros
+// SP@: ( -- addr ) Push current stack pointer
+// SP!: ( addr -- ) Set stack pointer
+// RP@: ( -- addr ) Push current return stack pointer
+// RP!: ( addr -- ) Set return stack pointer
+pointer_fetch!(quarter_sp_fetch, sp);
+pointer_store!(quarter_sp_store, sp, false);  // SP! sets sp directly, no need to update
+pointer_fetch!(quarter_rp_fetch, rp);
+pointer_store!(quarter_rp_store, rp, true);   // RP! needs to pop from data stack
 
 /// JIT-callable here: ( -- addr )
 /// Push current dictionary pointer
