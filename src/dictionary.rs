@@ -9,6 +9,16 @@ use std::collections::{HashMap, HashSet};
 // - rp: pointer to return stack pointer (can be read and modified)
 pub type JITFunction = unsafe extern "C" fn(*mut u8, *mut usize, *mut usize);
 
+// Macro to register multiple primitive words at once
+// Usage: register_primitives!(dict, "NAME" => words::function, ...)
+macro_rules! register_primitives {
+    ($dict:expr, $($name:expr => $func:expr),* $(,)?) => {
+        $(
+            $dict.add_primitive($name, $func);
+        )*
+    };
+}
+
 pub enum Word {
     Primitive(fn(&mut Stack, &crate::LoopStack, &mut crate::ReturnStack, &mut crate::Memory)),
     Compiled(AstNode),
@@ -33,131 +43,148 @@ impl Dictionary {
             frozen_words: HashSet::new(),
         };
 
-        // Register built-in words as Primitives
-        dict.add_primitive(".", words::dot);
-        dict.add_primitive("+", words::add);
-        dict.add_primitive("-", words::subtract);
-        dict.add_primitive("*", words::multiply);
-        dict.add_primitive("/", words::divide);
-        dict.add_primitive("DUP", words::dup);
-        dict.add_primitive("SWAP", words::swap);
-        dict.add_primitive("PICK", words::pick);
-        dict.add_primitive(".S", words::dot_s);
-        dict.add_primitive("U.", words::u_dot);
-        dict.add_primitive(".R", words::dot_r);
-        dict.add_primitive("U.R", words::u_dot_r);
-        dict.add_primitive("<", words::less_than);
-        dict.add_primitive(">", words::greater_than);
-        dict.add_primitive("=", words::equal);
-        dict.add_primitive("<>", words::not_equal);
-        dict.add_primitive("<=", words::less_equal);
-        dict.add_primitive(">=", words::greater_equal);
-        dict.add_primitive("0=", words::zero_equal);
-        dict.add_primitive("0<", words::zero_less);
-        dict.add_primitive("0>", words::zero_greater);
-        dict.add_primitive("NEGATE", words::negate);
-        dict.add_primitive("ABS", words::abs);
-        dict.add_primitive("MIN", words::min);
-        dict.add_primitive("MAX", words::max);
-        dict.add_primitive("1+", words::one_plus);
-        dict.add_primitive("1-", words::one_minus);
-        dict.add_primitive("2*", words::two_star);
-        dict.add_primitive("2/", words::two_slash);
-        dict.add_primitive("CR", words::cr);
-        dict.add_primitive("DROP", words::drop);
-        dict.add_primitive("OVER", words::over);
-        dict.add_primitive("ROT", words::rot);
-        dict.add_primitive("DEPTH", words::depth);
-        dict.add_primitive("/MOD", words::slash_modulo);
-        dict.add_primitive("MOD", words::mod_word);
-        dict.add_primitive("I", words::loop_i);
-        dict.add_primitive("J", words::loop_j);
-        dict.add_primitive("EMIT", words::emit);
-        dict.add_primitive("SPACE", words::space);
-        dict.add_primitive("TYPE", words::type_word);
-        dict.add_primitive("KEY", words::key);
-        dict.add_primitive("AND", words::and);
-        dict.add_primitive("OR", words::or);
-        dict.add_primitive("XOR", words::xor);
-        dict.add_primitive("INVERT", words::invert);
-        dict.add_primitive("LSHIFT", words::lshift);
-        dict.add_primitive("RSHIFT", words::rshift);
-        dict.add_primitive(">R", words::to_r);
-        dict.add_primitive("R>", words::r_from);
-        dict.add_primitive("R@", words::r_fetch);
-        // TRUE, FALSE now defined in core.fth as constants
-        dict.add_primitive("!", words::store);
-        dict.add_primitive("@", words::fetch);
-        dict.add_primitive("C!", words::c_store);
-        dict.add_primitive("C@", words::c_fetch);
-        dict.add_primitive("SP@", words::sp_fetch);
-        dict.add_primitive("SP!", words::sp_store);
-        dict.add_primitive("RP@", words::rp_fetch);
-        dict.add_primitive("RP!", words::rp_store);
-        // CELLS now defined in core.fth
-        dict.add_primitive("HERE", words::here);
-        dict.add_primitive("ALLOT", words::allot);
-        dict.add_primitive(",", words::comma);
+        // Register all built-in primitive words using macro
+        register_primitives!(dict,
+            // I/O operations
+            "." => words::dot,
+            ".S" => words::dot_s,
+            "U." => words::u_dot,
+            ".R" => words::dot_r,
+            "U.R" => words::u_dot_r,
+            "CR" => words::cr,
+            "EMIT" => words::emit,
+            "SPACE" => words::space,
+            "TYPE" => words::type_word,
+            "KEY" => words::key,
 
-        // LLVM primitives for self-hosting compiler
-        dict.add_primitive("LLVM-CREATE-CONTEXT", words::llvm_create_context_word);
-        dict.add_primitive("LLVM-CREATE-MODULE", words::llvm_create_module_word);
-        dict.add_primitive("LLVM-DECLARE-EXTERNAL", words::llvm_declare_external_word);
-        dict.add_primitive("LLVM-CREATE-BUILDER", words::llvm_create_builder_word);
-        dict.add_primitive("LLVM-CREATE-FUNCTION", words::llvm_create_function_word);
-        dict.add_primitive("LLVM-MODULE-GET-FUNCTION", words::llvm_module_get_function_word);
-        dict.add_primitive("LLVM-CREATE-BLOCK", words::llvm_create_block_word);
-        dict.add_primitive("LLVM-POSITION-AT-END", words::llvm_position_at_end_word);
-        dict.add_primitive("LLVM-BUILD-RET-VOID", words::llvm_build_ret_void_word);
-        dict.add_primitive("LLVM-BUILD-RET", words::llvm_build_ret_word);
-        dict.add_primitive("LLVM-DUMP-MODULE", words::llvm_dump_module_word);
-        dict.add_primitive("LLVM-CREATE-JIT", words::llvm_create_jit_word);
-        dict.add_primitive("LLVM-GET-FUNCTION", words::llvm_get_function_word);
+            // Arithmetic operations
+            "+" => words::add,
+            "-" => words::subtract,
+            "*" => words::multiply,
+            "/" => words::divide,
+            "/MOD" => words::slash_modulo,
+            "MOD" => words::mod_word,
+            "NEGATE" => words::negate,
+            "ABS" => words::abs,
+            "MIN" => words::min,
+            "MAX" => words::max,
+            "1+" => words::one_plus,
+            "1-" => words::one_minus,
+            "2*" => words::two_star,
+            "2/" => words::two_slash,
 
-        // LLVM IR builder primitives
-        dict.add_primitive("LLVM-BUILD-CONST-INT", words::llvm_build_const_int_word);
-        dict.add_primitive("LLVM-BUILD-LOAD", words::llvm_build_load_word);
-        dict.add_primitive("LLVM-BUILD-STORE", words::llvm_build_store_word);
-        dict.add_primitive("LLVM-BUILD-GEP", words::llvm_build_gep_word);
-        dict.add_primitive("LLVM-BUILD-ADD", words::llvm_build_add_word);
-        dict.add_primitive("LLVM-BUILD-SUB", words::llvm_build_sub_word);
-        dict.add_primitive("LLVM-BUILD-MUL", words::llvm_build_mul_word);
-        dict.add_primitive("LLVM-BUILD-SDIV", words::llvm_build_sdiv_word);
-        dict.add_primitive("LLVM-BUILD-SREM", words::llvm_build_srem_word);
-        dict.add_primitive("LLVM-BUILD-AND", words::llvm_build_and_word);
-        dict.add_primitive("LLVM-BUILD-OR", words::llvm_build_or_word);
-        dict.add_primitive("LLVM-BUILD-XOR", words::llvm_build_xor_word);
-        dict.add_primitive("LLVM-BUILD-SHL", words::llvm_build_shl_word);
-        dict.add_primitive("LLVM-BUILD-ASHR", words::llvm_build_ashr_word);
-        dict.add_primitive("LLVM-BUILD-BR", words::llvm_build_br_word);
-        dict.add_primitive("LLVM-BUILD-COND-BR", words::llvm_build_cond_br_word);
-        dict.add_primitive("LLVM-BUILD-ICMP", words::llvm_build_icmp_word);
-        dict.add_primitive("LLVM-BUILD-SEXT", words::llvm_build_sext_word);
-        dict.add_primitive("LLVM-BUILD-TRUNC", words::llvm_build_trunc_word);
-        dict.add_primitive("LLVM-BUILD-CALL", words::llvm_build_call_word);
-        dict.add_primitive("LLVM-GET-PARAM", words::llvm_get_param_word);
-        dict.add_primitive("LLVM-BUILD-PHI", words::llvm_build_phi_word);
-        dict.add_primitive("LLVM-PHI-ADD-INCOMING", words::llvm_phi_add_incoming_word);
-        dict.add_primitive("LLVM-GET-INSERT-BLOCK", words::llvm_get_insert_block_word);
+            // Comparison operations
+            "<" => words::less_than,
+            ">" => words::greater_than,
+            "=" => words::equal,
+            "<>" => words::not_equal,
+            "<=" => words::less_equal,
+            ">=" => words::greater_equal,
+            "0=" => words::zero_equal,
+            "0<" => words::zero_less,
+            "0>" => words::zero_greater,
 
-        // AST inspection primitives
-        dict.add_primitive("AST-TYPE", words::ast_get_type_word);
-        dict.add_primitive("AST-GET-NUMBER", words::ast_get_number_word);
-        dict.add_primitive("AST-GET-WORD", words::ast_get_word_word);
-        dict.add_primitive("AST-GET-STRING", words::ast_get_string_word);
-        dict.add_primitive("AST-SEQ-LENGTH", words::ast_seq_length_word);
-        dict.add_primitive("AST-SEQ-CHILD", words::ast_seq_child_word);
-        dict.add_primitive("AST-IF-THEN", words::ast_if_then_word);
-        dict.add_primitive("AST-IF-ELSE", words::ast_if_else_word);
-        dict.add_primitive("AST-LOOP-BODY", words::ast_loop_body_word);
-        dict.add_primitive("AST-LOOP-CONDITION", words::ast_loop_condition_word);
-        dict.add_primitive("AST-LOOP-INCREMENT", words::ast_loop_increment_word);
+            // Stack operations
+            "DUP" => words::dup,
+            "DROP" => words::drop,
+            "SWAP" => words::swap,
+            "OVER" => words::over,
+            "ROT" => words::rot,
+            "PICK" => words::pick,
+            "DEPTH" => words::depth,
 
-        // Test primitives for compiler development
-        dict.add_primitive("TEST-AST-CREATE", words::test_ast_create_word);
+            // Return stack operations
+            ">R" => words::to_r,
+            "R>" => words::r_from,
+            "R@" => words::r_fetch,
 
-        // JIT word registration
-        dict.add_primitive("REGISTER-JIT-WORD", words::register_jit_word);
+            // Bitwise operations
+            "AND" => words::and,
+            "OR" => words::or,
+            "XOR" => words::xor,
+            "INVERT" => words::invert,
+            "LSHIFT" => words::lshift,
+            "RSHIFT" => words::rshift,
+
+            // Memory operations
+            "!" => words::store,
+            "@" => words::fetch,
+            "C!" => words::c_store,
+            "C@" => words::c_fetch,
+
+            // Stack pointer operations
+            "SP@" => words::sp_fetch,
+            "SP!" => words::sp_store,
+            "RP@" => words::rp_fetch,
+            "RP!" => words::rp_store,
+
+            // Memory allocation
+            "HERE" => words::here,
+            "ALLOT" => words::allot,
+            "," => words::comma,
+
+            // Loop operations
+            "I" => words::loop_i,
+            "J" => words::loop_j,
+
+            // LLVM context and module operations
+            "LLVM-CREATE-CONTEXT" => words::llvm_create_context_word,
+            "LLVM-CREATE-MODULE" => words::llvm_create_module_word,
+            "LLVM-DECLARE-EXTERNAL" => words::llvm_declare_external_word,
+            "LLVM-CREATE-BUILDER" => words::llvm_create_builder_word,
+            "LLVM-CREATE-FUNCTION" => words::llvm_create_function_word,
+            "LLVM-MODULE-GET-FUNCTION" => words::llvm_module_get_function_word,
+            "LLVM-CREATE-BLOCK" => words::llvm_create_block_word,
+            "LLVM-POSITION-AT-END" => words::llvm_position_at_end_word,
+            "LLVM-BUILD-RET-VOID" => words::llvm_build_ret_void_word,
+            "LLVM-BUILD-RET" => words::llvm_build_ret_word,
+            "LLVM-DUMP-MODULE" => words::llvm_dump_module_word,
+            "LLVM-CREATE-JIT" => words::llvm_create_jit_word,
+            "LLVM-GET-FUNCTION" => words::llvm_get_function_word,
+
+            // LLVM IR builder operations
+            "LLVM-BUILD-CONST-INT" => words::llvm_build_const_int_word,
+            "LLVM-BUILD-LOAD" => words::llvm_build_load_word,
+            "LLVM-BUILD-STORE" => words::llvm_build_store_word,
+            "LLVM-BUILD-GEP" => words::llvm_build_gep_word,
+            "LLVM-BUILD-ADD" => words::llvm_build_add_word,
+            "LLVM-BUILD-SUB" => words::llvm_build_sub_word,
+            "LLVM-BUILD-MUL" => words::llvm_build_mul_word,
+            "LLVM-BUILD-SDIV" => words::llvm_build_sdiv_word,
+            "LLVM-BUILD-SREM" => words::llvm_build_srem_word,
+            "LLVM-BUILD-AND" => words::llvm_build_and_word,
+            "LLVM-BUILD-OR" => words::llvm_build_or_word,
+            "LLVM-BUILD-XOR" => words::llvm_build_xor_word,
+            "LLVM-BUILD-SHL" => words::llvm_build_shl_word,
+            "LLVM-BUILD-ASHR" => words::llvm_build_ashr_word,
+            "LLVM-BUILD-BR" => words::llvm_build_br_word,
+            "LLVM-BUILD-COND-BR" => words::llvm_build_cond_br_word,
+            "LLVM-BUILD-ICMP" => words::llvm_build_icmp_word,
+            "LLVM-BUILD-SEXT" => words::llvm_build_sext_word,
+            "LLVM-BUILD-TRUNC" => words::llvm_build_trunc_word,
+            "LLVM-BUILD-CALL" => words::llvm_build_call_word,
+            "LLVM-GET-PARAM" => words::llvm_get_param_word,
+            "LLVM-BUILD-PHI" => words::llvm_build_phi_word,
+            "LLVM-PHI-ADD-INCOMING" => words::llvm_phi_add_incoming_word,
+            "LLVM-GET-INSERT-BLOCK" => words::llvm_get_insert_block_word,
+
+            // AST inspection operations
+            "AST-TYPE" => words::ast_get_type_word,
+            "AST-GET-NUMBER" => words::ast_get_number_word,
+            "AST-GET-WORD" => words::ast_get_word_word,
+            "AST-GET-STRING" => words::ast_get_string_word,
+            "AST-SEQ-LENGTH" => words::ast_seq_length_word,
+            "AST-SEQ-CHILD" => words::ast_seq_child_word,
+            "AST-IF-THEN" => words::ast_if_then_word,
+            "AST-IF-ELSE" => words::ast_if_else_word,
+            "AST-LOOP-BODY" => words::ast_loop_body_word,
+            "AST-LOOP-CONDITION" => words::ast_loop_condition_word,
+            "AST-LOOP-INCREMENT" => words::ast_loop_increment_word,
+
+            // Test and JIT operations
+            "TEST-AST-CREATE" => words::test_ast_create_word,
+            "REGISTER-JIT-WORD" => words::register_jit_word,
+        );
 
         dict
     }

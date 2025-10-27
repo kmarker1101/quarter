@@ -8,80 +8,99 @@ use inkwell::module::Module;
 use inkwell::builder::Builder;
 use inkwell::execution_engine::ExecutionEngine;
 
+// Macro to create symbol array without repetitive 'as usize' casts
+// Usage: symbol_array!(func1, func2, func3, ...)
+macro_rules! symbol_array {
+    ($($func:path),* $(,)?) => {
+        [
+            $($func as usize),*
+        ]
+    };
+}
+
 // Force quarter_ symbols to be included in binary
 // This function references all quarter_ functions so the linker includes them
 #[inline(never)]
 fn register_quarter_symbols() -> usize {
-    let symbols = [
+    let symbols = symbol_array!(
         // Stack operations
-        crate::words::quarter_dup as usize,
-        crate::words::quarter_drop as usize,
-        crate::words::quarter_swap as usize,
-        crate::words::quarter_over as usize,
-        crate::words::quarter_rot as usize,
-        crate::words::quarter_pick as usize,
-        crate::words::quarter_depth as usize,
-        // Arithmetic
-        crate::words::quarter_add as usize,
-        crate::words::quarter_sub as usize,
-        crate::words::quarter_mul as usize,
-        crate::words::quarter_div as usize,
-        crate::words::quarter_slash_mod as usize,
-        crate::words::quarter_negate as usize,
-        crate::words::quarter_abs as usize,
-        // Comparison
-        crate::words::quarter_less_than as usize,
-        crate::words::quarter_lt as usize,
-        crate::words::quarter_gt as usize,
-        crate::words::quarter_equal as usize,
-        crate::words::quarter_not_equal as usize,
-        crate::words::quarter_less_equal as usize,
-        crate::words::quarter_greater_equal as usize,
-        crate::words::quarter_min as usize,
-        crate::words::quarter_max as usize,
-        crate::words::quarter_1plus as usize,
-        crate::words::quarter_1minus as usize,
-        crate::words::quarter_2star as usize,
-        crate::words::quarter_2slash as usize,
+        crate::words::quarter_dup,
+        crate::words::quarter_drop,
+        crate::words::quarter_swap,
+        crate::words::quarter_over,
+        crate::words::quarter_rot,
+        crate::words::quarter_pick,
+        crate::words::quarter_depth,
+
+        // Arithmetic operations
+        crate::words::quarter_add,
+        crate::words::quarter_sub,
+        crate::words::quarter_mul,
+        crate::words::quarter_div,
+        crate::words::quarter_slash_mod,
+        crate::words::quarter_negate,
+        crate::words::quarter_abs,
+
+        // Comparison operations
+        crate::words::quarter_less_than,
+        crate::words::quarter_lt,
+        crate::words::quarter_gt,
+        crate::words::quarter_equal,
+        crate::words::quarter_not_equal,
+        crate::words::quarter_less_equal,
+        crate::words::quarter_greater_equal,
+        crate::words::quarter_min,
+        crate::words::quarter_max,
+        crate::words::quarter_1plus,
+        crate::words::quarter_1minus,
+        crate::words::quarter_2star,
+        crate::words::quarter_2slash,
+
         // Memory operations
-        crate::words::quarter_store as usize,
-        crate::words::quarter_fetch as usize,
-        crate::words::quarter_c_store as usize,
-        crate::words::quarter_c_fetch as usize,
+        crate::words::quarter_store,
+        crate::words::quarter_fetch,
+        crate::words::quarter_c_store,
+        crate::words::quarter_c_fetch,
+
         // Bitwise operations
-        crate::words::quarter_and as usize,
-        crate::words::quarter_or as usize,
-        crate::words::quarter_xor as usize,
-        crate::words::quarter_invert as usize,
-        crate::words::quarter_lshift as usize,
-        crate::words::quarter_rshift as usize,
+        crate::words::quarter_and,
+        crate::words::quarter_or,
+        crate::words::quarter_xor,
+        crate::words::quarter_invert,
+        crate::words::quarter_lshift,
+        crate::words::quarter_rshift,
+
         // Return stack operations
-        crate::words::quarter_to_r as usize,
-        crate::words::quarter_r_from as usize,
-        crate::words::quarter_r_fetch as usize,
-        // Loop access
-        crate::words::quarter_i as usize,
-        crate::words::quarter_j as usize,
+        crate::words::quarter_to_r,
+        crate::words::quarter_r_from,
+        crate::words::quarter_r_fetch,
+
+        // Loop operations
+        crate::words::quarter_i,
+        crate::words::quarter_j,
+
         // I/O operations
-        crate::words::quarter_emit as usize,
-        crate::words::quarter_space as usize,
-        crate::words::quarter_key as usize,
-        crate::words::quarter_cr as usize,
-        crate::words::quarter_dot as usize,
-        crate::words::quarter_u_dot as usize,
-        crate::words::quarter_dot_r as usize,
-        crate::words::quarter_u_dot_r as usize,
-        crate::words::quarter_type as usize,
-        // Stack pointers
-        crate::words::quarter_sp_fetch as usize,
-        crate::words::quarter_sp_store as usize,
-        crate::words::quarter_rp_fetch as usize,
-        crate::words::quarter_rp_store as usize,
-        // Memory allocation
-        crate::words::quarter_here as usize,
-        crate::words::quarter_allot as usize,
-        crate::words::quarter_comma as usize,
-    ];
+        crate::words::quarter_emit,
+        crate::words::quarter_space,
+        crate::words::quarter_key,
+        crate::words::quarter_cr,
+        crate::words::quarter_dot,
+        crate::words::quarter_u_dot,
+        crate::words::quarter_dot_r,
+        crate::words::quarter_u_dot_r,
+        crate::words::quarter_type,
+
+        // Stack pointer operations
+        crate::words::quarter_sp_fetch,
+        crate::words::quarter_sp_store,
+        crate::words::quarter_rp_fetch,
+        crate::words::quarter_rp_store,
+
+        // Memory allocation operations
+        crate::words::quarter_here,
+        crate::words::quarter_allot,
+        crate::words::quarter_comma,
+    );
     symbols[0] // Return something to prevent optimization
 }
 use inkwell::values::{FunctionValue, BasicValueEnum, PhiValue, BasicValue};
