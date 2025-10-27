@@ -1115,3 +1115,57 @@ fn test_question_do_with_counter() {
 
     assert_eq!(stack.pop(&mut memory), Some(3)); // Sum of 0+1+2
 }
+
+#[test]
+fn test_unloop_with_exit() {
+    // UNLOOP with EXIT to properly exit from within a loop
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+    let mut return_stack = ReturnStack::new();
+    let mut memory = Memory::new();
+
+    // : FIND-5 10 0 DO I 5 = IF I UNLOOP EXIT THEN LOOP -1 ;
+    let tokens: Vec<&str> = vec![
+        "10", "0", "DO",
+        "I", "5", "=", "IF",
+        "I", "UNLOOP", "EXIT",
+        "THEN",
+        "LOOP",
+        "-1"
+    ];
+    let ast = parse_tokens(&tokens, &dict, None).unwrap();
+    ast.execute(&mut stack, &dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
+
+    assert_eq!(stack.pop(&mut memory), Some(5)); // Found at index 5
+    assert!(stack.is_empty());
+}
+
+#[test]
+fn test_unloop_nested_loops() {
+    // UNLOOP in nested loops - clean up both loops before EXIT
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+    let mut return_stack = ReturnStack::new();
+    let mut memory = Memory::new();
+
+    // : TEST 3 0 DO 3 0 DO I J + 4 = IF I J UNLOOP UNLOOP EXIT THEN LOOP LOOP -1 -1 ;
+    let tokens: Vec<&str> = vec![
+        "3", "0", "DO",
+        "3", "0", "DO",
+        "I", "J", "+", "4", "=", "IF",
+        "I", "J", "UNLOOP", "UNLOOP", "EXIT",
+        "THEN",
+        "LOOP",
+        "LOOP",
+        "-1", "-1"
+    ];
+    let ast = parse_tokens(&tokens, &dict, None).unwrap();
+    ast.execute(&mut stack, &dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
+
+    // Should have I and J when I+J=4 (I=2, J=2)
+    assert_eq!(stack.pop(&mut memory), Some(2)); // J
+    assert_eq!(stack.pop(&mut memory), Some(2)); // I
+    assert!(stack.is_empty());
+}

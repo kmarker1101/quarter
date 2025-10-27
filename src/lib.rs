@@ -700,6 +700,10 @@ pub fn parse_tokens(tokens: &[&str], dict: &crate::Dictionary, current_word: Opt
                 nodes.push(AstNode::Exit);
                 i += 1;
             }
+            "UNLOOP" => {
+                nodes.push(AstNode::Unloop);
+                i += 1;
+            }
             "INLINE" => {
                 // INLINE <instruction> - marks next token as an inline LLVM instruction
                 if i + 1 >= tokens.len() {
@@ -1267,6 +1271,7 @@ pub fn execute_line(
                             || upper == "+LOOP"
                             || upper == "LEAVE"
                             || upper == "EXIT"
+                            || upper == "UNLOOP"
                         {
                             found_compile_only = true;
                             break;
@@ -1276,7 +1281,7 @@ pub fn execute_line(
                     }
 
                     if found_compile_only {
-                        return Err("Control flow words (IF/THEN/ELSE/BEGIN/UNTIL/WHILE/REPEAT/DO/?DO/LOOP/LEAVE/EXIT) are compile-only".to_string());
+                        return Err("Control flow words (IF/THEN/ELSE/BEGIN/UNTIL/WHILE/REPEAT/DO/?DO/LOOP/LEAVE/EXIT/UNLOOP) are compile-only".to_string());
                     }
 
                     let ast = parse_tokens(&exec_tokens, dict, None)?;

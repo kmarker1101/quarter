@@ -25,6 +25,7 @@ pub enum AstNode {
     StackString(String),  // S" - push address and length
     Leave,
     Exit,
+    Unloop,  // Discard loop parameters (used before EXIT when exiting from within a loop)
     InlineInstruction(String),  // INLINE directive - maps to LLVM instruction (e.g., "LLVM-ADD")
 }
 
@@ -41,6 +42,7 @@ impl AstNode {
             AstNode::StackString(_) => Ok(()),
             AstNode::Leave => Ok(()),
             AstNode::Exit => Ok(()),
+            AstNode::Unloop => Ok(()),
             AstNode::InlineInstruction(_) => Ok(()),  // Inline instructions are validated at JIT time
             AstNode::CallWord(name) => {
                 // Allow forward reference if this is the word being defined (for recursion)
@@ -299,6 +301,12 @@ impl AstNode {
             AstNode::Exit => {
                 // Signal to exit the current word
                 Err("EXIT".to_string())
+            }
+            AstNode::Unloop => {
+                // Pop loop control parameters from loop stack
+                // Used when exiting from within a loop (before EXIT)
+                loop_stack.pop_loop();
+                Ok(())
             }
             AstNode::InlineInstruction(instruction) => {
                 // Inline instructions can only be executed in JIT-compiled code
