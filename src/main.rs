@@ -33,7 +33,7 @@ fn try_forth_compile(
         // Stdlib is already loaded by main(), no need to reload it here
         // Load compiler
         if let Err(e) = load_file(
-            "forth/compiler.fth",
+            "stdlib/compiler.fth",
             stack,
             dict,
             loop_stack,

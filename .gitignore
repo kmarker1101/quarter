@@ -17,6 +17,9 @@
 .claude/
 CLAUDE.md
 
+# REPL history
+.quarter_history
+
 # OS files
 .DS_Store
 Thumbs.db

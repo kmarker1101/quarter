@@ -267,7 +267,7 @@ Example: Compiling `: SQUARE DUP * ;`
 
 3. **Choose Compiler:**
    - Default: Store as interpreted `Word::Compiled(ast)`
-   - `--jit`: Self-hosting Forth compiler (forth/compiler.fth) generates LLVM IR and batch compiles all words
+   - `--jit`: Self-hosting Forth compiler (stdlib/compiler.fth) generates LLVM IR and batch compiles all words
 
 4. **JIT Compilation** (if enabled):
    - Creates LLVM module and function

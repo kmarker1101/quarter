@@ -1180,7 +1180,7 @@ pub fn batch_compile_all_words(
     // Load the Forth compiler if not already loaded (after capturing words to compile)
     if !FORTH_COMPILER_LOADED.load(Ordering::Relaxed) {
         // Load compiler
-        if let Err(e) = load_file("forth/compiler.fth", stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir, false, false, included_files) {
+        if let Err(e) = load_file("stdlib/compiler.fth", stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir, false, false, included_files) {
             return Err(format!("Failed to load Forth compiler: {}", e));
         }
         FORTH_COMPILER_LOADED.store(true, Ordering::Relaxed);
@@ -1314,7 +1314,7 @@ pub fn try_forth_compile_word(
             return false;
         }
         // Load compiler
-        if let Err(e) = load_file("forth/compiler.fth", stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir, false, false, included_files) {
+        if let Err(e) = load_file("stdlib/compiler.fth", stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir, false, false, included_files) {
             eprintln!("Failed to load Forth compiler: {}", e);
             return false;
         }
