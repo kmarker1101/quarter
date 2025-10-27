@@ -301,6 +301,9 @@ impl ReturnStack {
 // Fixed memory location for dictionary pointer (8 bytes before user memory)
 const DP_ADDR: usize = 0x01FFF8;
 
+// Fixed memory location for BASE (numeric radix for I/O)
+const BASE_ADDR: usize = 0x7FFFF8;
+
 #[derive(Debug)]
 pub struct Memory {
     bytes: Vec<u8>,
@@ -321,6 +324,8 @@ impl Memory {
         };
         // Sync dp to memory
         memory.sync_dp_to_memory();
+        // Initialize BASE to default value (10 = decimal)
+        memory.init_base();
         memory
     }
 
@@ -335,6 +340,19 @@ impl Memory {
         self.bytes[DP_ADDR + 5] = bytes[5];
         self.bytes[DP_ADDR + 6] = bytes[6];
         self.bytes[DP_ADDR + 7] = bytes[7];
+    }
+
+    // Initialize BASE to default value (10 = decimal)
+    fn init_base(&mut self) {
+        let bytes = (10i64).to_le_bytes();
+        self.bytes[BASE_ADDR] = bytes[0];
+        self.bytes[BASE_ADDR + 1] = bytes[1];
+        self.bytes[BASE_ADDR + 2] = bytes[2];
+        self.bytes[BASE_ADDR + 3] = bytes[3];
+        self.bytes[BASE_ADDR + 4] = bytes[4];
+        self.bytes[BASE_ADDR + 5] = bytes[5];
+        self.bytes[BASE_ADDR + 6] = bytes[6];
+        self.bytes[BASE_ADDR + 7] = bytes[7];
     }
 
     // Read dictionary pointer from memory (for JIT)
@@ -355,6 +373,11 @@ impl Memory {
     // HERE - return current dictionary pointer
     pub fn here(&self) -> i64 {
         self.dp as i64
+    }
+
+    // BASE - return address of numeric base variable
+    pub fn base(&self) -> i64 {
+        BASE_ADDR as i64
     }
 
     // ALLOT - allocate n bytes in dictionary space

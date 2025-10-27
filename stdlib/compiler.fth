@@ -1051,6 +1051,19 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
     CURRENT-BUILDER @ CURRENT-CTX @ ROT LLVM-BUILD-SEXT
     COMPILE-PUSH ;
 
+\ Emit inline U<: pop b, pop a, push (a u< b ? -1 : 0)
+\ Unsigned less than comparison using ICMP ULT (predicate 6)
+\ ( -- )
+: EMIT-INLINE-ULT
+    COMPILE-POP COMPILE-POP  \ b a
+    SWAP                      \ a b (correct order for lhs < rhs)
+    CURRENT-BUILDER @ 6       \ a b builder 6 (ULT predicate)
+    2SWAP                     \ builder 6 a b
+    LLVM-BUILD-ICMP           \ cmp-result (i1)
+    \ Convert i1 to i64 (-1 or 0)
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT LLVM-BUILD-SEXT
+    COMPILE-PUSH ;
+
 \ Emit inline 0=: pop a, push (a = 0 ? -1 : 0)
 \ ( -- )
 : EMIT-INLINE-0EQ
@@ -1100,6 +1113,75 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
     DUP           \ Duplicate the handle
     COMPILE-PUSH  \ Push first copy
     COMPILE-PUSH  \ Push second copy
+;
+
+\ Emit inline ?DUP: duplicate if non-zero
+\ Stack effect: ( x -- x ) if x=0, ( x -- x x ) if x!=0
+\ Implementation: Use basic blocks for conditional duplication
+: EMIT-INLINE-?DUP
+    \ Pop value from virtual stack
+    COMPILE-POP
+    \ Stack: ( value-handle )
+
+    \ Save value on return stack for later use
+    DUP >R
+
+    \ Compare value to zero (ICMP-NE: not equal, predicate 1)
+    CURRENT-BUILDER @ 1 R@
+    CURRENT-CTX @ 0 64 LLVM-BUILD-CONST-INT
+    LLVM-BUILD-ICMP
+    \ Stack: ( cmp-result-handle )
+
+    \ Create "dup" block (for when value != 0)
+    CURRENT-CTX @ CURRENT-FUNCTION @
+    100 WORD-NAME-BUFFER 0 + C!  \ 'd'
+    117 WORD-NAME-BUFFER 1 + C!  \ 'u'
+    112 WORD-NAME-BUFFER 2 + C!  \ 'p'
+    WORD-NAME-BUFFER 3 LLVM-CREATE-BLOCK
+    \ Stack: ( cmp-result dup-block )
+
+    \ Create "skip" block (for when value == 0)
+    CURRENT-CTX @ CURRENT-FUNCTION @
+    115 WORD-NAME-BUFFER 0 + C!  \ 's'
+    107 WORD-NAME-BUFFER 1 + C!  \ 'k'
+    105 WORD-NAME-BUFFER 2 + C!  \ 'i'
+    112 WORD-NAME-BUFFER 3 + C!  \ 'p'
+    WORD-NAME-BUFFER 4 LLVM-CREATE-BLOCK
+    \ Stack: ( cmp-result dup-block skip-block )
+
+    \ Create "merge" block (where both paths meet)
+    CURRENT-CTX @ CURRENT-FUNCTION @
+    109 WORD-NAME-BUFFER 0 + C!  \ 'm'
+    101 WORD-NAME-BUFFER 1 + C!  \ 'e'
+    114 WORD-NAME-BUFFER 2 + C!  \ 'r'
+    103 WORD-NAME-BUFFER 3 + C!  \ 'g'
+    101 WORD-NAME-BUFFER 4 + C!  \ 'e'
+    WORD-NAME-BUFFER 5 LLVM-CREATE-BLOCK
+    \ Stack: ( cmp-result dup-block skip-block merge-block )
+
+    \ Save blocks on return stack
+    >R >R >R
+    \ Stack: ( cmp-result ) R: ( value dup skip merge )
+
+    \ Conditional branch: if (value != 0) goto dup else goto skip
+    CURRENT-BUILDER @ SWAP 2 R@ SWAP LLVM-BUILD-COND-BR
+    \ Stack: ( ) R: ( value dup skip merge )
+
+    \ Compile "dup" block: push value twice, branch to merge
+    R> DUP >R CURRENT-BUILDER @ SWAP LLVM-POSITION-AT-END
+    R@ COMPILE-PUSH
+    R@ COMPILE-PUSH
+    R> DROP  \ Drop value, get skip block
+    R> DUP >R CURRENT-BUILDER @ SWAP LLVM-BUILD-BR
+    \ Stack: ( ) R: ( skip merge )
+
+    \ Compile "skip" block: push value once, branch to merge
+    R> CURRENT-BUILDER @ SWAP LLVM-POSITION-AT-END
+    R@ COMPILE-PUSH
+    R> CURRENT-BUILDER @ SWAP LLVM-BUILD-BR
+
+    \ Position at merge block
+    CURRENT-BUILDER @ SWAP LLVM-POSITION-AT-END
 ;
 
 \ Emit inline DROP: pop a
@@ -1936,6 +2018,15 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
             EXIT
         THEN
 
+        \ Check for 'U<'
+        85 COMPILER-SCRATCH C!      \ U
+        60 COMPILER-SCRATCH 1 + C!  \ <
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 2 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-ULT
+            EXIT
+        THEN
+
         \ Check for '<>'
         60 COMPILER-SCRATCH C!      \ <
         62 COMPILER-SCRATCH 1 + C!  \ >
@@ -1997,6 +2088,17 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
         WORD-NAME-BUFFER OVER COMPILER-SCRATCH 3 STRING-EQUALS? IF
             DROP
             EMIT-INLINE-DUP
+            EXIT
+        THEN
+
+        \ Check for '?DUP'
+        63 COMPILER-SCRATCH C!      \ ?
+        68 COMPILER-SCRATCH 1 + C!  \ D
+        85 COMPILER-SCRATCH 2 + C!  \ U
+        80 COMPILER-SCRATCH 3 + C!  \ P
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 4 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-?DUP
             EXIT
         THEN
 

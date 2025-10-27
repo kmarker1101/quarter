@@ -415,6 +415,151 @@ T{ 42 >R R@ DROP R> -> 42 }T
 \ be used in the test framework's interpreted mode.
 
 \ =============================================================================
+\ MULTIPLY-DIVIDE (*/) TESTS
+\ =============================================================================
+
+TESTING
+
+S" */ basic operation" TEST:
+T{ 6 7 2 */ -> 21 }T
+
+S" */ with large intermediate" TEST:
+T{ 1000000 1000000 2 */ -> 500000000000 }T
+
+S" */ exact division" TEST:
+T{ 12 15 3 */ -> 60 }T
+
+S" */ with negative numbers" TEST:
+T{ -10 6 3 */ -> -20 }T
+
+S" */ preventing overflow" TEST:
+T{ 2147483647 2 2 */ -> 2147483647 }T
+
+\ =============================================================================
+\ UNSIGNED LESS THAN (U<) TESTS
+\ =============================================================================
+
+S" U< with positive numbers" TEST:
+T{ 5 10 U< -> -1 }T
+
+S" U< equal numbers" TEST:
+T{ 10 10 U< -> 0 }T
+
+S" U< greater number" TEST:
+T{ 20 10 U< -> 0 }T
+
+S" U< treats negative as large unsigned" TEST:
+T{ -1 0 U< -> 0 }T
+
+S" U< positive vs negative" TEST:
+T{ 5 -1 U< -> -1 }T
+
+S" U< both negative" TEST:
+T{ -2 -1 U< -> -1 }T
+
+S" U< negative less negative" TEST:
+T{ -10 -5 U< -> -1 }T
+
+S" U< max unsigned values" TEST:
+T{ 0 -1 U< -> -1 }T
+
+\ =============================================================================
+\ BASE TESTS
+\ =============================================================================
+
+S" BASE returns address" TEST:
+T{ BASE @ 10 = -> -1 }T
+
+S" DECIMAL sets base to 10" TEST:
+T{ DECIMAL BASE @ -> 10 }T
+
+S" HEX sets base to 16" TEST:
+T{ HEX BASE @ -> 16 }T
+
+S" BINARY sets base to 2" TEST:
+T{ BINARY BASE @ -> 2 }T
+
+S" BASE can be modified" TEST:
+T{ 8 BASE ! BASE @ -> 8 }T
+
+S" Reset to decimal" TEST:
+T{ DECIMAL BASE @ -> 10 }T
+
+\ =============================================================================
+\ WITHIN TESTS (using WITHIN from core.fth)
+\ =============================================================================
+
+S" WITHIN in range" TEST:
+T{ 5 3 10 WITHIN -> -1 }T
+
+S" WITHIN at lower bound" TEST:
+T{ 3 3 10 WITHIN -> -1 }T
+
+S" WITHIN at upper bound" TEST:
+T{ 10 3 10 WITHIN -> 0 }T
+
+S" WITHIN below range" TEST:
+T{ 2 3 10 WITHIN -> 0 }T
+
+S" WITHIN above range" TEST:
+T{ 15 3 10 WITHIN -> 0 }T
+
+S" WITHIN negative range" TEST:
+T{ -5 -10 0 WITHIN -> -1 }T
+
+S" WITHIN inverted bounds" TEST:
+T{ 5 10 3 WITHIN -> 0 }T
+
+S" WITHIN single value range" TEST:
+T{ 5 5 6 WITHIN -> -1 }T
+
+S" WITHIN single value at bound" TEST:
+T{ 5 5 5 WITHIN -> 0 }T
+
+S" WITHIN zero in positive range" TEST:
+T{ 0 -5 5 WITHIN -> -1 }T
+
+S" WITHIN wraparound unsigned" TEST:
+T{ 0 -1 10 WITHIN -> -1 }T
+
+S" WITHIN large numbers" TEST:
+T{ 1000000 0 2000000 WITHIN -> -1 }T
+
+S" WITHIN negative numbers" TEST:
+T{ -50 -100 -10 WITHIN -> -1 }T
+
+S" WITHIN edge of negative" TEST:
+T{ -10 -100 -10 WITHIN -> 0 }T
+
+S" WITHIN full range" TEST:
+T{ 0 -2147483648 2147483647 WITHIN -> -1 }T
+
+\ =============================================================================
+\ ?DUP TESTS
+\ =============================================================================
+
+S" ?DUP with zero" TEST:
+T{ 0 ?DUP -> 0 }T
+
+S" ?DUP with positive" TEST:
+T{ 5 ?DUP -> 5 5 }T
+
+S" ?DUP with negative" TEST:
+T{ -3 ?DUP -> -3 -3 }T
+
+S" ?DUP with one" TEST:
+T{ 1 ?DUP -> 1 1 }T
+
+S" ?DUP with minus one" TEST:
+T{ -1 ?DUP -> -1 -1 }T
+
+S" ?DUP preserves depth with zero" TEST:
+T{ 10 20 0 ?DUP -> 10 20 0 }T
+
+S" ?DUP increases depth with nonzero" TEST:
+T{ 10 20 5 ?DUP -> 10 20 5 5 }T
+
+\ =============================================================================
 \ REPORT
 \ =============================================================================
 

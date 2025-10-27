@@ -777,7 +777,7 @@ impl LLVMRegistry {
     /// Build integer comparison
     pub fn build_icmp(&mut self,
                      builder_handle: BuilderHandle,
-                     predicate: i64,  // 0=eq, 1=ne, 2=slt, 3=sle, 4=sgt, 5=sge
+                     predicate: i64,  // 0=eq, 1=ne, 2=slt, 3=sle, 4=sgt, 5=sge, 6=ult, 7=ule, 8=ugt, 9=uge
                      lhs_handle: ValueHandle,
                      rhs_handle: ValueHandle) -> Result<ValueHandle, String> {
         let builder = self.builders.get(&builder_handle)
@@ -799,6 +799,10 @@ impl LLVMRegistry {
             3 => IntPredicate::SLE,
             4 => IntPredicate::SGT,
             5 => IntPredicate::SGE,
+            6 => IntPredicate::ULT,
+            7 => IntPredicate::ULE,
+            8 => IntPredicate::UGT,
+            9 => IntPredicate::UGE,
             _ => return Err(format!("Invalid predicate: {}", predicate)),
         };
 
