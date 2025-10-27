@@ -44,6 +44,7 @@ impl AstRegistry {
             AstNode::StackString(_) => "StackString".to_string(),
             AstNode::Leave => "Leave".to_string(),
             AstNode::Exit => "Exit".to_string(),
+            AstNode::Unloop => "Unloop".to_string(),
             AstNode::InlineInstruction(_) => "InlineInstruction".to_string(),
         };
         self.nodes.insert(handle, node);
@@ -74,6 +75,7 @@ impl AstRegistry {
             AstNode::StackString(_) => 9,
             AstNode::Leave => 10,
             AstNode::Exit => 11,
+            AstNode::Unloop => 13,
             AstNode::InlineInstruction(_) => 12,
         })
     }

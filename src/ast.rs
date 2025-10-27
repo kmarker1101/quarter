@@ -19,11 +19,13 @@ pub enum AstNode {
     DoLoop {
         body: Vec<AstNode>,
         increment: i64,  // 1 for LOOP, variable for +LOOP
+        conditional: bool,  // true for ?DO (skip if start >= limit), false for DO
     },
     PrintString(String),
     StackString(String),  // S" - push address and length
     Leave,
     Exit,
+    Unloop,  // Discard loop parameters (used before EXIT when exiting from within a loop)
     InlineInstruction(String),  // INLINE directive - maps to LLVM instruction (e.g., "LLVM-ADD")
 }
 
@@ -40,6 +42,7 @@ impl AstNode {
             AstNode::StackString(_) => Ok(()),
             AstNode::Leave => Ok(()),
             AstNode::Exit => Ok(()),
+            AstNode::Unloop => Ok(()),
             AstNode::InlineInstruction(_) => Ok(()),  // Inline instructions are validated at JIT time
             AstNode::CallWord(name) => {
                 // Allow forward reference if this is the word being defined (for recursion)
@@ -203,10 +206,11 @@ impl AstNode {
                 }
                 Ok(())
             }
-            AstNode::DoLoop { body, increment } => {
+            AstNode::DoLoop { body, increment, conditional: _ } => {
                 // Pop limit and start from stack ( limit start -- )
                 if let (Some(start), Some(limit)) = (stack.pop(memory), stack.pop(memory)) {
-                    // Check if we should execute at all (start < limit)
+                    // Both DO and ?DO skip if start >= limit
+                    // (?DO explicitly documents this behavior, DO matches for safety)
                     if start >= limit {
                         // Don't execute - loop would run 0 times
                         return Ok(());
@@ -297,6 +301,12 @@ impl AstNode {
             AstNode::Exit => {
                 // Signal to exit the current word
                 Err("EXIT".to_string())
+            }
+            AstNode::Unloop => {
+                // Pop loop control parameters from loop stack
+                // Used when exiting from within a loop (before EXIT)
+                loop_stack.pop_loop();
+                Ok(())
             }
             AstNode::InlineInstruction(instruction) => {
                 // Inline instructions can only be executed in JIT-compiled code
