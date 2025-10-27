@@ -19,6 +19,7 @@ pub enum AstNode {
     DoLoop {
         body: Vec<AstNode>,
         increment: i64,  // 1 for LOOP, variable for +LOOP
+        conditional: bool,  // true for ?DO (skip if start >= limit), false for DO
     },
     PrintString(String),
     StackString(String),  // S" - push address and length
@@ -203,10 +204,11 @@ impl AstNode {
                 }
                 Ok(())
             }
-            AstNode::DoLoop { body, increment } => {
+            AstNode::DoLoop { body, increment, conditional: _ } => {
                 // Pop limit and start from stack ( limit start -- )
                 if let (Some(start), Some(limit)) = (stack.pop(memory), stack.pop(memory)) {
-                    // Check if we should execute at all (start < limit)
+                    // Both DO and ?DO skip if start >= limit
+                    // (?DO explicitly documents this behavior, DO matches for safety)
                     if start >= limit {
                         // Don't execute - loop would run 0 times
                         return Ok(());

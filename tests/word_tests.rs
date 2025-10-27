@@ -1063,3 +1063,55 @@ fn test_recurse_outside_definition() {
         "RECURSE can only be used inside a word definition"
     );
 }
+
+#[test]
+fn test_question_do_skip_when_equal() {
+    // ?DO should skip loop when start = limit
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+    let mut return_stack = ReturnStack::new();
+    let mut memory = Memory::new();
+
+    // 0 0 ?DO 999 LOOP 42
+    let tokens: Vec<&str> = vec!["0", "0", "?DO", "999", "LOOP", "42"];
+    let ast = parse_tokens(&tokens, &dict, None).unwrap();
+    ast.execute(&mut stack, &dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
+
+    assert_eq!(stack.pop(&mut memory), Some(42)); // Loop was skipped
+    assert!(stack.is_empty()); // 999 was not pushed
+}
+
+#[test]
+fn test_question_do_execute_when_less() {
+    // ?DO should execute when start < limit
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+    let mut return_stack = ReturnStack::new();
+    let mut memory = Memory::new();
+
+    // 0 5 0 ?DO 1 + LOOP
+    let tokens: Vec<&str> = vec!["0", "5", "0", "?DO", "1", "+", "LOOP"];
+    let ast = parse_tokens(&tokens, &dict, None).unwrap();
+    ast.execute(&mut stack, &dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
+
+    assert_eq!(stack.pop(&mut memory), Some(5)); // Loop executed 5 times
+}
+
+#[test]
+fn test_question_do_with_counter() {
+    // ?DO with I (loop counter)
+    let mut stack = Stack::new();
+    let dict = Dictionary::new();
+    let mut loop_stack = LoopStack::new();
+    let mut return_stack = ReturnStack::new();
+    let mut memory = Memory::new();
+
+    // 0 3 0 ?DO I + LOOP
+    let tokens: Vec<&str> = vec!["0", "3", "0", "?DO", "I", "+", "LOOP"];
+    let ast = parse_tokens(&tokens, &dict, None).unwrap();
+    ast.execute(&mut stack, &dict, &mut loop_stack, &mut return_stack, &mut memory).unwrap();
+
+    assert_eq!(stack.pop(&mut memory), Some(3)); // Sum of 0+1+2
+}

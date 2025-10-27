@@ -624,7 +624,7 @@ pub fn parse_tokens(tokens: &[&str], dict: &crate::Dictionary, current_word: Opt
                     return Err(format!("Unexpected {} after BEGIN", end_keyword));
                 }
             }
-            "DO" => {
+            "DO" | "?DO" => {
                 // Find matching LOOP or +LOOP
                 let loop_pos = find_do_loop(&tokens[i + 1..])?;
                 let loop_keyword = tokens[i + 1 + loop_pos];
@@ -638,6 +638,8 @@ pub fn parse_tokens(tokens: &[&str], dict: &crate::Dictionary, current_word: Opt
                     1 // LOOP always increments by 1
                 };
 
+                let conditional = token_upper == "?DO";
+
                 nodes.push(AstNode::DoLoop {
                     body: if let AstNode::Sequence(v) = body_ast {
                         v
@@ -645,6 +647,7 @@ pub fn parse_tokens(tokens: &[&str], dict: &crate::Dictionary, current_word: Opt
                         vec![body_ast]
                     },
                     increment,
+                    conditional,
                 });
 
                 i += loop_pos + 2; // Skip past LOOP/+LOOP
@@ -845,7 +848,7 @@ fn find_do_loop(tokens: &[&str]) -> Result<usize, String> {
 
         let token_upper = token.to_uppercase();
         match token_upper.as_str() {
-            "DO" => depth += 1,
+            "DO" | "?DO" => depth += 1,
             "LOOP" | "+LOOP" => {
                 if depth == 0 {
                     return Ok(i);
@@ -1259,6 +1262,7 @@ pub fn execute_line(
                             || upper == "WHILE"
                             || upper == "REPEAT"
                             || upper == "DO"
+                            || upper == "?DO"
                             || upper == "LOOP"
                             || upper == "+LOOP"
                             || upper == "LEAVE"
@@ -1272,7 +1276,7 @@ pub fn execute_line(
                     }
 
                     if found_compile_only {
-                        return Err("Control flow words (IF/THEN/ELSE/BEGIN/UNTIL/WHILE/REPEAT/DO/LOOP/LEAVE/EXIT) are compile-only".to_string());
+                        return Err("Control flow words (IF/THEN/ELSE/BEGIN/UNTIL/WHILE/REPEAT/DO/?DO/LOOP/LEAVE/EXIT) are compile-only".to_string());
                     }
 
                     let ast = parse_tokens(&exec_tokens, dict, None)?;
