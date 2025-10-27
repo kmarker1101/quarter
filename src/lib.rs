@@ -11,9 +11,125 @@ pub use stack::Stack;
 
 use std::fs;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::cell::RefCell;
+use std::collections::HashSet;
 
 /// Track whether the Forth compiler has been loaded
 static FORTH_COMPILER_LOADED: AtomicBool = AtomicBool::new(false);
+
+// ============================================================================
+// Global Execution Context (for EVALUATE and self-hosting REPL)
+// ============================================================================
+
+/// Global execution context accessible from primitive words
+pub struct ExecutionContext {
+    pub stack: Stack,
+    pub dict: Dictionary,
+    pub loop_stack: LoopStack,
+    pub return_stack: ReturnStack,
+    pub memory: Memory,
+    pub included_files: HashSet<String>,
+    pub no_jit: bool,
+    pub dump_ir: bool,
+    pub verify_ir: bool,
+    // Raw pointers for re-entrant access (used by EVALUATE)
+    pub dict_ptr: *mut Dictionary,
+    pub loop_stack_ptr: *mut LoopStack,
+    pub return_stack_ptr: *mut ReturnStack,
+    pub memory_ptr: *mut Memory,
+}
+
+thread_local! {
+    /// Thread-local execution context for EVALUATE and REPL
+    static EXECUTION_CONTEXT: RefCell<Option<ExecutionContext>> = RefCell::new(None);
+
+    /// Raw pointers for re-entrant access (stored separately to avoid RefCell conflicts)
+    static REENTRANT_POINTERS: std::cell::Cell<(*mut Dictionary, *mut LoopStack, *mut ReturnStack, *mut Memory)> =
+        std::cell::Cell::new((std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut()));
+}
+
+/// Initialize the global execution context
+pub fn init_execution_context(
+    stack: Stack,
+    dict: Dictionary,
+    loop_stack: LoopStack,
+    return_stack: ReturnStack,
+    memory: Memory,
+    included_files: HashSet<String>,
+    no_jit: bool,
+    dump_ir: bool,
+    verify_ir: bool,
+) {
+    EXECUTION_CONTEXT.with(|ctx| {
+        let mut context = ExecutionContext {
+            stack,
+            dict,
+            loop_stack,
+            return_stack,
+            memory,
+            included_files,
+            no_jit,
+            dump_ir,
+            verify_ir,
+            dict_ptr: std::ptr::null_mut(),
+            loop_stack_ptr: std::ptr::null_mut(),
+            return_stack_ptr: std::ptr::null_mut(),
+            memory_ptr: std::ptr::null_mut(),
+        };
+
+        // Initialize raw pointers to point to the actual fields
+        context.dict_ptr = &mut context.dict as *mut Dictionary;
+        context.loop_stack_ptr = &mut context.loop_stack as *mut LoopStack;
+        context.return_stack_ptr = &mut context.return_stack as *mut ReturnStack;
+        context.memory_ptr = &mut context.memory as *mut Memory;
+
+        // Store pointers in separate thread-local for re-entrant access
+        REENTRANT_POINTERS.with(|ptrs| {
+            ptrs.set((
+                context.dict_ptr,
+                context.loop_stack_ptr,
+                context.return_stack_ptr,
+                context.memory_ptr,
+            ));
+        });
+
+        *ctx.borrow_mut() = Some(context);
+    });
+}
+
+/// Access the global execution context
+pub fn with_execution_context<F, R>(f: F) -> Option<R>
+where
+    F: FnOnce(&mut ExecutionContext) -> R,
+{
+    EXECUTION_CONTEXT.with(|ctx| {
+        if let Some(context) = ctx.borrow_mut().as_mut() {
+            Some(f(context))
+        } else {
+            None
+        }
+    })
+}
+
+/// Take the execution context out (for returning from REPL to main)
+pub fn take_execution_context() -> Option<ExecutionContext> {
+    EXECUTION_CONTEXT.with(|ctx| ctx.borrow_mut().take())
+}
+
+/// Get raw pointers for re-entrant access (used by EVALUATE)
+/// SAFETY: Caller must ensure pointers are valid and not used across re-entrant calls
+pub fn get_reentrant_pointers() -> Option<(*mut Dictionary, *mut LoopStack, *mut ReturnStack, *mut Memory)> {
+    REENTRANT_POINTERS.with(|ptrs| {
+        let (dict_ptr, loop_stack_ptr, return_stack_ptr, memory_ptr) = ptrs.get();
+
+        // Check if pointers are null (not initialized)
+        if dict_ptr.is_null() || loop_stack_ptr.is_null() || return_stack_ptr.is_null() || memory_ptr.is_null() {
+            None
+        } else {
+            Some((dict_ptr, loop_stack_ptr, return_stack_ptr, memory_ptr))
+        }
+    })
+}
 
 // Embedded standard library files
 const CORE_FTH: &str = include_str!("../stdlib/core.fth");

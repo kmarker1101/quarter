@@ -1,5 +1,13 @@
 use crate::LoopStack;
 use crate::stack::Stack;
+use std::cell::RefCell;
+use rustyline::DefaultEditor;
+use rustyline::error::ReadlineError;
+
+// Thread-local rustyline editor for REPL primitives
+thread_local! {
+    static READLINE_EDITOR: RefCell<Option<DefaultEditor>> = RefCell::new(None);
+}
 
 // Built-in word definitions
 pub fn dot(
@@ -2956,5 +2964,270 @@ pub fn register_jit_word(
         }
     } else {
         eprintln!("REGISTER-JIT-WORD: Stack underflow");
+    }
+}
+
+// ============================================================================
+// REPL Primitives (for Forth-based REPL)
+// ============================================================================
+
+/// READLINE: ( prompt-addr prompt-len -- line-addr line-len flag )
+/// Read a line of input with the given prompt using rustyline
+/// Returns the line address, length, and a flag (true=-1 if success, false=0 if EOF/interrupt)
+pub fn readline_word(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(prompt_len), Some(prompt_addr)) = (stack.pop(memory), stack.pop(memory)) {
+        // Extract prompt string from memory
+        match extract_string(memory, prompt_addr as usize, prompt_len as usize) {
+            Ok(prompt) => {
+                // Initialize editor if needed
+                READLINE_EDITOR.with(|editor_cell| {
+                    let mut editor_opt = editor_cell.borrow_mut();
+                    if editor_opt.is_none() {
+                        *editor_opt = Some(DefaultEditor::new().unwrap());
+                    }
+
+                    if let Some(editor) = editor_opt.as_mut() {
+                        match editor.readline(&prompt) {
+                            Ok(line) => {
+                                // Store the line in memory at HERE
+                                let here = memory.here() as usize;
+                                for (i, ch) in line.bytes().enumerate() {
+                                    if memory.store_byte(here + i, ch as i64).is_err() {
+                                        stack.push(0, memory); // addr (dummy)
+                                        stack.push(0, memory); // len
+                                        stack.push(0, memory); // flag (false)
+                                        return;
+                                    }
+                                }
+
+                                // Push line addr, len, and success flag
+                                stack.push(here as i64, memory);
+                                stack.push(line.len() as i64, memory);
+                                stack.push(-1, memory); // true flag
+                            }
+                            Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {
+                                // EOF or interrupt - return false flag
+                                stack.push(0, memory); // addr (dummy)
+                                stack.push(0, memory); // len
+                                stack.push(0, memory); // flag (false)
+                            }
+                            Err(_) => {
+                                // Other error - return false flag
+                                stack.push(0, memory); // addr (dummy)
+                                stack.push(0, memory); // len
+                                stack.push(0, memory); // flag (false)
+                            }
+                        }
+                    } else {
+                        // Editor not available
+                        stack.push(0, memory); // addr (dummy)
+                        stack.push(0, memory); // len
+                        stack.push(0, memory); // flag (false)
+                    }
+                });
+            }
+            Err(e) => {
+                eprintln!("READLINE prompt string error: {}", e);
+                stack.push(0, memory); // addr (dummy)
+                stack.push(0, memory); // len
+                stack.push(0, memory); // flag (false)
+            }
+        }
+    } else {
+        eprintln!("READLINE: Stack underflow");
+    }
+}
+
+/// HISTORY-ADD: ( addr len -- )
+/// Add a line to the readline history
+pub fn history_add_word(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(len), Some(addr)) = (stack.pop(memory), stack.pop(memory)) {
+        match extract_string(memory, addr as usize, len as usize) {
+            Ok(line) => {
+                READLINE_EDITOR.with(|editor_cell| {
+                    if let Some(editor) = editor_cell.borrow_mut().as_mut() {
+                        let _ = editor.add_history_entry(line);
+                    }
+                });
+            }
+            Err(e) => eprintln!("HISTORY-ADD string error: {}", e),
+        }
+    } else {
+        eprintln!("HISTORY-ADD: Stack underflow");
+    }
+}
+
+/// HISTORY-LOAD: ( addr len -- flag )
+/// Load history from a file, returns true=-1 if success, false=0 if error
+pub fn history_load_word(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(len), Some(addr)) = (stack.pop(memory), stack.pop(memory)) {
+        match extract_string(memory, addr as usize, len as usize) {
+            Ok(filename) => {
+                let success = READLINE_EDITOR.with(|editor_cell| {
+                    let mut editor_opt = editor_cell.borrow_mut();
+                    if editor_opt.is_none() {
+                        *editor_opt = Some(DefaultEditor::new().unwrap());
+                    }
+
+                    if let Some(editor) = editor_opt.as_mut() {
+                        editor.load_history(&filename).is_ok()
+                    } else {
+                        false
+                    }
+                });
+
+                stack.push(if success { -1 } else { 0 }, memory);
+            }
+            Err(e) => {
+                eprintln!("HISTORY-LOAD string error: {}", e);
+                stack.push(0, memory); // false flag
+            }
+        }
+    } else {
+        eprintln!("HISTORY-LOAD: Stack underflow");
+        stack.push(0, memory); // false flag
+    }
+}
+
+/// HISTORY-SAVE: ( addr len -- flag )
+/// Save history to a file, returns true=-1 if success, false=0 if error
+pub fn history_save_word(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(len), Some(addr)) = (stack.pop(memory), stack.pop(memory)) {
+        match extract_string(memory, addr as usize, len as usize) {
+            Ok(filename) => {
+                let success = READLINE_EDITOR.with(|editor_cell| {
+                    if let Some(editor) = editor_cell.borrow_mut().as_mut() {
+                        editor.save_history(&filename).is_ok()
+                    } else {
+                        false
+                    }
+                });
+
+                stack.push(if success { -1 } else { 0 }, memory);
+            }
+            Err(e) => {
+                eprintln!("HISTORY-SAVE string error: {}", e);
+                stack.push(0, memory); // false flag
+            }
+        }
+    } else {
+        eprintln!("HISTORY-SAVE: Stack underflow");
+        stack.push(0, memory); // false flag
+    }
+}
+
+/// EVALUATE: ( addr len -- )
+/// Execute a string as Forth code
+/// Uses the global execution context to parse and execute the code
+pub fn evaluate_word(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(len), Some(addr)) = (stack.pop(memory), stack.pop(memory)) {
+        // Extract the string from memory
+        match extract_string(memory, addr as usize, len as usize) {
+            Ok(code) => {
+                // Get raw pointers for re-entrant access
+                // This avoids nested RefCell borrows
+                match crate::get_reentrant_pointers() {
+                    Some((dict_ptr, loop_stack_ptr, return_stack_ptr, memory_ptr)) => {
+                        // Parse the code
+                        let tokens: Vec<&str> = code.split_whitespace().collect();
+
+                        // SAFETY: We're using raw pointers obtained from the execution context
+                        // These pointers are valid for the lifetime of the execution context
+                        // We don't hold any other references to these values during this call
+                        unsafe {
+                            match crate::parse_tokens(&tokens, &*dict_ptr, None) {
+                                Ok(ast) => {
+                                    // Execute the AST using the raw pointers
+                                    match ast.execute(
+                                        stack,
+                                        &*dict_ptr,
+                                        &mut *loop_stack_ptr,
+                                        &mut *return_stack_ptr,
+                                        &mut *memory_ptr,
+                                    ) {
+                                        Ok(()) => {
+                                            // Success - execution completed
+                                        }
+                                        Err(e) => {
+                                            eprintln!("EVALUATE error: {}", e);
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    eprintln!("EVALUATE parse error: {}", e);
+                                }
+                            }
+                        }
+                    }
+                    None => {
+                        eprintln!("EVALUATE: No execution context available");
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("EVALUATE string error: {}", e);
+            }
+        }
+    } else {
+        eprintln!("EVALUATE: Stack underflow");
+    }
+}
+
+/// CMOVE: ( src dest count -- )
+/// Copy count bytes from src to dest
+pub fn cmove_word(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(count), Some(dest), Some(src)) =
+        (stack.pop(memory), stack.pop(memory), stack.pop(memory)) {
+        let src_addr = src as usize;
+        let dest_addr = dest as usize;
+        let count_usize = count as usize;
+
+        // Copy bytes from src to dest
+        for i in 0..count_usize {
+            match memory.fetch_byte(src_addr + i) {
+                Ok(byte) => {
+                    if let Err(e) = memory.store_byte(dest_addr + i, byte) {
+                        eprintln!("CMOVE store error: {}", e);
+                        return;
+                    }
+                }
+                Err(e) => {
+                    eprintln!("CMOVE fetch error: {}", e);
+                    return;
+                }
+            }
+        }
+    } else {
+        eprintln!("CMOVE: Stack underflow");
     }
 }

@@ -265,8 +265,83 @@ fn main() {
         }
     }
 
-    println!("Type 'quit' to exit");
+    // Initialize global execution context for EVALUATE and Forth REPL
+    quarter::init_execution_context(
+        stack,
+        dict,
+        loop_stack,
+        return_stack,
+        memory,
+        included_files,
+        no_jit,
+        dump_ir,
+        verify_ir,
+    );
 
+    // Load the Forth REPL
+    let result = quarter::with_execution_context(|ctx| {
+        quarter::load_file(
+            "stdlib/repl.fth",
+            &mut ctx.stack,
+            &mut ctx.dict,
+            &mut ctx.loop_stack,
+            &mut ctx.return_stack,
+            &mut ctx.memory,
+            ctx.no_jit,
+            ctx.dump_ir,
+            ctx.verify_ir,
+            false,
+            false,
+            &mut ctx.included_files,
+        )
+    });
+
+    match result {
+        Some(Ok(())) => {
+            // REPL loaded successfully
+        }
+        Some(Err(e)) => {
+            eprintln!("Error loading Forth REPL: {}", e);
+            std::process::exit(1);
+        }
+        None => {
+            eprintln!("No execution context available");
+            std::process::exit(1);
+        }
+    }
+
+    // Start the Forth REPL by executing QUARTER-REPL
+    println!("Type CTRL-C or CTRL-D to exit");
+
+    let result = quarter::with_execution_context(|ctx| {
+        ctx.dict.execute_word(
+            "QUARTER-REPL",
+            &mut ctx.stack,
+            &mut ctx.loop_stack,
+            &mut ctx.return_stack,
+            &mut ctx.memory,
+        )
+    });
+
+    match result {
+        Some(Ok(())) => {
+            // REPL exited normally
+        }
+        Some(Err(e)) => {
+            eprintln!("REPL error: {}", e);
+            std::process::exit(1);
+        }
+        None => {
+            eprintln!("No execution context available");
+            std::process::exit(1);
+        }
+    }
+
+    return;
+
+    // OLD RUST REPL CODE - TO BE DELETED AFTER TESTING
+    #[allow(unreachable_code)]
+    {
     let mut rl = DefaultEditor::new().unwrap();
 
     // State for multi-line definitions
@@ -614,4 +689,5 @@ fn main() {
     }
 
     println!("Goodbye!");
+    } // End of unreachable old REPL code
 }
