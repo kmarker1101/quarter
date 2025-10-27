@@ -106,7 +106,7 @@ VARIABLE COMPILE-POS       \ Current position in compile buffer
     FORMAT-PROMPT READLINE  \ ( -- line-addr line-len flag )
   WHILE                     \ Continue while flag is true
     \ We have input: line-addr line-len on stack
-    2DUP HISTORY-ADD        \ Add to history
+    \ DISABLED FOR DEBUG: 2DUP HISTORY-ADD        \ Add to history
 
     COMPILING @ IF
       \ In compilation mode - accumulate line
@@ -144,17 +144,30 @@ VARIABLE COMPILE-POS       \ Current position in compile buffer
   2DROP                     \ Clean up addr/len from failed READLINE
 ;
 
+\ Working simple REPL using recursion
+: SIMPLE-REPL
+  S" quarter> " READLINE
+  IF
+    2DUP HISTORY-ADD
+    EVALUATE
+    ."  ok" CR
+    SIMPLE-REPL  \ Recursive call for next line
+  ELSE
+    2DROP  \ Clean up failed READLINE
+  THEN
+;
+
 \ Initialize and start the REPL
 : QUARTER-REPL
   \ Load history from home directory
   S" .quarter_history" HISTORY-LOAD DROP
 
-  \ Run the main REPL loop
-  REPL
+  \ Run simple recursive REPL
+  SIMPLE-REPL
 
   \ Save history on exit
   S" .quarter_history" HISTORY-SAVE DROP
 
   \ Print goodbye message
-  ." Goodbye!" CR
+  CR ." Goodbye!" CR
 ;

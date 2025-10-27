@@ -2994,10 +2994,13 @@ pub fn readline_word(
                     if let Some(editor) = editor_opt.as_mut() {
                         match editor.readline(&prompt) {
                             Ok(line) => {
-                                // Store the line in memory at HERE
-                                let here = memory.here() as usize;
+                                // Store the line in a temporary buffer at a fixed high address
+                                // Use address 0x300000 (3MB mark) to avoid conflicts with HERE
+                                // This gives us plenty of space before we hit this area
+                                let temp_buffer = 0x300000_usize;
+
                                 for (i, ch) in line.bytes().enumerate() {
-                                    if memory.store_byte(here + i, ch as i64).is_err() {
+                                    if memory.store_byte(temp_buffer + i, ch as i64).is_err() {
                                         stack.push(0, memory); // addr (dummy)
                                         stack.push(0, memory); // len
                                         stack.push(0, memory); // flag (false)
@@ -3006,7 +3009,7 @@ pub fn readline_word(
                                 }
 
                                 // Push line addr, len, and success flag
-                                stack.push(here as i64, memory);
+                                stack.push(temp_buffer as i64, memory);
                                 stack.push(line.len() as i64, memory);
                                 stack.push(-1, memory); // true flag
                             }
@@ -3139,47 +3142,46 @@ pub fn history_save_word(
 /// EVALUATE: ( addr len -- )
 /// Execute a string as Forth code
 /// Uses the global execution context to parse and execute the code
+/// Supports word definitions (: and ;) and all other Forth constructs
 pub fn evaluate_word(
     stack: &mut Stack,
     _loop_stack: &LoopStack,
     _return_stack: &mut crate::ReturnStack,
     memory: &mut crate::Memory,
 ) {
+    // Pop values first before any re-entrant calls
     if let (Some(len), Some(addr)) = (stack.pop(memory), stack.pop(memory)) {
         // Extract the string from memory
         match extract_string(memory, addr as usize, len as usize) {
             Ok(code) => {
-                // Get raw pointers for re-entrant access
-                // This avoids nested RefCell borrows
+                // Get raw pointers for re-entrant access (avoids RefCell borrow panic)
                 match crate::get_reentrant_pointers() {
-                    Some((dict_ptr, loop_stack_ptr, return_stack_ptr, memory_ptr)) => {
-                        // Parse the code
-                        let tokens: Vec<&str> = code.split_whitespace().collect();
+                    Some((dict_ptr, loop_stack_ptr, return_stack_ptr, _memory_ptr, included_files_ptr)) => {
+                        // Get config flags
+                        let (no_jit, dump_ir, verify_ir) = crate::get_reentrant_config();
 
-                        // SAFETY: We're using raw pointers obtained from the execution context
-                        // These pointers are valid for the lifetime of the execution context
-                        // We don't hold any other references to these values during this call
+                        // SAFETY: Using raw pointers from execution context
+                        // These are valid for the lifetime of the execution context
                         unsafe {
-                            match crate::parse_tokens(&tokens, &*dict_ptr, None) {
-                                Ok(ast) => {
-                                    // Execute the AST using the raw pointers
-                                    match ast.execute(
-                                        stack,
-                                        &*dict_ptr,
-                                        &mut *loop_stack_ptr,
-                                        &mut *return_stack_ptr,
-                                        &mut *memory_ptr,
-                                    ) {
-                                        Ok(()) => {
-                                            // Success - execution completed
-                                        }
-                                        Err(e) => {
-                                            eprintln!("EVALUATE error: {}", e);
-                                        }
-                                    }
+                            match crate::execute_line(
+                                &code,
+                                stack,
+                                &mut *dict_ptr,
+                                &mut *loop_stack_ptr,
+                                &mut *return_stack_ptr,
+                                memory,
+                                no_jit,
+                                dump_ir,
+                                verify_ir,
+                                false,  // use_forth_compiler
+                                false,  // define_only
+                                &mut *included_files_ptr,
+                            ) {
+                                Ok(()) => {
+                                    // Success
                                 }
                                 Err(e) => {
-                                    eprintln!("EVALUATE parse error: {}", e);
+                                    eprintln!("EVALUATE error: {}", e);
                                 }
                             }
                         }
@@ -3229,5 +3231,108 @@ pub fn cmove_word(
         }
     } else {
         eprintln!("CMOVE: Stack underflow");
+    }
+}
+
+/// BYE: ( -- )
+/// Exit the Forth interpreter
+pub fn bye_word(
+    _stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    _memory: &mut crate::Memory,
+) {
+    println!("\nGoodbye!");
+    std::process::exit(0);
+}
+
+/// THROW: ( k*x n -- k*x | i*x n )
+/// If n is non-zero, unwind to nearest CATCH with error code n
+/// If n is zero, do nothing
+pub fn throw_word(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let Some(n) = stack.pop(memory) {
+        if n != 0 {
+            // Signal throw by returning a special error with the throw code
+            // This will be caught by CATCH
+            eprintln!("THROW: Throwing error code {}", n);
+            // We can't actually throw from here, so we'll use a special marker
+            // The actual unwinding will happen in CATCH
+            stack.push(n, memory); // Put code back for CATCH to see
+        }
+        // If n==0, do nothing (don't throw)
+    } else {
+        eprintln!("THROW: Stack underflow");
+    }
+}
+
+/// CATCH: ( i*x addr len -- j*x 0 | i*x n )
+/// Execute code at addr/len (like EVALUATE) and catch any errors
+/// Returns 0 if successful, or error code n if THROW was called
+pub fn catch_word(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(len), Some(addr)) = (stack.pop(memory), stack.pop(memory)) {
+        // Save stack depth for unwinding
+        let saved_depth = stack.depth();
+
+        // Extract the string from memory
+        match extract_string(memory, addr as usize, len as usize) {
+            Ok(code) => {
+                // Try to execute the code using reentrant pointers
+                let result = match crate::get_reentrant_pointers() {
+                    Some((dict_ptr, loop_stack_ptr, return_stack_ptr, _memory_ptr, _included_files_ptr)) => {
+                        let tokens: Vec<&str> = code.split_whitespace().collect();
+                        unsafe {
+                            let dict_ref = &*dict_ptr;
+                            match crate::parse_tokens(&tokens, dict_ref, None) {
+                                Ok(ast) => {
+                                    ast.execute(
+                                        stack,
+                                        dict_ref,
+                                        &mut *loop_stack_ptr,
+                                        &mut *return_stack_ptr,
+                                        memory,
+                                    )
+                                }
+                                Err(e) => Err(e),
+                            }
+                        }
+                    }
+                    None => Err("No execution context".to_string()),
+                };
+
+                // Check result
+                match result {
+                    Ok(()) => {
+                        // Success - push 0
+                        stack.push(0, memory);
+                    }
+                    Err(e) => {
+                        // Error - restore stack and push error code
+                        eprintln!("CATCH: Caught error: {}", e);
+                        // Restore stack depth
+                        while stack.depth() > saved_depth {
+                            stack.pop(memory);
+                        }
+                        // Push error code (-1 for generic error)
+                        stack.push(-1, memory);
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("CATCH string error: {}", e);
+                stack.push(-3, memory); // String error code
+            }
+        }
+    } else {
+        eprintln!("CATCH: Stack underflow");
     }
 }

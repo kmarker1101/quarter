@@ -21,6 +21,13 @@ static FORTH_COMPILER_LOADED: AtomicBool = AtomicBool::new(false);
 // Global Execution Context (for EVALUATE and self-hosting REPL)
 // ============================================================================
 
+/// Catch frame for exception handling
+#[derive(Clone, Debug)]
+pub struct CatchFrame {
+    pub stack_depth: usize,
+    pub return_stack_depth: usize,
+}
+
 /// Global execution context accessible from primitive words
 pub struct ExecutionContext {
     pub stack: Stack,
@@ -37,6 +44,8 @@ pub struct ExecutionContext {
     pub loop_stack_ptr: *mut LoopStack,
     pub return_stack_ptr: *mut ReturnStack,
     pub memory_ptr: *mut Memory,
+    // Exception handling
+    pub catch_stack: Vec<CatchFrame>,
 }
 
 thread_local! {
@@ -44,8 +53,11 @@ thread_local! {
     static EXECUTION_CONTEXT: RefCell<Option<ExecutionContext>> = RefCell::new(None);
 
     /// Raw pointers for re-entrant access (stored separately to avoid RefCell conflicts)
-    static REENTRANT_POINTERS: std::cell::Cell<(*mut Dictionary, *mut LoopStack, *mut ReturnStack, *mut Memory)> =
-        std::cell::Cell::new((std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut()));
+    static REENTRANT_POINTERS: std::cell::Cell<(*mut Dictionary, *mut LoopStack, *mut ReturnStack, *mut Memory, *mut HashSet<String>)> =
+        std::cell::Cell::new((std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut()));
+
+    /// Config flags for re-entrant access
+    static REENTRANT_CONFIG: std::cell::Cell<(bool, bool, bool)> = std::cell::Cell::new((false, false, false));
 }
 
 /// Initialize the global execution context
@@ -61,7 +73,7 @@ pub fn init_execution_context(
     verify_ir: bool,
 ) {
     EXECUTION_CONTEXT.with(|ctx| {
-        let mut context = ExecutionContext {
+        let context = ExecutionContext {
             stack,
             dict,
             loop_stack,
@@ -75,25 +87,37 @@ pub fn init_execution_context(
             loop_stack_ptr: std::ptr::null_mut(),
             return_stack_ptr: std::ptr::null_mut(),
             memory_ptr: std::ptr::null_mut(),
+            catch_stack: Vec::new(),
         };
 
-        // Initialize raw pointers to point to the actual fields
-        context.dict_ptr = &mut context.dict as *mut Dictionary;
-        context.loop_stack_ptr = &mut context.loop_stack as *mut LoopStack;
-        context.return_stack_ptr = &mut context.return_stack as *mut ReturnStack;
-        context.memory_ptr = &mut context.memory as *mut Memory;
-
-        // Store pointers in separate thread-local for re-entrant access
-        REENTRANT_POINTERS.with(|ptrs| {
-            ptrs.set((
-                context.dict_ptr,
-                context.loop_stack_ptr,
-                context.return_stack_ptr,
-                context.memory_ptr,
-            ));
-        });
-
+        // Store context FIRST
         *ctx.borrow_mut() = Some(context);
+
+        // NOW create pointers to the stored context
+        if let Some(context_ref) = ctx.borrow_mut().as_mut() {
+            let dict_ptr = &mut context_ref.dict as *mut Dictionary;
+            let loop_stack_ptr = &mut context_ref.loop_stack as *mut LoopStack;
+            let return_stack_ptr = &mut context_ref.return_stack as *mut ReturnStack;
+            let memory_ptr = &mut context_ref.memory as *mut Memory;
+
+            // Update the pointers in the context itself
+            context_ref.dict_ptr = dict_ptr;
+            context_ref.loop_stack_ptr = loop_stack_ptr;
+            context_ref.return_stack_ptr = return_stack_ptr;
+            context_ref.memory_ptr = memory_ptr;
+
+            let included_files_ptr = &mut context_ref.included_files as *mut HashSet<String>;
+
+            // Store pointers in separate thread-local for re-entrant access
+            REENTRANT_POINTERS.with(|ptrs| {
+                ptrs.set((dict_ptr, loop_stack_ptr, return_stack_ptr, memory_ptr, included_files_ptr));
+            });
+
+            // Store config flags
+            REENTRANT_CONFIG.with(|cfg| {
+                cfg.set((context_ref.no_jit, context_ref.dump_ir, context_ref.verify_ir));
+            });
+        }
     });
 }
 
@@ -116,19 +140,24 @@ pub fn take_execution_context() -> Option<ExecutionContext> {
     EXECUTION_CONTEXT.with(|ctx| ctx.borrow_mut().take())
 }
 
-/// Get raw pointers for re-entrant access (used by EVALUATE)
+/// Get raw pointers for re-entrant access (used by EVALUATE and CATCH)
 /// SAFETY: Caller must ensure pointers are valid and not used across re-entrant calls
-pub fn get_reentrant_pointers() -> Option<(*mut Dictionary, *mut LoopStack, *mut ReturnStack, *mut Memory)> {
+pub fn get_reentrant_pointers() -> Option<(*mut Dictionary, *mut LoopStack, *mut ReturnStack, *mut Memory, *mut HashSet<String>)> {
     REENTRANT_POINTERS.with(|ptrs| {
-        let (dict_ptr, loop_stack_ptr, return_stack_ptr, memory_ptr) = ptrs.get();
+        let (dict_ptr, loop_stack_ptr, return_stack_ptr, memory_ptr, included_files_ptr) = ptrs.get();
 
         // Check if pointers are null (not initialized)
-        if dict_ptr.is_null() || loop_stack_ptr.is_null() || return_stack_ptr.is_null() || memory_ptr.is_null() {
+        if dict_ptr.is_null() || loop_stack_ptr.is_null() || return_stack_ptr.is_null() || memory_ptr.is_null() || included_files_ptr.is_null() {
             None
         } else {
-            Some((dict_ptr, loop_stack_ptr, return_stack_ptr, memory_ptr))
+            Some((dict_ptr, loop_stack_ptr, return_stack_ptr, memory_ptr, included_files_ptr))
         }
     })
+}
+
+/// Get config flags for re-entrant access
+pub fn get_reentrant_config() -> (bool, bool, bool) {
+    REENTRANT_CONFIG.with(|cfg| cfg.get())
 }
 
 // Embedded standard library files
@@ -238,6 +267,10 @@ impl ReturnStack {
 
     pub fn is_empty(&self) -> bool {
         self.rp == 0x010000
+    }
+
+    pub fn depth(&self) -> usize {
+        (self.rp - 0x010000) / 8
     }
 
     // New methods for return stack pointer access
