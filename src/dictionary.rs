@@ -161,6 +161,7 @@ impl Dictionary {
             "LLVM-BUILD-COND-BR" => words::llvm_build_cond_br_word,
             "LLVM-BUILD-ICMP" => words::llvm_build_icmp_word,
             "LLVM-BUILD-SEXT" => words::llvm_build_sext_word,
+            "LLVM-BUILD-SELECT" => words::llvm_build_select_word,
             "LLVM-BUILD-TRUNC" => words::llvm_build_trunc_word,
             "LLVM-BUILD-CALL" => words::llvm_build_call_word,
             "LLVM-GET-PARAM" => words::llvm_get_param_word,

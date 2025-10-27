@@ -1241,6 +1241,95 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
     DROP
 ;
 
+\ Emit inline 1+: pop a, push (a + 1)
+\ ( -- )
+: EMIT-INLINE-1+
+    COMPILE-POP  \ a
+    \ Build constant 1
+    CURRENT-CTX @ 1 64 LLVM-BUILD-CONST-INT
+    \ Add: a + 1
+    CURRENT-BUILDER @ ROT ROT LLVM-BUILD-ADD
+    COMPILE-PUSH ;
+
+\ Emit inline 1-: pop a, push (a - 1)
+\ ( -- )
+: EMIT-INLINE-1-
+    COMPILE-POP  \ a
+    \ Build constant 1
+    CURRENT-CTX @ 1 64 LLVM-BUILD-CONST-INT
+    \ Subtract: a - 1
+    CURRENT-BUILDER @ ROT ROT LLVM-BUILD-SUB
+    COMPILE-PUSH ;
+
+\ Emit inline 2*: pop a, push (a * 2) using left shift
+\ ( -- )
+: EMIT-INLINE-2*
+    COMPILE-POP  \ a
+    \ Build constant 1 (shift amount)
+    CURRENT-CTX @ 1 64 LLVM-BUILD-CONST-INT
+    \ Left shift: a << 1
+    CURRENT-BUILDER @ ROT ROT LLVM-BUILD-SHL
+    COMPILE-PUSH ;
+
+\ Emit inline 2/: pop a, push (a / 2) using arithmetic right shift
+\ ( -- )
+: EMIT-INLINE-2/
+    COMPILE-POP  \ a
+    \ Build constant 1 (shift amount)
+    CURRENT-CTX @ 1 64 LLVM-BUILD-CONST-INT
+    \ Arithmetic right shift: a >> 1
+    CURRENT-BUILDER @ ROT ROT LLVM-BUILD-ASHR
+    COMPILE-PUSH ;
+
+\ Emit inline MIN: pop b, pop a, push (a < b ? a : b)
+\ ( -- )
+: EMIT-INLINE-MIN
+    COMPILE-POP  \ b
+    COMPILE-POP  \ a
+    \ Stack: ( b a )
+    2DUP  \ Duplicate for comparison ( b a b a )
+    \ ICMP-SLT (signed less than) predicate = 4
+    CURRENT-BUILDER @ 4 ROT ROT LLVM-BUILD-ICMP
+    \ Stack: ( b a cond )
+    \ SELECT: builder cond true-val false-val
+    CURRENT-BUILDER @ ROT ROT ROT LLVM-BUILD-SELECT
+    COMPILE-PUSH ;
+
+\ Emit inline MAX: pop b, pop a, push (a > b ? a : b)
+\ ( -- )
+: EMIT-INLINE-MAX
+    COMPILE-POP  \ b
+    COMPILE-POP  \ a
+    \ Stack: ( b a )
+    2DUP  \ Duplicate for comparison ( b a b a )
+    \ ICMP-SGT (signed greater than) predicate = 6
+    CURRENT-BUILDER @ 6 ROT ROT LLVM-BUILD-ICMP
+    \ Stack: ( b a cond )
+    \ SELECT: builder cond true-val false-val
+    CURRENT-BUILDER @ ROT ROT ROT LLVM-BUILD-SELECT
+    COMPILE-PUSH ;
+
+\ Emit inline ABS: pop a, push (a < 0 ? -a : a)
+\ ( -- )
+: EMIT-INLINE-ABS
+    COMPILE-POP  \ a
+    DUP  \ Duplicate a ( a a )
+    \ Build constant 0
+    CURRENT-CTX @ 0 64 LLVM-BUILD-CONST-INT
+    \ Stack: ( a a 0 )
+    \ ICMP-SLT: compare a < 0, predicate = 4
+    CURRENT-BUILDER @ 4 ROT ROT LLVM-BUILD-ICMP
+    \ Stack: ( a cond )
+    SWAP DUP  \ Stack: ( cond a a )
+    \ Negate: 0 - a
+    CURRENT-CTX @ 0 64 LLVM-BUILD-CONST-INT
+    \ Stack: ( cond a a 0 )
+    SWAP CURRENT-BUILDER @ ROT ROT LLVM-BUILD-SUB
+    \ Stack: ( cond a -a )
+    \ SELECT: builder cond true-val(-a) false-val(a)
+    SWAP CURRENT-BUILDER @ ROT ROT ROT LLVM-BUILD-SELECT
+    COMPILE-PUSH ;
+
 \ =============================================================================
 \ AST COMPILATION
 \ =============================================================================
@@ -1817,6 +1906,72 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
         WORD-NAME-BUFFER OVER COMPILER-SCRATCH 2 STRING-EQUALS? IF
             DROP
             EMIT-INLINE-ADD-STORE
+            EXIT
+        THEN
+
+        \ Check for '1+'
+        49 COMPILER-SCRATCH C!      \ 1
+        43 COMPILER-SCRATCH 1 + C!  \ +
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 2 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-1+
+            EXIT
+        THEN
+
+        \ Check for '1-'
+        49 COMPILER-SCRATCH C!      \ 1
+        45 COMPILER-SCRATCH 1 + C!  \ -
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 2 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-1-
+            EXIT
+        THEN
+
+        \ Check for '2*'
+        50 COMPILER-SCRATCH C!      \ 2
+        42 COMPILER-SCRATCH 1 + C!  \ *
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 2 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-2*
+            EXIT
+        THEN
+
+        \ Check for '2/'
+        50 COMPILER-SCRATCH C!      \ 2
+        47 COMPILER-SCRATCH 1 + C!  \ /
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 2 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-2/
+            EXIT
+        THEN
+
+        \ Check for 'MIN'
+        77 COMPILER-SCRATCH C!      \ M
+        73 COMPILER-SCRATCH 1 + C!  \ I
+        78 COMPILER-SCRATCH 2 + C!  \ N
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 3 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-MIN
+            EXIT
+        THEN
+
+        \ Check for 'MAX'
+        77 COMPILER-SCRATCH C!      \ M
+        65 COMPILER-SCRATCH 1 + C!  \ A
+        88 COMPILER-SCRATCH 2 + C!  \ X
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 3 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-MAX
+            EXIT
+        THEN
+
+        \ Check for 'ABS'
+        65 COMPILER-SCRATCH C!      \ A
+        66 COMPILER-SCRATCH 1 + C!  \ B
+        83 COMPILER-SCRATCH 2 + C!  \ S
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 3 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-ABS
             EXIT
         THEN
 

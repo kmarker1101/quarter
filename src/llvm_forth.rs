@@ -834,6 +834,35 @@ impl LLVMRegistry {
         Ok(handle)
     }
 
+    /// Build select instruction (conditional selection)
+    pub fn build_select(&mut self,
+                       builder_handle: BuilderHandle,
+                       cond_handle: ValueHandle,
+                       true_handle: ValueHandle,
+                       false_handle: ValueHandle) -> Result<ValueHandle, String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let cond_value = self.values.get(&cond_handle)
+            .ok_or_else(|| format!("Invalid condition handle: {}", cond_handle))?
+            .into_int_value();
+
+        let true_value = self.values.get(&true_handle)
+            .ok_or_else(|| format!("Invalid true value handle: {}", true_handle))?
+            .into_int_value();
+
+        let false_value = self.values.get(&false_handle)
+            .ok_or_else(|| format!("Invalid false value handle: {}", false_handle))?
+            .into_int_value();
+
+        let result = builder.build_select(cond_value, true_value, false_value, "select")
+            .map_err(|e| format!("Failed to build select: {}", e))?;
+
+        let handle = self.next_handle();
+        self.values.insert(handle, result.into());
+        Ok(handle)
+    }
+
     /// Build truncate instruction (i64 -> i8 for byte operations)
     pub fn build_trunc(&mut self,
                       builder_handle: BuilderHandle,
@@ -1234,6 +1263,15 @@ pub fn llvm_build_sext(builder_handle: i64, ctx_handle: i64, value_handle: i64) 
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.build_sext(builder_handle, ctx_handle, value_handle)
+    })
+}
+
+/// Build select instruction (picks one of two values based on condition)
+/// Stack: ( builder-handle cond-handle true-value false-value -- result-handle )
+pub fn llvm_build_select(builder_handle: i64, cond_handle: i64, true_handle: i64, false_handle: i64) -> Result<i64, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_select(builder_handle, cond_handle, true_handle, false_handle)
     })
 }
 

@@ -2558,6 +2558,29 @@ pub fn llvm_build_sext_word(
     }
 }
 
+/// LLVM-BUILD-SELECT: Conditional selection (ternary operator)
+/// Stack: ( builder-handle cond-handle true-value false-value -- result-handle )
+pub fn llvm_build_select_word(
+    stack: &mut crate::Stack,
+    _loop_stack: &crate::LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(false_handle), Some(true_handle), Some(cond_handle), Some(builder_handle)) = (
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+    ) {
+        match crate::llvm_forth::llvm_build_select(builder_handle, cond_handle, true_handle, false_handle) {
+            Ok(handle) => stack.push(handle, memory),
+            Err(e) => eprintln!("LLVM-BUILD-SELECT error: {}", e),
+        }
+    } else {
+        eprintln!("LLVM-BUILD-SELECT: Stack underflow");
+    }
+}
+
 /// LLVM-BUILD-TRUNC: Truncate i64 to smaller int (for byte operations)
 /// Stack: ( builder-handle ctx-handle value-handle bit-width -- result-handle )
 pub fn llvm_build_trunc_word(
