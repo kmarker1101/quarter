@@ -57,6 +57,7 @@ VARIABLE LOOP-PRELOOP-BLOCK        \ Pre-loop block handle
 VARIABLE LOOP-LOOP-BLOCK           \ Loop body block handle
 VARIABLE LOOP-EXIT-BLOCK           \ Exit block handle
 VARIABLE LOOP-PHI-NODE             \ PHI node for loop index
+VARIABLE LOOP-OUTER-PHI-NODE       \ Outer loop PHI node (for J)
 VARIABLE LOOP-END-BLOCK            \ Loop-end block handle
 
 \ IF/THEN/ELSE compilation temporaries
@@ -1287,12 +1288,18 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
     COMPILE-POP  \ b
     COMPILE-POP  \ a
     \ Stack: ( b a )
-    2DUP  \ Duplicate for comparison ( b a b a )
-    \ ICMP-SLT (signed less than) predicate = 4
-    CURRENT-BUILDER @ 4 ROT ROT LLVM-BUILD-ICMP
+
+    \ Build ICMP: a < b
+    \ Need: ( builder predicate lhs rhs ) = ( builder 2 a b )
+    CURRENT-BUILDER @ 2 2 PICK 4 PICK LLVM-BUILD-ICMP
     \ Stack: ( b a cond )
-    \ SELECT: builder cond true-val false-val
-    CURRENT-BUILDER @ ROT ROT ROT LLVM-BUILD-SELECT
+
+    \ Build SELECT: if cond then a else b
+    \ Need: ( builder cond true-val false-val ) = ( builder cond a b )
+    CURRENT-BUILDER @ SWAP 2 PICK 4 PICK LLVM-BUILD-SELECT
+    \ Stack: ( b a result )
+
+    -ROT 2DROP
     COMPILE-PUSH ;
 
 \ Emit inline MAX: pop b, pop a, push (a > b ? a : b)
@@ -1301,33 +1308,192 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
     COMPILE-POP  \ b
     COMPILE-POP  \ a
     \ Stack: ( b a )
-    2DUP  \ Duplicate for comparison ( b a b a )
-    \ ICMP-SGT (signed greater than) predicate = 6
-    CURRENT-BUILDER @ 6 ROT ROT LLVM-BUILD-ICMP
+
+    \ Build ICMP: a > b
+    \ Need: ( builder predicate lhs rhs ) = ( builder 4 a b )
+    CURRENT-BUILDER @ 4 2 PICK 4 PICK LLVM-BUILD-ICMP
     \ Stack: ( b a cond )
-    \ SELECT: builder cond true-val false-val
-    CURRENT-BUILDER @ ROT ROT ROT LLVM-BUILD-SELECT
+
+    \ Build SELECT: if cond then a else b
+    \ Need: ( builder cond true-val false-val ) = ( builder cond a b )
+    CURRENT-BUILDER @ SWAP 2 PICK 4 PICK LLVM-BUILD-SELECT
+    \ Stack: ( b a result )
+
+    -ROT 2DROP
     COMPILE-PUSH ;
 
 \ Emit inline ABS: pop a, push (a < 0 ? -a : a)
 \ ( -- )
 : EMIT-INLINE-ABS
     COMPILE-POP  \ a
-    DUP  \ Duplicate a ( a a )
-    \ Build constant 0
+    \ Stack: ( a )
+
+    \ Build 0 constant
     CURRENT-CTX @ 0 64 LLVM-BUILD-CONST-INT
-    \ Stack: ( a a 0 )
-    \ ICMP-SLT: compare a < 0, predicate = 4
-    CURRENT-BUILDER @ 4 ROT ROT LLVM-BUILD-ICMP
-    \ Stack: ( a cond )
-    SWAP DUP  \ Stack: ( cond a a )
-    \ Negate: 0 - a
-    CURRENT-CTX @ 0 64 LLVM-BUILD-CONST-INT
-    \ Stack: ( cond a a 0 )
-    SWAP CURRENT-BUILDER @ ROT ROT LLVM-BUILD-SUB
-    \ Stack: ( cond a -a )
-    \ SELECT: builder cond true-val(-a) false-val(a)
-    SWAP CURRENT-BUILDER @ ROT ROT ROT LLVM-BUILD-SELECT
+    \ Stack: ( a 0 )
+
+    \ Build ICMP: a < 0
+    \ Need: ( builder predicate lhs rhs ) = ( builder 2 a 0 )
+    CURRENT-BUILDER @ 2 3 PICK 3 PICK LLVM-BUILD-ICMP
+    \ Stack: ( a 0 cond )
+
+    \ Build -a (0 - a)
+    \ Need: ( builder lhs rhs ) = ( builder 0 a )
+    CURRENT-BUILDER @ 2 PICK 4 PICK LLVM-BUILD-SUB
+    \ Stack: ( a 0 cond -a )
+
+    \ Build SELECT: if cond then -a else a
+    \ Need: ( builder cond true-val false-val ) = ( builder cond -a a )
+    CURRENT-BUILDER @ 2 PICK 2 PICK 6 PICK LLVM-BUILD-SELECT
+    \ Stack: ( a 0 cond -a result )
+
+    -ROT 2DROP NIP NIP
+    COMPILE-PUSH ;
+
+\ Emit inline >R: pop from data stack, push to return stack
+\ ( -- )
+: EMIT-INLINE->R
+    \ Step 1: Get value from data stack
+    COMPILE-POP  \ Stack: ( value )
+
+    \ Step 2: Load current RP value
+    CURRENT-BUILDER @ CURRENT-CTX @ PARAM-RP @ 64 LLVM-BUILD-LOAD
+    \ Stack: ( value rp )
+
+    \ Step 3: Compute address = memory + rp using GEP
+    \ GEP needs: ( builder ctx mem offset )
+    CURRENT-BUILDER @  \ ( value rp builder )
+    CURRENT-CTX @      \ ( value rp builder ctx )
+    PARAM-MEMORY @     \ ( value rp builder ctx mem )
+    3 PICK             \ ( value rp builder ctx mem rp ) - rp is at index 3
+    LLVM-BUILD-GEP     \ ( value rp addr )
+
+    \ Step 4: Store value at addr
+    \ STORE needs: ( builder value ptr )
+    CURRENT-BUILDER @  \ ( value rp addr builder )
+    3 PICK             \ ( value rp addr builder value )
+    2 PICK             \ ( value rp addr builder value addr )
+    LLVM-BUILD-STORE   \ ( value rp addr )
+    DROP               \ ( value rp )
+
+    \ Step 5: Increment RP by 8
+    \ ADD needs: ( builder lhs rhs )
+    CURRENT-CTX @ 8 64 LLVM-BUILD-CONST-INT  \ ( value rp eight )
+    CURRENT-BUILDER @  \ ( value rp eight builder )
+    2 PICK             \ ( value rp eight builder rp )
+    2 PICK             \ ( value rp eight builder rp eight )
+    LLVM-BUILD-ADD     \ ( value rp eight new-rp )
+    NIP NIP            \ ( value new-rp )
+
+    \ Step 6: Store new RP
+    \ STORE needs: ( builder value ptr )
+    CURRENT-BUILDER @  \ ( value new-rp builder )
+    SWAP               \ ( value builder new-rp )
+    PARAM-RP @         \ ( value builder new-rp rp-ptr )
+    LLVM-BUILD-STORE   \ ( value )
+    DROP ;             \ ( )
+
+
+
+\ Emit inline R>: pop from return stack, push to data stack
+\ ( -- )
+: EMIT-INLINE-R>
+    \ Step 1: Load current RP
+    CURRENT-BUILDER @ CURRENT-CTX @ PARAM-RP @ 64 LLVM-BUILD-LOAD
+    \ Stack: ( rp )
+
+    \ Step 2: Decrement RP by 8
+    \ SUB needs: ( builder lhs rhs )
+    CURRENT-CTX @ 8 64 LLVM-BUILD-CONST-INT  \ ( rp eight )
+    CURRENT-BUILDER @  \ ( rp eight builder )
+    2 PICK             \ ( rp eight builder rp )
+    2 PICK             \ ( rp eight builder rp eight )
+    LLVM-BUILD-SUB     \ ( rp eight new-rp )
+    NIP NIP            \ ( new-rp )
+
+    \ Step 3: Store new RP (keep copy for GEP)
+    \ STORE needs: ( builder value ptr )
+    DUP                \ ( new-rp new-rp )
+    CURRENT-BUILDER @  \ ( new-rp new-rp builder )
+    SWAP               \ ( new-rp builder new-rp )
+    PARAM-RP @         \ ( new-rp builder new-rp rp-ptr )
+    LLVM-BUILD-STORE   \ ( new-rp )
+
+    \ Step 4: GEP to get address = memory + new_rp
+    \ GEP needs: ( builder ctx mem offset )
+    CURRENT-BUILDER @  \ ( new-rp builder )
+    CURRENT-CTX @      \ ( new-rp builder ctx )
+    PARAM-MEMORY @     \ ( new-rp builder ctx mem )
+    3 PICK             \ ( new-rp builder ctx mem new-rp )
+    LLVM-BUILD-GEP     \ ( new-rp addr )
+
+    \ Step 5: Load value from address
+    \ LOAD needs: ( builder ctx ptr width )
+    CURRENT-BUILDER @  \ ( new-rp addr builder )
+    CURRENT-CTX @      \ ( new-rp addr builder ctx )
+    2 PICK             \ ( new-rp addr builder ctx addr )
+    64                 \ ( new-rp addr builder ctx addr 64 )
+    LLVM-BUILD-LOAD    \ ( new-rp addr value )
+    NIP NIP            \ ( value )
+
+    \ Step 6: Push to data stack
+    COMPILE-PUSH ;
+
+\ Emit inline R@: copy from return stack (peek, don't pop)
+\ ( -- )
+: EMIT-INLINE-R@
+    \ Step 1: Load current RP
+    CURRENT-BUILDER @ CURRENT-CTX @ PARAM-RP @ 64 LLVM-BUILD-LOAD
+    \ Stack: ( rp )
+
+    \ Step 2: Compute peek_rp = rp - 8 (don't store, just use for GEP)
+    \ SUB needs: ( builder lhs rhs )
+    CURRENT-CTX @ 8 64 LLVM-BUILD-CONST-INT  \ ( rp eight )
+    CURRENT-BUILDER @  \ ( rp eight builder )
+    2 PICK             \ ( rp eight builder rp )
+    2 PICK             \ ( rp eight builder rp eight )
+    LLVM-BUILD-SUB     \ ( rp eight peek-rp )
+    NIP NIP            \ ( peek-rp )
+
+    \ Step 3: GEP to get address = memory + peek_rp
+    \ GEP needs: ( builder ctx mem offset )
+    CURRENT-BUILDER @  \ ( peek-rp builder )
+    CURRENT-CTX @      \ ( peek-rp builder ctx )
+    PARAM-MEMORY @     \ ( peek-rp builder ctx mem )
+    3 PICK             \ ( peek-rp builder ctx mem peek-rp )
+    LLVM-BUILD-GEP     \ ( peek-rp addr )
+
+    \ Step 4: Load value from address
+    \ LOAD needs: ( builder ctx ptr width )
+    CURRENT-BUILDER @  \ ( peek-rp addr builder )
+    CURRENT-CTX @      \ ( peek-rp addr builder ctx )
+    2 PICK             \ ( peek-rp addr builder ctx addr )
+    64                 \ ( peek-rp addr builder ctx addr 64 )
+    LLVM-BUILD-LOAD    \ ( peek-rp addr value )
+    NIP NIP            \ ( value )
+
+    \ Step 5: Push to data stack
+    COMPILE-PUSH ;
+
+\ Emit inline I: push current loop index to data stack
+\ ( -- )
+: EMIT-INLINE-I
+    \ The loop index is stored in LOOP-PHI-NODE during compilation
+    \ It contains the LLVM value handle for the current loop counter (i32)
+    \ Sign-extend from i32 to i64 before pushing to stack
+    CURRENT-BUILDER @ CURRENT-CTX @ LOOP-PHI-NODE @ LLVM-BUILD-SEXT
+    \ Push the extended value to data stack
+    COMPILE-PUSH ;
+
+\ Emit inline J: push outer loop index to data stack
+\ ( -- )
+\ Note: LOOP-OUTER-PHI-NODE contains the outer loop's PHI node handle
+: EMIT-INLINE-J
+    \ Get outer loop's PHI handle from variable
+    LOOP-OUTER-PHI-NODE @
+    \ Sign-extend from i32 to i64 before pushing to stack
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT LLVM-BUILD-SEXT
+    \ Push the extended value to data stack
     COMPILE-PUSH ;
 
 \ =============================================================================
@@ -1344,9 +1510,15 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
     DUP AST-LOOP-BODY LOOP-BODY-HANDLE !
     AST-LOOP-INCREMENT LOOP-INCREMENT !
 
-    \ Pop start and limit from runtime stack
-    COMPILE-POP LOOP-START-VALUE !
-    COMPILE-POP LOOP-LIMIT-VALUE !
+    \ Pop start and limit from runtime stack (i64 values)
+    \ Truncate to i32 for loop index comparison
+    COMPILE-POP
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT 32 LLVM-BUILD-TRUNC
+    LOOP-START-VALUE !
+
+    COMPILE-POP
+    CURRENT-BUILDER @ CURRENT-CTX @ ROT 32 LLVM-BUILD-TRUNC
+    LOOP-LIMIT-VALUE !
 
     \ Save pre-loop block
     CURRENT-BUILDER @ LLVM-GET-INSERT-BLOCK LOOP-PRELOOP-BLOCK !
@@ -1384,6 +1556,9 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
     \ Position at loop block
     CURRENT-BUILDER @ LOOP-LOOP-BLOCK @ LLVM-POSITION-AT-END
 
+    \ Save current loop's PHI as outer loop's PHI (for nested loops / J word)
+    LOOP-PHI-NODE @ LOOP-OUTER-PHI-NODE !
+
     \ Create PHI for loop index
     CURRENT-BUILDER @ CURRENT-CTX @
     105 WORD-NAME-BUFFER C!  \ 'i'
@@ -1393,6 +1568,7 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
     LOOP-PHI-NODE @ LOOP-START-VALUE @ LOOP-PRELOOP-BLOCK @ LLVM-PHI-ADD-INCOMING
 
     \ Save loop state on return stack before recursive compilation
+    LOOP-OUTER-PHI-NODE @ >R   \ Save outer PHI for restoration
     LOOP-PHI-NODE @ >R
     LOOP-START-VALUE @ >R
     LOOP-LIMIT-VALUE @ >R
@@ -1410,6 +1586,7 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
     R> LOOP-LIMIT-VALUE !
     R> LOOP-START-VALUE !
     R> LOOP-PHI-NODE !
+    R> LOOP-OUTER-PHI-NODE !
 
     \ Get block after body compilation
     CURRENT-BUILDER @ LLVM-GET-INSERT-BLOCK LOOP-END-BLOCK !
@@ -1972,6 +2149,49 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
         WORD-NAME-BUFFER OVER COMPILER-SCRATCH 3 STRING-EQUALS? IF
             DROP
             EMIT-INLINE-ABS
+            EXIT
+        THEN
+
+        \ Check for '>R'
+        62 COMPILER-SCRATCH C!      \ >
+        82 COMPILER-SCRATCH 1 + C!  \ R
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 2 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE->R
+            EXIT
+        THEN
+
+        \ Check for 'R>'
+        82 COMPILER-SCRATCH C!      \ R
+        62 COMPILER-SCRATCH 1 + C!  \ >
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 2 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-R>
+            EXIT
+        THEN
+
+        \ Check for 'R@'
+        82 COMPILER-SCRATCH C!      \ R
+        64 COMPILER-SCRATCH 1 + C!  \ @
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 2 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-R@
+            EXIT
+        THEN
+
+        \ Check for 'I'
+        73 COMPILER-SCRATCH C!      \ I
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 1 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-I
+            EXIT
+        THEN
+
+        \ Check for 'J'
+        74 COMPILER-SCRATCH C!      \ J
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 1 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-J
             EXIT
         THEN
 

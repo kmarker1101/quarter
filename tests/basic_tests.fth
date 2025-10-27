@@ -289,8 +289,35 @@ T{ 10 2/ -> 5 }T
 S" MIN returns smaller value" TEST:
 T{ 5 3 MIN -> 3 }T
 
+S" MIN with negative numbers" TEST:
+T{ -5 -10 MIN -> -10 }T
+
+S" MIN with mixed signs" TEST:
+T{ -5 3 MIN -> -5 }T
+
+S" MIN with equal values" TEST:
+T{ 7 7 MIN -> 7 }T
+
+S" MIN with zero" TEST:
+T{ 0 5 MIN -> 0 }T
+
 S" MAX returns larger value" TEST:
 T{ 5 3 MAX -> 5 }T
+
+S" MAX with negative numbers" TEST:
+T{ -5 -10 MAX -> -5 }T
+
+S" MAX with mixed signs" TEST:
+T{ -5 3 MAX -> 3 }T
+
+S" MAX with equal values" TEST:
+T{ 7 7 MAX -> 7 }T
+
+S" MAX with zero" TEST:
+T{ 0 5 MAX -> 5 }T
+
+S" ABS of zero" TEST:
+T{ 0 ABS -> 0 }T
 
 S" ROT rotates three values" TEST:
 T{ 1 2 3 ROT -> 2 3 1 }T
@@ -323,6 +350,70 @@ T{ 52 +!-TEST ! -5 +!-TEST +! +!-TEST @ -> 47 }T
 
 S" +! adds 0 to stored value" TEST:
 T{ 47 +!-TEST ! 0 +!-TEST +! +!-TEST @ -> 47 }T
+
+\ =============================================================================
+\ INLINE PRIMITIVE TESTS (Issue #60 - 12 High Priority Primitives)
+\ =============================================================================
+
+\ 1+ tests (additional edge cases)
+S" Large number 1+" TEST:
+T{ 1000000 1+ -> 1000001 }T
+
+S" Negative number 1+" TEST:
+T{ -100 1+ -> -99 }T
+
+\ 1- tests (additional edge cases)
+S" Large number 1-" TEST:
+T{ 1000000 1- -> 999999 }T
+
+S" Negative number 1-" TEST:
+T{ -100 1- -> -101 }T
+
+\ 2* tests (additional)
+S" Large number 2*" TEST:
+T{ 500 2* -> 1000 }T
+
+\ 2/ tests (additional)
+S" Odd number 2/" TEST:
+T{ 11 2/ -> 5 }T
+
+S" Negative odd 2/" TEST:
+T{ -11 2/ -> -5 }T
+
+\ MIN tests (comprehensive already added earlier)
+\ MAX tests (comprehensive already added earlier)
+\ ABS tests (comprehensive already added earlier)
+
+\ =============================================================================
+\ RETURN STACK TESTS (>R, R>, R@)
+\ =============================================================================
+
+S" >R and R> basic" TEST:
+T{ 42 >R R> -> 42 }T
+
+S" >R and R> with addition" TEST:
+T{ 10 20 >R R> + -> 30 }T
+
+S" R@ peeks without popping" TEST:
+T{ 99 >R R@ R> + -> 198 }T
+
+S" >R R> order (LIFO)" TEST:
+T{ 1 >R 2 >R 3 >R R> R> R> -> 3 2 1 }T
+
+S" Complex return stack usage" TEST:
+T{ 5 >R 10 >R R> R> + -> 15 }T
+
+S" R@ doesn't modify return stack" TEST:
+T{ 42 >R R@ DROP R> -> 42 }T
+
+\ =============================================================================
+\ LOOP INDEX TESTS (I and J)
+\ =============================================================================
+
+\ Note: Loop tests with I and J are in tests/word_tests.rs
+\ because they require DO/LOOP which is compile-only and cannot
+\ be used in the test framework's interpreted mode.
+
 \ =============================================================================
 \ REPORT
 \ =============================================================================
