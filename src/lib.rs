@@ -484,6 +484,39 @@ pub fn parse_tokens(tokens: &[&str], dict: &crate::Dictionary, current_word: Opt
                 let string_content = string_parts.join(" ");
                 nodes.push(AstNode::PrintString(string_content));
             }
+            ".(" => {
+                // Handle .( print-string: collect tokens until closing )
+                let mut string_parts: Vec<String> = Vec::new();
+                i += 1; // Skip past .(
+
+                while i < tokens.len() {
+                    let part = tokens[i];
+                    if let Some(without_paren) = part.strip_suffix(')') {
+                        // Found closing paren
+                        if part == ")" {
+                            // Just a closing paren - means there was a trailing space
+                            // Add space to the last part if there is one
+                            if !string_parts.is_empty() {
+                                let last_idx = string_parts.len() - 1;
+                                string_parts[last_idx].push(' ');
+                            }
+                        } else {
+                            // Text followed by paren
+                            if !without_paren.is_empty() {
+                                string_parts.push(without_paren.to_string());
+                            }
+                        }
+                        i += 1;
+                        break;
+                    } else {
+                        string_parts.push(part.to_string());
+                        i += 1;
+                    }
+                }
+
+                let string_content = string_parts.join(" ");
+                nodes.push(AstNode::PrintString(string_content));
+            }
             "S\"" => {
                 // Handle S" string literals: collect tokens until closing "
                 let mut string_parts: Vec<String> = Vec::new();
@@ -686,8 +719,21 @@ pub fn parse_tokens(tokens: &[&str], dict: &crate::Dictionary, current_word: Opt
 fn find_then_else(tokens: &[&str]) -> Result<(usize, Option<usize>), String> {
     let mut depth = 0;
     let mut else_pos = None;
+    let mut in_string = false; // Track if we're inside .( or ."
 
     for (i, &token) in tokens.iter().enumerate() {
+        // Track if we're inside string literals to avoid matching keywords
+        if token == ".(" || token == ".\"" {
+            in_string = true;
+            continue;
+        }
+        if in_string {
+            if token.ends_with(')') || token.ends_with('"') {
+                in_string = false;
+            }
+            continue;
+        }
+
         let token_upper = token.to_uppercase();
         match token_upper.as_str() {
             "IF" => depth += 1,
@@ -714,8 +760,21 @@ fn find_then_else(tokens: &[&str]) -> Result<(usize, Option<usize>), String> {
 fn find_begin_end(tokens: &[&str]) -> Result<(usize, Option<usize>), String> {
     let mut depth = 0;
     let mut while_pos = None;
+    let mut in_string = false; // Track if we're inside .( or ."
 
     for (i, &token) in tokens.iter().enumerate() {
+        // Track if we're inside string literals to avoid matching keywords
+        if token == ".(" || token == ".\"" {
+            in_string = true;
+            continue;
+        }
+        if in_string {
+            if token.ends_with(')') || token.ends_with('"') {
+                in_string = false;
+            }
+            continue;
+        }
+
         let token_upper = token.to_uppercase();
         match token_upper.as_str() {
             "BEGIN" => depth += 1,
@@ -746,8 +805,21 @@ fn find_begin_end(tokens: &[&str]) -> Result<(usize, Option<usize>), String> {
 // Find matching LOOP or +LOOP for DO
 fn find_do_loop(tokens: &[&str]) -> Result<usize, String> {
     let mut depth = 0;
+    let mut in_string = false;
 
     for (i, &token) in tokens.iter().enumerate() {
+        // Track if we're inside string literals to avoid matching keywords
+        if token == ".(" || token == ".\"" {
+            in_string = true;
+            continue;
+        }
+        if in_string {
+            if token.ends_with(')') || token.ends_with('"') {
+                in_string = false;
+            }
+            continue;
+        }
+
         let token_upper = token.to_uppercase();
         match token_upper.as_str() {
             "DO" => depth += 1,
@@ -766,6 +838,7 @@ fn find_do_loop(tokens: &[&str]) -> Result<usize, String> {
 
 /// Strip comments from a line of Forth code
 /// Handles both backslash comments (\) and parenthesis comments ( )
+/// Preserves .( ... ) which is the print-string word, not a comment
 pub fn strip_comments(input: &str) -> String {
     // First, strip backslash comments (everything after \)
     let line = if let Some(pos) = input.find('\\') {
@@ -774,22 +847,77 @@ pub fn strip_comments(input: &str) -> String {
         input
     };
 
-    // Then strip parenthesis comments ( ... )
+    // Then strip parenthesis comments ( ... ) but preserve .( ... )
     let mut result = String::new();
     let mut in_paren_comment = false;
+    let mut in_dot_paren = false;
+    let chars: Vec<char> = line.chars().collect();
+    let mut i = 0;
 
-    for ch in line.chars() {
+    while i < chars.len() {
+        let ch = chars[i];
+
         if ch == '(' {
-            in_paren_comment = true;
+            // Only check for .( if we're not already in a comment
+            // (to handle nested parentheses in stack comments like ( n -- fib(n) ))
+            if !in_paren_comment {
+                // Check if this is .( (print-string) or just ( (comment)
+                // Look back to see if previous non-whitespace char is .
+                let is_dot_paren_start = if i > 0 {
+                    // Find the previous non-whitespace character
+                    let mut j = i - 1;
+                    let mut found_dot = false;
+                    loop {
+                        if chars[j] == '.' {
+                            // Found . immediately before (, this is .(
+                            found_dot = true;
+                            break;
+                        } else if chars[j].is_whitespace() {
+                            // Skip whitespace
+                            if j == 0 {
+                                break;
+                            }
+                            j -= 1;
+                        } else {
+                            // Found some other character, not .(
+                            break;
+                        }
+                    }
+                    found_dot
+                } else {
+                    false
+                };
+
+                if is_dot_paren_start {
+                    // Keep .( and its content
+                    in_dot_paren = true;
+                    result.push(ch);
+                } else {
+                    // Regular comment, start skipping
+                    in_paren_comment = true;
+                }
+            }
+            // If already in comment, just skip this ( character
         } else if ch == ')' {
-            in_paren_comment = false;
-            // Don't include the ) itself
-            continue;
+            if in_paren_comment {
+                // End of regular comment
+                in_paren_comment = false;
+                // Don't include the ) itself
+                i += 1;
+                continue;
+            } else if in_dot_paren {
+                // This is the closing ) of .(, keep it
+                in_dot_paren = false;
+                result.push(ch);
+            }
+            // Else: standalone ) outside any context - skip it
+        } else {
+            if !in_paren_comment {
+                result.push(ch);
+            }
         }
 
-        if !in_paren_comment {
-            result.push(ch);
-        }
+        i += 1;
     }
 
     result
