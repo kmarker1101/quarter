@@ -184,6 +184,17 @@ impl Dictionary {
             // Test and JIT operations
             "TEST-AST-CREATE" => words::test_ast_create_word,
             "REGISTER-JIT-WORD" => words::register_jit_word,
+
+            // REPL operations (for Forth-based REPL)
+            "READLINE" => words::readline_word,
+            "HISTORY-ADD" => words::history_add_word,
+            "HISTORY-LOAD" => words::history_load_word,
+            "HISTORY-SAVE" => words::history_save_word,
+            "EVALUATE" => words::evaluate_word,
+            "CMOVE" => words::cmove_word,
+            "BYE" => words::bye_word,
+            "THROW" => words::throw_word,
+            "CATCH" => words::catch_word,
         );
 
         dict
