@@ -1216,9 +1216,42 @@ pub fn execute_line(
 
                 if should_execute {
                     // Check for compile-only words (case-insensitive)
-                    if exec_tokens.iter().any(|&t| {
-                        let upper = t.to_uppercase();
-                        upper == "IF"
+                    // Skip tokens inside S" strings to avoid false positives
+                    let mut idx = 0;
+                    let mut found_compile_only = false;
+                    while idx < exec_tokens.len() {
+                        let upper = exec_tokens[idx].to_uppercase();
+
+                        // Skip S" string contents
+                        if upper == "S\"" {
+                            idx += 1;
+                            // Skip until we find the closing "
+                            while idx < exec_tokens.len() {
+                                if exec_tokens[idx].ends_with('"') {
+                                    idx += 1;
+                                    break;
+                                }
+                                idx += 1;
+                            }
+                            continue;
+                        }
+
+                        // Skip ." string contents
+                        if upper == ".\"" {
+                            idx += 1;
+                            // Skip until we find the closing "
+                            while idx < exec_tokens.len() {
+                                if exec_tokens[idx].ends_with('"') {
+                                    idx += 1;
+                                    break;
+                                }
+                                idx += 1;
+                            }
+                            continue;
+                        }
+
+                        // Check if this is a compile-only word
+                        if upper == "IF"
                             || upper == "THEN"
                             || upper == "ELSE"
                             || upper == "BEGIN"
@@ -1230,10 +1263,16 @@ pub fn execute_line(
                             || upper == "+LOOP"
                             || upper == "LEAVE"
                             || upper == "EXIT"
-                            || upper == "INLINE"
-                            || upper == ".\""
-                    }) {
-                        return Err("Control flow and string words (IF/THEN/ELSE/BEGIN/UNTIL/WHILE/REPEAT/DO/LOOP/LEAVE/EXIT/INLINE/.\") are compile-only".to_string());
+                        {
+                            found_compile_only = true;
+                            break;
+                        }
+
+                        idx += 1;
+                    }
+
+                    if found_compile_only {
+                        return Err("Control flow words (IF/THEN/ELSE/BEGIN/UNTIL/WHILE/REPEAT/DO/LOOP/LEAVE/EXIT) are compile-only".to_string());
                     }
 
                     let ast = parse_tokens(&exec_tokens, dict, None)?;
