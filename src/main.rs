@@ -142,27 +142,39 @@ fn compile_to_executable(
     verbose: bool,
 ) {
     if verbose {
-        eprintln!("AOT compilation not yet implemented.");
+        eprintln!("AOT compilation partially implemented.");
         eprintln!();
-        eprintln!("This feature requires substantial infrastructure:");
-        eprintln!("  1. LLVM TargetMachine API integration (inkwell)");
-        eprintln!("  2. Object file generation from LLVM IR");
-        eprintln!("  3. Runtime library (C) for stack/memory/IO");
-        eprintln!("  4. Main wrapper generation");
-        eprintln!("  5. System linker integration");
+        eprintln!("Completed infrastructure:");
+        eprintln!("  ✓ Command-line argument parsing (--compile, -o, -O, etc.)");
+        eprintln!("  ✓ LLVM TargetMachine API integration");
+        eprintln!("  ✓ Object file generation (LLVM-WRITE-OBJECT-FILE)");
+        eprintln!("  ✓ Native target initialization (LLVM-INITIALIZE-NATIVE-TARGET)");
         eprintln!();
-        eprintln!("Current status: JIT compilation works (--jit flag)");
-        eprintln!("The batch compilation infrastructure exists but only");
-        eprintln!("generates in-memory code via ExecutionEngine.");
+        eprintln!("Remaining work:");
+        eprintln!("  ✗ Runtime library (C) for standalone executables");
+        eprintln!("    - Stack management, I/O primitives, memory allocation");
+        eprintln!("  ✗ Main wrapper generation");
+        eprintln!("    - Initialize stacks/memory, call Forth words");
+        eprintln!("  ✗ Linking infrastructure");
+        eprintln!("    - Link Forth object + runtime + wrapper → executable");
+        eprintln!("  ✗ FINALIZE-AOT in stdlib/compiler.fth");
+        eprintln!("    - Alternative to FINALIZE-BATCH that writes object files");
         eprintln!();
-        eprintln!("To implement AOT:");
-        eprintln!("  - Modify FINALIZE-BATCH in stdlib/compiler.fth");
-        eprintln!("  - Add TargetMachine support in src/llvm_forth.rs");
-        eprintln!("  - Create runtime library (runtime/runtime.c)");
-        eprintln!("  - Add linking logic in this function");
+        eprintln!("Current workaround: Use --jit flag for JIT compilation");
+        eprintln!();
+        eprintln!("The LLVM words are ready and can generate .o files:");
+        eprintln!("  LLVM-INITIALIZE-NATIVE-TARGET");
+        eprintln!("  LLVM-WRITE-OBJECT-FILE ( module path-addr path-len opt-level -- )");
+        eprintln!();
+        eprintln!("See issue #33 for full AOT compilation roadmap.");
     } else {
-        eprintln!("Error: AOT compilation not yet implemented");
-        eprintln!("Use --verbose flag for implementation details");
+        eprintln!("Error: AOT compilation infrastructure incomplete");
+        eprintln!();
+        eprintln!("Command-line parsing and LLVM object generation are ready,");
+        eprintln!("but runtime library and linking are not yet implemented.");
+        eprintln!();
+        eprintln!("Use --verbose flag for detailed status.");
+        eprintln!("Use --jit flag for JIT compilation (fully functional).");
     }
     std::process::exit(1);
 }
