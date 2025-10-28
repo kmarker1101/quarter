@@ -213,24 +213,64 @@ fn compile_to_executable(
         }
     }
 
-    // Step 2: TODO - Compile Forth source to object file
-    // This requires:
-    // - Loading source file and stdlib
-    // - Compiling to LLVM IR using batch_compile_all_words()
-    // - Writing object file with LLVM-WRITE-OBJECT-FILE
-    // For now, we'll show what's needed
-
+    // Step 2: Compile Forth source to object file
     if verbose {
-        eprintln!();
-        eprintln!("Step 2: NOT YET IMPLEMENTED - Compile Forth to object file");
-        eprintln!("  This requires creating a Forth word that:");
-        eprintln!("  1. Loads source file");
-        eprintln!("  2. Runs INIT-BATCH-COMPILER");
-        eprintln!("  3. Declares all functions");
-        eprintln!("  4. Compiles all function bodies");
-        eprintln!("  5. Calls LLVM-INITIALIZE-NATIVE-TARGET");
-        eprintln!("  6. Calls LLVM-WRITE-OBJECT-FILE instead of FINALIZE-BATCH");
-        eprintln!();
+        println!("Step 2: Compiling Forth source to object file...");
+    }
+
+    let forth_obj_path = format!("{}_forth.o", output_file);
+
+    // Initialize Quarter execution context
+    quarter::init_execution_context(
+        quarter::Stack::new(),
+        quarter::Dictionary::new(),
+        quarter::LoopStack::new(),
+        quarter::ReturnStack::new(),
+        quarter::Memory::new(),
+        std::collections::HashSet::new(),
+        quarter::CompilerConfig::new(false, false, false),
+    );
+
+    // Load source file and compile to object
+    let compile_result = quarter::with_execution_context(|exec_ctx| {
+        // Load stdlib
+        let load_options = quarter::ExecutionOptions::new(false, false);
+        let mut ctx = quarter::RuntimeContext::new(
+            &mut exec_ctx.stack,
+            &mut exec_ctx.dict,
+            &mut exec_ctx.loop_stack,
+            &mut exec_ctx.return_stack,
+            &mut exec_ctx.memory
+        );
+
+        if let Err(e) = quarter::load_stdlib(&mut ctx, exec_ctx.config, load_options, &mut exec_ctx.included_files) {
+            return Err(format!("Failed to load stdlib: {}", e));
+        }
+
+        // Load source file
+        if let Err(e) = quarter::load_file(source_file, &mut ctx, exec_ctx.config, load_options, &mut exec_ctx.included_files) {
+            return Err(format!("Failed to load source file: {}", e));
+        }
+
+        // Compile to object file
+        quarter::compile_to_object_file(&mut ctx, &forth_obj_path, opt_level, exec_ctx.config, &mut exec_ctx.included_files)
+    });
+
+    match compile_result {
+        Some(Ok(())) => {
+            if verbose {
+                println!("  Successfully compiled to {}", forth_obj_path);
+            }
+        }
+        Some(Err(e)) => {
+            eprintln!("Failed to compile Forth source:");
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+        None => {
+            eprintln!("No execution context available");
+            std::process::exit(1);
+        }
     }
 
     // Step 3: Generate main wrapper
@@ -276,27 +316,59 @@ fn compile_to_executable(
         println!("Step 5: Linking...");
     }
 
-    // TODO: Link forth_code.o + main.o + runtime.o → executable
-    // For now, just show what's needed
+    // Use absolute paths to Homebrew libraries for better compatibility
+    let link_result = std::process::Command::new("cc")
+        .args(&[
+            &main_o_path,
+            &forth_obj_path,
+            "target/release/libquarter.a",
+            "-o",
+            output_file,
+            "-lc++",    // LLVM requires C++ standard library
+            "/opt/homebrew/lib/libzstd.dylib",        // zstd (compression)
+            "/opt/homebrew/opt/libffi/lib/libffi.dylib", // libffi (foreign function interface)
+            "/opt/homebrew/opt/zlib/lib/libz.dylib",  // zlib (compression)
+            "-Wl,-U,_del_curterm",  // Allow undefined ncurses symbols
+            "-Wl,-U,_set_curterm",
+            "-Wl,-U,_setupterm",
+            "-Wl,-U,_tigetnum",
+        ])
+        .output();
 
-    eprintln!();
-    eprintln!("Partial success:");
-    eprintln!("  ✓ Runtime library built (target/release/libquarter.a - Rust staticlib)");
-    eprintln!("  ✓ Main wrapper generated ({})", main_c_path);
-    eprintln!("  ✓ Main wrapper compiled ({})", main_o_path);
-    eprintln!();
-    eprintln!("Still needed:");
-    eprintln!("  ✗ Compile Forth source to forth_code.o");
-    eprintln!("  ✗ Link: cc {} forth_code.o target/release/libquarter.a -o {}", main_o_path, output_file);
-    eprintln!();
-    eprintln!("Next steps:");
-    eprintln!("  1. Create FINALIZE-AOT word in stdlib/compiler.fth");
-    eprintln!("  2. Create compile_forth_to_object() function in src/lib.rs");
-    eprintln!("  3. Wire up linking in this function");
-    eprintln!();
-    eprintln!("Note: Using Rust runtime (not C) - all quarter_* functions from src/words.rs");
+    match link_result {
+        Ok(output) => {
+            if !output.status.success() {
+                eprintln!("Failed to link executable:");
+                eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+                std::process::exit(1);
+            }
+        }
+        Err(e) => {
+            eprintln!("Error running linker: {}", e);
+            std::process::exit(1);
+        }
+    }
 
-    std::process::exit(1);
+    // Success!
+    if verbose {
+        println!();
+        println!("===========================================");
+        println!("✓ Successfully created executable: {}", output_file);
+        println!("===========================================");
+        println!();
+        println!("Files generated:");
+        println!("  - {} (main wrapper - C source)", main_c_path);
+        println!("  - {} (main wrapper - object)", main_o_path);
+        println!("  - {} (Forth code - object)", forth_obj_path);
+        println!("  - {} (final executable)", output_file);
+        println!();
+        println!("Linked with:");
+        println!("  - target/release/libquarter.a (Rust runtime)");
+        println!();
+        println!("Run with: ./{}", output_file);
+    } else {
+        println!("Successfully created: {}", output_file);
+    }
 }
 
 fn print_help() {

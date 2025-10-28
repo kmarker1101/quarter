@@ -1633,6 +1633,104 @@ pub fn batch_compile_all_words(
     Ok(())
 }
 
+/// Compile all words to an object file for AOT compilation
+/// Similar to batch_compile_all_words but writes object file instead of creating JIT
+pub fn compile_to_object_file(
+    ctx: &mut RuntimeContext,
+    output_path: &str,
+    opt_level: u8,
+    config: CompilerConfig,
+    included_files: &mut std::collections::HashSet<String>,
+) -> Result<(), String> {
+    // Get list of words to compile BEFORE loading the compiler
+    let all_words = ctx.dict.get_all_words();
+    let mut words_to_compile: Vec<(String, AstNode)> = Vec::new();
+
+    for (name, word) in all_words {
+        if let crate::dictionary::Word::Compiled(ast) = word {
+            words_to_compile.push((name, ast.clone()));
+        }
+    }
+
+    if words_to_compile.is_empty() {
+        return Err("No words to compile".to_string());
+    }
+
+    // Load the Forth compiler if not already loaded
+    if !FORTH_COMPILER_LOADED.load(Ordering::Relaxed) {
+        let compiler_options = ExecutionOptions::new(false, false);
+        if let Err(e) = load_file("stdlib/compiler.fth", ctx, config, compiler_options, included_files) {
+            return Err(format!("Failed to load Forth compiler: {}", e));
+        }
+        FORTH_COMPILER_LOADED.store(true, Ordering::Relaxed);
+    }
+
+    // Step 1: Initialize batch compiler (sets up CURRENT-MODULE variable)
+    ctx.dict.execute_word("INIT-BATCH-COMPILER", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
+
+    // Step 2: Get module handle from CURRENT-MODULE variable
+    ctx.dict.execute_word("CURRENT-MODULE", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
+    ctx.dict.execute_word("@", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
+    let module_handle = ctx.stack.pop(ctx.memory)
+        .ok_or("Failed to get module handle from CURRENT-MODULE")?;
+
+    // Step 3: Declare all functions (pass 1)
+    for (name, _ast) in &words_to_compile {
+        let here = ctx.memory.here() as usize;
+        let name_bytes = name.as_bytes();
+        for (i, &byte) in name_bytes.iter().enumerate() {
+            ctx.memory.store_byte(here + i, byte as i64)?;
+        }
+
+        ctx.stack.push(here as i64, ctx.memory);
+        ctx.stack.push(name_bytes.len() as i64, ctx.memory);
+
+        ctx.dict.execute_word("DECLARE-FUNCTION", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)
+            .map_err(|e| format!("Declaration failed for {}: {}", name, e))?;
+    }
+
+    // Step 4: Compile each word body (pass 2)
+    for (name, ast) in &words_to_compile {
+        let ast_handle = crate::ast_forth::ast_register_node(ast.clone());
+
+        let here = ctx.memory.here() as usize;
+        let name_bytes = name.as_bytes();
+        for (i, &byte) in name_bytes.iter().enumerate() {
+            ctx.memory.store_byte(here + i, byte as i64)?;
+        }
+
+        ctx.stack.push(ast_handle as i64, ctx.memory);
+        ctx.stack.push(here as i64, ctx.memory);
+        ctx.stack.push(name_bytes.len() as i64, ctx.memory);
+
+        ctx.dict.execute_word("COMPILE-WORD", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)
+            .map_err(|e| format!("Compilation failed for {}: {}", name, e))?;
+
+        // Pop and discard the result (0 in batch mode)
+        ctx.stack.pop(ctx.memory);
+    }
+
+    // Step 5: Initialize native target
+    ctx.dict.execute_word("LLVM-INITIALIZE-NATIVE-TARGET", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
+
+    // Step 6: Write object file
+    // Stack: ( module-handle path-addr path-len opt-level -- )
+    let here = ctx.memory.here() as usize;
+    let path_bytes = output_path.as_bytes();
+    for (i, &byte) in path_bytes.iter().enumerate() {
+        ctx.memory.store_byte(here + i, byte as i64)?;
+    }
+
+    ctx.stack.push(module_handle, ctx.memory);
+    ctx.stack.push(here as i64, ctx.memory);
+    ctx.stack.push(path_bytes.len() as i64, ctx.memory);
+    ctx.stack.push(opt_level as i64, ctx.memory);
+
+    ctx.dict.execute_word("LLVM-WRITE-OBJECT-FILE", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
+
+    Ok(())
+}
+
 /// Attempt to compile a word using the Forth self-hosting compiler
 /// Loads the compiler if not already loaded
 /// Returns true if successful, false otherwise
