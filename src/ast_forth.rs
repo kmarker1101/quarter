@@ -46,6 +46,8 @@ impl AstRegistry {
             AstNode::Exit => "Exit".to_string(),
             AstNode::Unloop => "Unloop".to_string(),
             AstNode::InlineInstruction(_) => "InlineInstruction".to_string(),
+            AstNode::Execute => "Execute".to_string(),
+            AstNode::TickLiteral(w) => format!("TickLiteral({})", w),
         };
         self.nodes.insert(handle, node);
         // eprintln!("[AST-REG] Registered handle {} = {} (total: {})", handle, _node_desc, self.nodes.len());
@@ -77,6 +79,8 @@ impl AstRegistry {
             AstNode::Exit => 11,
             AstNode::Unloop => 13,
             AstNode::InlineInstruction(_) => 12,
+            AstNode::Execute => 14,
+            AstNode::TickLiteral(_) => 15,
         })
     }
 

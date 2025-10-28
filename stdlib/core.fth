@@ -78,3 +78,12 @@
 \ ( n lo hi -- flag ) Tests if lo <= n < hi (half-open interval)
 : WITHIN ( n lo hi -- flag )
     OVER - >R - R> U< ;
+
+\ =============================================================================
+\ METAPROGRAMMING
+\ =============================================================================
+
+\ COUNT ( c-addr -- addr u )
+\ Convert counted string to address/length pair
+\ A counted string has its length in the first byte
+: COUNT DUP 1+ SWAP C@ ;

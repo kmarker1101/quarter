@@ -202,6 +202,9 @@ impl Dictionary {
             "CATCH" => words::catch_word,
         );
 
+        // Add EXECUTE as a compiled word that takes xt from stack and executes it
+        dict.add_compiled("EXECUTE".to_string(), AstNode::Execute);
+
         dict
     }
 

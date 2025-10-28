@@ -606,6 +606,79 @@ S" .S shows empty stack" TEST:
 T{ .S DEPTH -> 0 }T
 
 \ =============================================================================
+\ METAPROGRAMMING TESTS (ISSUE #89)
+\ =============================================================================
+
+S" CHAR A returns ASCII 65" TEST:
+T{ CHAR A -> 65 }T
+
+S" CHAR Z returns ASCII 90" TEST:
+T{ CHAR Z -> 90 }T
+
+S" CHAR 0 returns ASCII 48" TEST:
+T{ CHAR 0 -> 48 }T
+
+S" CHAR of multi-char word gets first char" TEST:
+T{ CHAR HELLO -> 72 }T
+
+S" [CHAR] in definition" TEST:
+: TEST-BRACKET-CHAR-A [CHAR] A ;
+T{ TEST-BRACKET-CHAR-A -> 65 }T
+
+S" [CHAR] with SPACE keyword" TEST:
+: TEST-BRACKET-CHAR-SPACE [CHAR] SPACE ;
+T{ TEST-BRACKET-CHAR-SPACE -> 83 }T
+
+S" ' (TICK) returns xt for DUP" TEST:
+T{ 5 ' DUP EXECUTE -> 5 5 }T
+
+S" EXECUTE with +" TEST:
+T{ 3 4 ' + EXECUTE -> 7 }T
+
+S" EXECUTE with *" TEST:
+T{ 5 6 ' * EXECUTE -> 30 }T
+
+S" ['] in definition with DUP" TEST:
+: TEST-TICK-DUP ['] DUP EXECUTE ;
+T{ 10 TEST-TICK-DUP -> 10 10 }T
+
+S" ['] in definition with +" TEST:
+: TEST-TICK-ADD ['] + EXECUTE ;
+T{ 3 4 TEST-TICK-ADD -> 7 }T
+
+S" ['] in definition with SWAP" TEST:
+: TEST-TICK-SWAP ['] SWAP EXECUTE ;
+T{ 1 2 TEST-TICK-SWAP -> 2 1 }T
+
+S" COUNT converts counted string" TEST:
+2 500000 C!
+72 500001 C!
+73 500002 C!
+T{ 500000 COUNT -> 500001 2 }T
+
+S" COUNT - verify character data" TEST:
+2 500100 C!
+72 500101 C!
+73 500102 C!
+500100 COUNT DROP
+T{ C@ -> 72 }T
+
+S" EXECUTE with user-defined SQUARE" TEST:
+: SQUARE DUP * ;
+T{ 5 ' SQUARE EXECUTE -> 25 }T
+
+S" EXECUTE with user-defined DOUBLE" TEST:
+: DOUBLE 2 * ;
+T{ 7 ' DOUBLE EXECUTE -> 14 }T
+
+S" Passing xt as parameter - APPLY-TWICE with DOUBLE" TEST:
+: APPLY-TWICE ( n xt -- n' ) DUP >R EXECUTE R> EXECUTE ;
+T{ 3 ' DOUBLE APPLY-TWICE -> 12 }T
+
+S" Passing xt as parameter - APPLY-TWICE with SQUARE" TEST:
+T{ 4 ' SQUARE APPLY-TWICE -> 256 }T
+
+\ =============================================================================
 \ REPORT
 \ =============================================================================
 

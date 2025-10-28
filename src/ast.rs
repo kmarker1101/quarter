@@ -26,7 +26,9 @@ pub enum AstNode {
     Leave,
     Exit,
     Unloop,  // Discard loop parameters (used before EXIT when exiting from within a loop)
+    Execute,  // EXECUTE - takes xt from stack and executes the word
     InlineInstruction(String),  // INLINE directive - maps to LLVM instruction (e.g., "LLVM-ADD")
+    TickLiteral(String),  // ['] - compile-only, stores word name, pushes xt at runtime
 }
 
 impl AstNode {
@@ -43,7 +45,16 @@ impl AstNode {
             AstNode::Leave => Ok(()),
             AstNode::Exit => Ok(()),
             AstNode::Unloop => Ok(()),
+            AstNode::Execute => Ok(()),  // Execute resolves word at runtime, no compile-time validation
             AstNode::InlineInstruction(_) => Ok(()),  // Inline instructions are validated at JIT time
+            AstNode::TickLiteral(name) => {
+                // ['] validates word exists at compile time
+                if dict.has_word(name) {
+                    Ok(())
+                } else {
+                    Err(format!("Undefined word in [']:  {}", name))
+                }
+            }
             AstNode::CallWord(name) => {
                 // Allow forward reference if this is the word being defined (for recursion)
                 if let Some(def_name) = defining_word
@@ -308,9 +319,51 @@ impl AstNode {
                 loop_stack.pop_loop();
                 Ok(())
             }
+            AstNode::Execute => {
+                // EXECUTE ( xt -- )
+                // Execute word from execution token
+                // xt is the address of a counted string (length byte + characters)
+                let xt = stack.pop(memory).ok_or("Stack underflow for EXECUTE")?;
+                let addr = xt as usize;
+
+                // Read the length byte
+                let len = memory.fetch_byte(addr)? as usize;
+
+                // Read the word name from memory
+                let mut word_name = String::with_capacity(len);
+                for i in 0..len {
+                    let byte = memory.fetch_byte(addr + 1 + i)? as u8;
+                    word_name.push(byte as char);
+                }
+
+                // Execute the word
+                dict.execute_word(&word_name, stack, loop_stack, return_stack, memory)?;
+                Ok(())
+            }
             AstNode::InlineInstruction(instruction) => {
                 // Inline instructions can only be executed in JIT-compiled code
                 Err(format!("Inline instruction {} can only be used in JIT-compiled words", instruction))
+            }
+            AstNode::TickLiteral(word_name) => {
+                // ['] ( -- xt )
+                // Store word name as counted string at HERE, push xt (address)
+                let xt_addr = memory.here();
+                let name_bytes = word_name.as_bytes();
+
+                // Store length byte
+                memory.store_byte(xt_addr as usize, name_bytes.len() as i64)?;
+
+                // Store character bytes
+                for (offset, &byte) in name_bytes.iter().enumerate() {
+                    memory.store_byte(xt_addr as usize + 1 + offset, byte as i64)?;
+                }
+
+                // Advance HERE
+                memory.allot((1 + name_bytes.len()) as i64)?;
+
+                // Push xt (address of counted string) onto stack
+                stack.push(xt_addr, memory);
+                Ok(())
             }
         }
     }

@@ -177,6 +177,14 @@ cargo test test_tco_interpreted
 
 **File Loading**: `INCLUDE`, `INCLUDED` - Load and execute Forth files
 
+**Metaprogramming**:
+- `EXECUTE` ( xt -- ) - Execute word from execution token
+- `'` (TICK) ( "name" -- xt ) - Get execution token for a word (works in definitions and top-level)
+- `[']` ( "name" -- xt ) - Compile-only version of ' (gets xt at compile time)
+- `CHAR` ( "name" -- char ) - Get ASCII value of first character of next word
+- `[CHAR]` ( "name" -- char ) - Compile-only version of CHAR
+- `COUNT` ( c-addr -- addr u ) - Convert counted string to address/length pair
+
 **Comments**: `\` (line comment), `( )` (inline comment)
 
 ### LLVM Primitives (for Self-Hosting Compiler)
