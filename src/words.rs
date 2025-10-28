@@ -3137,6 +3137,88 @@ pub fn llvm_get_insert_block_word(
     }
 }
 
+/// LLVM-INITIALIZE-NATIVE-TARGET: Initialize LLVM native target for AOT compilation
+/// Stack: ( -- )
+/// Must be called before LLVM-WRITE-OBJECT-FILE
+pub fn llvm_initialize_native_target_word(
+    _stack: &mut crate::Stack,
+    _loop_stack: &crate::LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    _memory: &mut crate::Memory,
+) {
+    match crate::llvm_forth::llvm_initialize_native_target() {
+        Ok(()) => {}, // Success, no output needed
+        Err(e) => eprintln!("LLVM-INITIALIZE-NATIVE-TARGET error: {}", e),
+    }
+}
+
+/// LLVM-WRITE-OBJECT-FILE: Write module to object file
+/// Stack: ( module-handle path-addr path-len opt-level -- )
+/// opt-level: 0=None, 1=Less, 2=Default, 3=Aggressive
+pub fn llvm_write_object_file_word(
+    stack: &mut crate::Stack,
+    _loop_stack: &crate::LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    let opt_level = match stack.pop(memory) {
+        Some(n) => n,
+        None => {
+            eprintln!("LLVM-WRITE-OBJECT-FILE: Stack underflow (opt_level)");
+            return;
+        }
+    };
+
+    let path_len = match stack.pop(memory) {
+        Some(n) => n as usize,
+        None => {
+            eprintln!("LLVM-WRITE-OBJECT-FILE: Stack underflow (path_len)");
+            return;
+        }
+    };
+
+    let path_addr = match stack.pop(memory) {
+        Some(n) => n as usize,
+        None => {
+            eprintln!("LLVM-WRITE-OBJECT-FILE: Stack underflow (path_addr)");
+            return;
+        }
+    };
+
+    let module_handle = match stack.pop(memory) {
+        Some(n) => n,
+        None => {
+            eprintln!("LLVM-WRITE-OBJECT-FILE: Stack underflow (module_handle)");
+            return;
+        }
+    };
+
+    // Read path from memory
+    let mut path_bytes = Vec::new();
+    for i in 0..path_len {
+        match memory.fetch_byte(path_addr + i) {
+            Ok(byte) => path_bytes.push(byte as u8),
+            Err(e) => {
+                eprintln!("LLVM-WRITE-OBJECT-FILE: Error reading path: {}", e);
+                return;
+            }
+        }
+    }
+
+    let path = match String::from_utf8(path_bytes) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("LLVM-WRITE-OBJECT-FILE: Invalid UTF-8 in path: {}", e);
+            return;
+        }
+    };
+
+    match crate::llvm_forth::llvm_write_object_file(module_handle, &path, opt_level) {
+        Ok(()) => {}, // Success
+        Err(e) => eprintln!("LLVM-WRITE-OBJECT-FILE error: {}", e),
+    }
+}
+
 // ============================================================================
 // AST Inspection Primitives
 // ============================================================================

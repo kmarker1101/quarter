@@ -177,6 +177,8 @@ impl Dictionary {
             "LLVM-BUILD-PHI" => words::llvm_build_phi_word,
             "LLVM-PHI-ADD-INCOMING" => words::llvm_phi_add_incoming_word,
             "LLVM-GET-INSERT-BLOCK" => words::llvm_get_insert_block_word,
+            "LLVM-INITIALIZE-NATIVE-TARGET" => words::llvm_initialize_native_target_word,
+            "LLVM-WRITE-OBJECT-FILE" => words::llvm_write_object_file_word,
 
             // AST inspection operations
             "AST-TYPE" => words::ast_get_type_word,
