@@ -1578,6 +1578,48 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
     \ Push the extended value to data stack
     COMPILE-PUSH ;
 
+\ Emit inline SP@: push data stack pointer to data stack
+\ ( -- )
+: EMIT-INLINE-SP@
+    \ Load current SP value (64-bit integer)
+    CURRENT-BUILDER @ CURRENT-CTX @ PARAM-SP @ 64 LLVM-BUILD-LOAD
+    \ Push to data stack
+    COMPILE-PUSH ;
+
+\ Emit inline SP!: pop from data stack and store as new SP
+\ ( -- )
+: EMIT-INLINE-SP!
+    \ Pop value from data stack (this will be the new SP)
+    COMPILE-POP
+    \ Store as new SP
+    \ STORE needs: ( builder value ptr )
+    CURRENT-BUILDER @
+    SWAP
+    PARAM-SP @
+    LLVM-BUILD-STORE
+    DROP ;
+
+\ Emit inline RP@: push return stack pointer to data stack
+\ ( -- )
+: EMIT-INLINE-RP@
+    \ Load current RP value (64-bit integer)
+    CURRENT-BUILDER @ CURRENT-CTX @ PARAM-RP @ 64 LLVM-BUILD-LOAD
+    \ Push to data stack
+    COMPILE-PUSH ;
+
+\ Emit inline RP!: pop from data stack and store as new RP
+\ ( -- )
+: EMIT-INLINE-RP!
+    \ Pop value from data stack (this will be the new RP)
+    COMPILE-POP
+    \ Store as new RP
+    \ STORE needs: ( builder value ptr )
+    CURRENT-BUILDER @
+    SWAP
+    PARAM-RP @
+    LLVM-BUILD-STORE
+    DROP ;
+
 \ =============================================================================
 \ AST COMPILATION
 \ =============================================================================
@@ -2294,6 +2336,46 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
         WORD-NAME-BUFFER OVER COMPILER-SCRATCH 1 STRING-EQUALS? IF
             DROP
             EMIT-INLINE-J
+            EXIT
+        THEN
+
+        \ Check for 'SP@'
+        83 COMPILER-SCRATCH C!      \ S
+        80 COMPILER-SCRATCH 1 + C!  \ P
+        64 COMPILER-SCRATCH 2 + C!  \ @
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 3 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-SP@
+            EXIT
+        THEN
+
+        \ Check for 'SP!'
+        83 COMPILER-SCRATCH C!      \ S
+        80 COMPILER-SCRATCH 1 + C!  \ P
+        33 COMPILER-SCRATCH 2 + C!  \ !
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 3 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-SP!
+            EXIT
+        THEN
+
+        \ Check for 'RP@'
+        82 COMPILER-SCRATCH C!      \ R
+        80 COMPILER-SCRATCH 1 + C!  \ P
+        64 COMPILER-SCRATCH 2 + C!  \ @
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 3 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-RP@
+            EXIT
+        THEN
+
+        \ Check for 'RP!'
+        82 COMPILER-SCRATCH C!      \ R
+        80 COMPILER-SCRATCH 1 + C!  \ P
+        33 COMPILER-SCRATCH 2 + C!  \ !
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 3 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-RP!
             EXIT
         THEN
 
