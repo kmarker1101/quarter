@@ -48,14 +48,19 @@ pub extern "C" fn quarter_runtime_cleanup() {
 
 /// Get pointers to runtime state for Forth code
 /// Returns: (memory_ptr, sp_ptr, rp_ptr)
+///
+/// # Safety
+/// This function writes to raw pointers provided by the caller.
+/// The caller must ensure the pointers are valid and properly aligned.
 #[unsafe(no_mangle)]
-pub extern "C" fn quarter_runtime_get_state(
+pub unsafe extern "C" fn quarter_runtime_get_state(
     memory_out: *mut *mut u8,
     sp_out: *mut *mut usize,
     rp_out: *mut *mut usize,
 ) {
     let mut runtime = RUNTIME.lock().unwrap();
     if let Some(ref mut rt) = *runtime {
+        // SAFETY: Caller guarantees these pointers are valid
         unsafe {
             *memory_out = rt.memory.as_mut_ptr();
             *sp_out = &mut rt.sp as *mut usize;

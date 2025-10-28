@@ -1409,7 +1409,7 @@ pub fn llvm_write_object_file(
     path: &str,
     opt_level: i64,
 ) -> Result<(), String> {
-    if opt_level < 0 || opt_level > 3 {
+    if !(0..=3).contains(&opt_level) {
         return Err(format!("Invalid optimization level: {} (must be 0-3)", opt_level));
     }
 

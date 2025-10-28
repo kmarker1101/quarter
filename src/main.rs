@@ -195,7 +195,7 @@ fn compile_to_executable(
         println!("Step 1: Building runtime library...");
     }
     let runtime_result = std::process::Command::new("cargo")
-        .args(&["build", "--lib", "--release"])
+        .args(["build", "--lib", "--release"])
         .output()
         .map_err(|e| format!("Failed to run cargo: {}", e));
 
@@ -294,7 +294,7 @@ fn compile_to_executable(
 
     let main_o_path = format!("{}_main.o", output_file);
     let cc_result = std::process::Command::new("cc")
-        .args(&["-c", "-O2", &main_c_path, "-o", &main_o_path])
+        .args(["-c", "-O2", &main_c_path, "-o", &main_o_path])
         .output();
 
     match cc_result {
@@ -318,7 +318,7 @@ fn compile_to_executable(
 
     // Use absolute paths to Homebrew libraries for better compatibility
     let link_result = std::process::Command::new("cc")
-        .args(&[
+        .args([
             &main_o_path,
             &forth_obj_path,
             "target/release/libquarter.a",
@@ -465,9 +465,9 @@ fn main() {
                 eprintln!("Error: --optimize requires a level (0-3)");
                 std::process::exit(1);
             }
-        } else if arg.starts_with("-O") {
+        } else if let Some(opt_str) = arg.strip_prefix("-O") {
             // Handle -O0, -O1, -O2, -O3
-            opt_level = arg[2..].parse().unwrap_or_else(|_| {
+            opt_level = opt_str.parse().unwrap_or_else(|_| {
                 eprintln!("Error: -O requires a number 0-3");
                 std::process::exit(1);
             });
