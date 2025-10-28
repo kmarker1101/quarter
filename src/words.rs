@@ -2343,8 +2343,15 @@ pub fn llvm_declare_external_word(
     ) {
         match extract_string(memory, name_addr as usize, name_len as usize) {
             Ok(name) => {
+                if std::env::var("QUARTER_DEBUG").is_ok() {
+                    eprintln!("DEBUG: Declaring external: {}", name);
+                }
                 match crate::llvm_forth::llvm_declare_external(module_handle, ctx_handle, &name) {
-                    Ok(_) => {},
+                    Ok(_) => {
+                        if std::env::var("QUARTER_DEBUG").is_ok() {
+                            eprintln!("DEBUG: Successfully declared: {}", name);
+                        }
+                    },
                     Err(e) => eprintln!("LLVM-DECLARE-EXTERNAL error: {}", e),
                 }
             }

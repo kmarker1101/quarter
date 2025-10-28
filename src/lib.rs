@@ -1535,6 +1535,9 @@ pub fn batch_compile_all_words(
 
     // Step 1: Initialize batch compiler
     ctx.dict.execute_word("INIT-BATCH-COMPILER", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
+    if std::env::var("QUARTER_DEBUG").is_ok() {
+        eprintln!("DEBUG (lib.rs): INIT-BATCH-COMPILER completed, starting declarations");
+    }
 
     // Step 2: Declare all functions (pass 1 - forward references)
     for (name, _ast) in &words_to_compile {
@@ -1550,12 +1553,21 @@ pub fn batch_compile_all_words(
         ctx.stack.push(name_bytes.len() as i64, ctx.memory);
 
         // Call DECLARE-FUNCTION (creates function signature)
+        if std::env::var("QUARTER_DEBUG").is_ok() {
+            eprintln!("DEBUG (lib.rs): Declaring function: {}", name);
+        }
         ctx.dict.execute_word("DECLARE-FUNCTION", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)
             .map_err(|e| format!("Declaration failed for {}: {}", name, e))?;
+    }
+    if std::env::var("QUARTER_DEBUG").is_ok() {
+        eprintln!("DEBUG (lib.rs): All functions declared, starting compilation");
     }
 
     // Step 3: Compile each word body (pass 2 - now all functions exist)
     for (name, ast) in &words_to_compile {
+        if std::env::var("QUARTER_DEBUG").is_ok() {
+            eprintln!("DEBUG (lib.rs): Compiling word: {}", name);
+        }
         // Register AST node to get a handle
         let ast_handle = crate::ast_forth::ast_register_node(ast.clone());
 
@@ -1578,16 +1590,31 @@ pub fn batch_compile_all_words(
             .map_err(|e| format!("Compilation failed for {}: {}", name, e))?;
         // Pop and discard the result (0 in batch mode)
         ctx.stack.pop(ctx.memory);
+        if std::env::var("QUARTER_DEBUG").is_ok() {
+            eprintln!("DEBUG (lib.rs): Successfully compiled: {}", name);
+        }
     }
 
     // Step 4: Finalize batch compilation (create JIT)
+    if std::env::var("QUARTER_DEBUG").is_ok() {
+        eprintln!("DEBUG (lib.rs): All words compiled, calling FINALIZE-BATCH");
+    }
     ctx.dict.execute_word("FINALIZE-BATCH", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
+    if std::env::var("QUARTER_DEBUG").is_ok() {
+        eprintln!("DEBUG (lib.rs): FINALIZE-BATCH completed");
+    }
 
     // Stack now has JIT handle
     let jit_handle = ctx.stack.peek(ctx.memory).ok_or("Failed to get JIT handle")?;
 
     // Step 5: Get function pointers and update dictionary
+    if std::env::var("QUARTER_DEBUG").is_ok() {
+        eprintln!("DEBUG (lib.rs): Getting function pointers for {} words", words_to_compile.len());
+    }
     for (name, _ast) in &words_to_compile {
+        if std::env::var("QUARTER_DEBUG").is_ok() {
+            eprintln!("DEBUG (lib.rs): Getting function pointer for: {}", name);
+        }
         // Store word name in memory
         let here = ctx.memory.here() as usize;
         let name_bytes = name.as_bytes();
