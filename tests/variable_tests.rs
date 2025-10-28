@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use quarter::{execute_line, Dictionary, LoopStack, Memory, ReturnStack, Stack};
+use quarter::{execute_line, Dictionary, LoopStack, Memory, ReturnStack, Stack, RuntimeContext, CompilerConfig, ExecutionOptions};
 
 #[test]
 fn test_here_initial() {
@@ -47,23 +47,34 @@ fn test_variable_basic() {
     let mut return_stack = ReturnStack::new();
     let mut memory = Memory::new();
 
-    // Create a variable
-    execute_line("VARIABLE X", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
-        .unwrap();
+    let config = CompilerConfig::new(false, false, false);
+    let options = ExecutionOptions::new(false, false);
 
-    // X should push its address (which should be at initial HERE = 131072)
-    execute_line("X", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
-        .unwrap();
+    {
+        let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+
+        // Create a variable
+        execute_line("VARIABLE X", &mut ctx, config, options, &mut HashSet::new())
+            .unwrap();
+
+        // X should push its address (which should be at initial HERE = 131072)
+        execute_line("X", &mut ctx, config, options, &mut HashSet::new())
+            .unwrap();
+    }
     let addr = stack.pop(&mut memory).unwrap();
     assert_eq!(addr, 131072);
 
-    // Store a value
-    execute_line("42 X !", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
-        .unwrap();
+    {
+        let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
 
-    // Fetch the value
-    execute_line("X @", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
-        .unwrap();
+        // Store a value
+        execute_line("42 X !", &mut ctx, config, options, &mut HashSet::new())
+            .unwrap();
+
+        // Fetch the value
+        execute_line("X @", &mut ctx, config, options, &mut HashSet::new())
+            .unwrap();
+    }
     assert_eq!(stack.pop(&mut memory), Some(42));
 }
 
@@ -75,25 +86,35 @@ fn test_variable_multiple() {
     let mut return_stack = ReturnStack::new();
     let mut memory = Memory::new();
 
-    // Create two variables
-    execute_line("VARIABLE FOO", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
-        .unwrap();
-    execute_line("VARIABLE BAR", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
-        .unwrap();
+    let config = CompilerConfig::new(false, false, false);
+    let options = ExecutionOptions::new(false, false);
 
-    // Store different values
-    execute_line("10 FOO !", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
-        .unwrap();
-    execute_line("20 BAR !", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
-        .unwrap();
+    {
+        let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
 
-    // Fetch and verify
-    execute_line("FOO @", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
-        .unwrap();
+        // Create two variables
+        execute_line("VARIABLE FOO", &mut ctx, config, options, &mut HashSet::new())
+            .unwrap();
+        execute_line("VARIABLE BAR", &mut ctx, config, options, &mut HashSet::new())
+            .unwrap();
+
+        // Store different values
+        execute_line("10 FOO !", &mut ctx, config, options, &mut HashSet::new())
+            .unwrap();
+        execute_line("20 BAR !", &mut ctx, config, options, &mut HashSet::new())
+            .unwrap();
+
+        // Fetch and verify
+        execute_line("FOO @", &mut ctx, config, options, &mut HashSet::new())
+            .unwrap();
+    }
     assert_eq!(stack.pop(&mut memory), Some(10));
 
-    execute_line("BAR @", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
-        .unwrap();
+    {
+        let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+        execute_line("BAR @", &mut ctx, config, options, &mut HashSet::new())
+            .unwrap();
+    }
     assert_eq!(stack.pop(&mut memory), Some(20));
 }
 
@@ -105,18 +126,29 @@ fn test_constant_basic() {
     let mut return_stack = ReturnStack::new();
     let mut memory = Memory::new();
 
-    // Create a constant
-    execute_line("100 CONSTANT HUNDRED", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
-        .unwrap();
+    let config = CompilerConfig::new(false, false, false);
+    let options = ExecutionOptions::new(false, false);
 
-    // HUNDRED should push 100
-    execute_line("HUNDRED", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
-        .unwrap();
+    {
+        let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+
+        // Create a constant
+        execute_line("100 CONSTANT HUNDRED", &mut ctx, config, options, &mut HashSet::new())
+            .unwrap();
+
+        // HUNDRED should push 100
+        execute_line("HUNDRED", &mut ctx, config, options, &mut HashSet::new())
+            .unwrap();
+    }
     assert_eq!(stack.pop(&mut memory), Some(100));
 
-    // Can use multiple times
-    execute_line("HUNDRED HUNDRED +", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
-        .unwrap();
+    {
+        let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+
+        // Can use multiple times
+        execute_line("HUNDRED HUNDRED +", &mut ctx, config, options, &mut HashSet::new())
+            .unwrap();
+    }
     assert_eq!(stack.pop(&mut memory), Some(200));
 }
 
@@ -128,18 +160,22 @@ fn test_constant_in_definition() {
     let mut return_stack = ReturnStack::new();
     let mut memory = Memory::new();
 
+    let config = CompilerConfig::new(false, false, false);
+    let options = ExecutionOptions::new(false, false);
+    let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+
     // Create constants
-    execute_line("10 CONSTANT TEN", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
+    execute_line("10 CONSTANT TEN", &mut ctx, config, options, &mut HashSet::new())
         .unwrap();
-    execute_line("5 CONSTANT FIVE", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
+    execute_line("5 CONSTANT FIVE", &mut ctx, config, options, &mut HashSet::new())
         .unwrap();
 
     // Use in a word definition
-    execute_line(": SUM TEN FIVE + ;", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
+    execute_line(": SUM TEN FIVE + ;", &mut ctx, config, options, &mut HashSet::new())
         .unwrap();
 
     // Execute the word
-    execute_line("SUM", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
+    execute_line("SUM", &mut ctx, config, options, &mut HashSet::new())
         .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(15));
 }
@@ -152,16 +188,20 @@ fn test_variable_constant_together() {
     let mut return_stack = ReturnStack::new();
     let mut memory = Memory::new();
 
+    let config = CompilerConfig::new(false, false, false);
+    let options = ExecutionOptions::new(false, false);
+    let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+
     // Create a variable and a constant
-    execute_line("VARIABLE COUNTER", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
+    execute_line("VARIABLE COUNTER", &mut ctx, config, options, &mut HashSet::new())
         .unwrap();
-    execute_line("42 CONSTANT ANSWER", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
+    execute_line("42 CONSTANT ANSWER", &mut ctx, config, options, &mut HashSet::new())
         .unwrap();
 
     // Use them together
-    execute_line("ANSWER COUNTER !", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
+    execute_line("ANSWER COUNTER !", &mut ctx, config, options, &mut HashSet::new())
         .unwrap();
-    execute_line("COUNTER @", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
+    execute_line("COUNTER @", &mut ctx, config, options, &mut HashSet::new())
         .unwrap();
     assert_eq!(stack.pop(&mut memory), Some(42));
 }
@@ -174,18 +214,29 @@ fn test_here_after_variables() {
     let mut return_stack = ReturnStack::new();
     let mut memory = Memory::new();
 
-    // Get initial HERE
-    execute_line("HERE", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
-        .unwrap();
-    let initial = stack.pop(&mut memory).unwrap();
+    let config = CompilerConfig::new(false, false, false);
+    let options = ExecutionOptions::new(false, false);
 
-    // Create a variable (allocates 8 bytes)
-    execute_line("VARIABLE X", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
-        .unwrap();
+    let initial = {
+        let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
 
-    // HERE should be 8 bytes higher
-    execute_line("HERE", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
-        .unwrap();
+        // Get initial HERE
+        execute_line("HERE", &mut ctx, config, options, &mut HashSet::new())
+            .unwrap();
+        stack.pop(&mut memory).unwrap()
+    };
+
+    {
+        let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+
+        // Create a variable (allocates 8 bytes)
+        execute_line("VARIABLE X", &mut ctx, config, options, &mut HashSet::new())
+            .unwrap();
+
+        // HERE should be 8 bytes higher
+        execute_line("HERE", &mut ctx, config, options, &mut HashSet::new())
+            .unwrap();
+    }
     assert_eq!(stack.pop(&mut memory), Some(initial + 8));
 }
 
@@ -234,12 +285,16 @@ fn test_create_basic() {
     let mut return_stack = ReturnStack::new();
     let mut memory = Memory::new();
 
+    let config = CompilerConfig::new(false, false, false);
+    let options = ExecutionOptions::new(false, false);
+    let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+
     // CREATE BUFFER should create a word that pushes an address
-    execute_line("CREATE BUFFER", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
+    execute_line("CREATE BUFFER", &mut ctx, config, options, &mut HashSet::new())
         .unwrap();
 
     // BUFFER should push its address
-    execute_line("BUFFER", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
+    execute_line("BUFFER", &mut ctx, config, options, &mut HashSet::new())
         .unwrap();
     let addr = stack.pop(&mut memory).unwrap();
     assert_eq!(addr, 131072); // Initial HERE
@@ -253,25 +308,40 @@ fn test_create_with_allot() {
     let mut return_stack = ReturnStack::new();
     let mut memory = Memory::new();
 
-    // CREATE BUFFER 100 ALLOT
-    execute_line("CREATE BUFFER 100 ALLOT", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
-        .unwrap();
+    let config = CompilerConfig::new(false, false, false);
+    let options = ExecutionOptions::new(false, false);
 
-    // BUFFER should push its address
-    execute_line("BUFFER", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
-        .unwrap();
-    let buffer_addr = stack.pop(&mut memory).unwrap();
+    let buffer_addr = {
+        let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
 
-    // Store and fetch from the buffer
-    execute_line("42 BUFFER !", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
-        .unwrap();
-    execute_line("BUFFER @", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
-        .unwrap();
+        // CREATE BUFFER 100 ALLOT
+        execute_line("CREATE BUFFER 100 ALLOT", &mut ctx, config, options, &mut HashSet::new())
+            .unwrap();
+
+        // BUFFER should push its address
+        execute_line("BUFFER", &mut ctx, config, options, &mut HashSet::new())
+            .unwrap();
+        stack.pop(&mut memory).unwrap()
+    };
+
+    {
+        let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+
+        // Store and fetch from the buffer
+        execute_line("42 BUFFER !", &mut ctx, config, options, &mut HashSet::new())
+            .unwrap();
+        execute_line("BUFFER @", &mut ctx, config, options, &mut HashSet::new())
+            .unwrap();
+    }
     assert_eq!(stack.pop(&mut memory), Some(42));
 
-    // HERE should be 100 bytes past BUFFER
-    execute_line("HERE", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
-        .unwrap();
+    {
+        let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+
+        // HERE should be 100 bytes past BUFFER
+        execute_line("HERE", &mut ctx, config, options, &mut HashSet::new())
+            .unwrap();
+    }
     assert_eq!(stack.pop(&mut memory), Some(buffer_addr + 100));
 }
 
@@ -283,37 +353,54 @@ fn test_create_multiple_buffers() {
     let mut return_stack = ReturnStack::new();
     let mut memory = Memory::new();
 
-    // Create two buffers
-    execute_line("CREATE BUF1 20 ALLOT", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
-        .unwrap();
-    execute_line("CREATE BUF2 30 ALLOT", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
-        .unwrap();
+    let config = CompilerConfig::new(false, false, false);
+    let options = ExecutionOptions::new(false, false);
 
-    // Get their addresses
-    execute_line("BUF1", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
-        .unwrap();
-    let buf1_addr = stack.pop(&mut memory).unwrap();
+    let buf1_addr = {
+        let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
 
-    execute_line("BUF2", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
-        .unwrap();
-    let buf2_addr = stack.pop(&mut memory).unwrap();
+        // Create two buffers
+        execute_line("CREATE BUF1 20 ALLOT", &mut ctx, config, options, &mut HashSet::new())
+            .unwrap();
+        execute_line("CREATE BUF2 30 ALLOT", &mut ctx, config, options, &mut HashSet::new())
+            .unwrap();
+
+        // Get their addresses
+        execute_line("BUF1", &mut ctx, config, options, &mut HashSet::new())
+            .unwrap();
+        stack.pop(&mut memory).unwrap()
+    };
+
+    let buf2_addr = {
+        let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+        execute_line("BUF2", &mut ctx, config, options, &mut HashSet::new())
+            .unwrap();
+        stack.pop(&mut memory).unwrap()
+    };
 
     // BUF2 should be 20 bytes after BUF1
     assert_eq!(buf2_addr, buf1_addr + 20);
 
-    // Store different values
-    execute_line("100 BUF1 !", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
-        .unwrap();
-    execute_line("200 BUF2 !", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
-        .unwrap();
+    {
+        let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
 
-    // Fetch and verify
-    execute_line("BUF1 @", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
-        .unwrap();
+        // Store different values
+        execute_line("100 BUF1 !", &mut ctx, config, options, &mut HashSet::new())
+            .unwrap();
+        execute_line("200 BUF2 !", &mut ctx, config, options, &mut HashSet::new())
+            .unwrap();
+
+        // Fetch and verify
+        execute_line("BUF1 @", &mut ctx, config, options, &mut HashSet::new())
+            .unwrap();
+    }
     assert_eq!(stack.pop(&mut memory), Some(100));
 
-    execute_line("BUF2 @", &mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, false, &mut HashSet::new())
-        .unwrap();
+    {
+        let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+        execute_line("BUF2 @", &mut ctx, config, options, &mut HashSet::new())
+            .unwrap();
+    }
     assert_eq!(stack.pop(&mut memory), Some(200));
 }
 

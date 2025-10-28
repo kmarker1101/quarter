@@ -170,8 +170,7 @@ fn test_parse_empty_tokens() {
     assert!(result.is_ok());
 
     // Empty tokens should result in an empty sequence
-    match result.unwrap() {
-        AstNode::Sequence(nodes) => assert_eq!(nodes.len(), 0),
-        _ => {}
+    if let AstNode::Sequence(nodes) = result.unwrap() {
+        assert_eq!(nodes.len(), 0);
     }
 }

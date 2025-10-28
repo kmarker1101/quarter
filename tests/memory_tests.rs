@@ -116,7 +116,7 @@ fn test_c_store_fetch_multiple_bytes() {
     let mut memory = Memory::new();
 
     // Store "Hello" as bytes
-    let hello_bytes = vec![72, 101, 108, 108, 111]; // "Hello"
+    let hello_bytes = [72, 101, 108, 108, 111]; // "Hello"
     for (i, byte) in hello_bytes.iter().enumerate() {
         stack.push(*byte, &mut memory);
         stack.push(0x020000 + i as i64, &mut memory);

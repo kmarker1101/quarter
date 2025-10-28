@@ -6,7 +6,7 @@ use rustyline::error::ReadlineError;
 
 // Thread-local rustyline editor for REPL primitives
 thread_local! {
-    static READLINE_EDITOR: RefCell<Option<DefaultEditor>> = RefCell::new(None);
+    static READLINE_EDITOR: RefCell<Option<DefaultEditor>> = const { RefCell::new(None) };
 }
 
 // Built-in word definitions
@@ -1069,6 +1069,11 @@ unsafe fn check_sp_write(sp_val: usize, bytes_to_add: usize) -> bool {
 /// Takes two values from stack, applies operation, pushes result
 macro_rules! binary_op {
     ($name:ident, $op:expr) => {
+        /// # Safety
+        /// The caller must ensure:
+        /// - `memory` points to a valid memory buffer of at least 8MB
+        /// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
+        /// - The data stack contains at least 2 values (16 bytes)
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $name(
             memory: *mut u8,
@@ -1103,6 +1108,11 @@ macro_rules! binary_op {
 /// Takes one value from stack, applies operation, pushes result
 macro_rules! unary_op {
     ($name:ident, $op:expr) => {
+        /// # Safety
+        /// The caller must ensure:
+        /// - `memory` points to a valid memory buffer of at least 8MB
+        /// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
+        /// - The data stack contains at least 1 value (8 bytes)
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $name(
             memory: *mut u8,
@@ -1132,6 +1142,11 @@ macro_rules! unary_op {
 /// Takes two values from stack, applies operation returning tuple, pushes both results
 macro_rules! two_result_binary_op {
     ($name:ident, $op:expr) => {
+        /// # Safety
+        /// The caller must ensure:
+        /// - `memory` points to a valid memory buffer of at least 8MB
+        /// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
+        /// - The data stack contains at least 2 values (16 bytes)
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $name(
             memory: *mut u8,
@@ -1169,6 +1184,11 @@ macro_rules! two_result_binary_op {
 /// Used for SP@, RP@, etc.
 macro_rules! pointer_fetch {
     ($name:ident, $pointer:ident) => {
+        /// # Safety
+        /// The caller must ensure:
+        /// - `memory` points to a valid memory buffer of at least 8MB
+        /// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
+        /// - `$pointer` points to a valid pointer value
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $name(
             memory: *mut u8,
@@ -1191,6 +1211,12 @@ macro_rules! pointer_fetch {
 /// Used for SP!, RP!, etc.
 macro_rules! pointer_store {
     ($name:ident, $pointer:ident, $update_sp:expr) => {
+        /// # Safety
+        /// The caller must ensure:
+        /// - `memory` points to a valid memory buffer of at least 8MB
+        /// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
+        /// - `$pointer` points to a valid pointer that can be written to
+        /// - The data stack contains at least 1 value (8 bytes)
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $name(
             memory: *mut u8,
@@ -1214,6 +1240,11 @@ macro_rules! pointer_store {
     };
 }
 
+/// # Safety
+/// The caller must ensure:
+/// - `memory` points to a valid memory buffer of at least 8MB
+/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
+/// - The data stack contains at least 1 value (8 bytes)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_dup(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
@@ -1235,6 +1266,11 @@ pub unsafe extern "C" fn quarter_dup(memory: *mut u8, sp: *mut usize, _rp: *mut 
     }
 }
 
+/// # Safety
+/// The caller must ensure:
+/// - `memory` points to a valid memory buffer of at least 8MB
+/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
+/// - The data stack contains at least 1 value (8 bytes)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_drop(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
@@ -1251,6 +1287,11 @@ pub unsafe extern "C" fn quarter_drop(memory: *mut u8, sp: *mut usize, _rp: *mut
     }
 }
 
+/// # Safety
+/// The caller must ensure:
+/// - `memory` points to a valid memory buffer of at least 8MB
+/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
+/// - The data stack contains at least 2 values (16 bytes)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_swap(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
@@ -1286,6 +1327,12 @@ binary_op!(quarter_not_equal, |a, b| if a != b { -1 } else { 0 });
 binary_op!(quarter_less_equal, |a, b| if a <= b { -1 } else { 0 });
 
 /// JIT-callable less than (alias for quarter_less_than): ( a b -- flag )
+/// # Safety
+/// The caller must ensure:
+/// - `memory` points to a valid memory buffer of at least 8MB
+/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
+/// - `rp` points to a valid return stack pointer
+/// - The data stack contains at least 2 values (16 bytes)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_lt(memory: *mut u8, sp: *mut usize, rp: *mut usize) {
     unsafe {
@@ -1315,6 +1362,11 @@ unary_op!(quarter_2slash, |a: i64| a / 2);
 
 /// JIT-callable store: ( n addr -- )
 /// Stores n at address addr (8-byte cell)
+/// # Safety
+/// The caller must ensure:
+/// - `memory` points to a valid memory buffer of at least 8MB
+/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
+/// - The data stack contains at least 2 values (16 bytes)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_store(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
@@ -1341,6 +1393,11 @@ pub unsafe extern "C" fn quarter_store(memory: *mut u8, sp: *mut usize, _rp: *mu
 
 /// JIT-callable fetch: ( addr -- n )
 /// Fetches 8-byte cell from address addr
+/// # Safety
+/// The caller must ensure:
+/// - `memory` points to a valid memory buffer of at least 8MB
+/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
+/// - The data stack contains at least 1 value (8 bytes)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_fetch(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
@@ -1365,6 +1422,11 @@ pub unsafe extern "C" fn quarter_fetch(memory: *mut u8, sp: *mut usize, _rp: *mu
 
 /// JIT-callable c-store: ( c addr -- )
 /// Stores byte c at address addr
+/// # Safety
+/// The caller must ensure:
+/// - `memory` points to a valid memory buffer of at least 8MB
+/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
+/// - The data stack contains at least 2 values (16 bytes)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_c_store(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
@@ -1391,6 +1453,11 @@ pub unsafe extern "C" fn quarter_c_store(memory: *mut u8, sp: *mut usize, _rp: *
 
 /// JIT-callable c-fetch: ( addr -- c )
 /// Fetches byte from address addr
+/// # Safety
+/// The caller must ensure:
+/// - `memory` points to a valid memory buffer of at least 8MB
+/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
+/// - The data stack contains at least 1 value (8 bytes)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_c_fetch(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
@@ -1430,6 +1497,12 @@ unary_op!(quarter_invert, |a: i64| !a);
 
 /// JIT-callable >R: ( n -- ) (R: -- n)
 /// Moves value from data stack to return stack
+/// # Safety
+/// The caller must ensure:
+/// - `memory` points to a valid memory buffer of at least 8MB
+/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
+/// - `rp` points to a valid return stack pointer within return stack bounds
+/// - The data stack contains at least 1 value (8 bytes)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_to_r(memory: *mut u8, sp: *mut usize, rp: *mut usize) {
     unsafe {
@@ -1459,6 +1532,12 @@ pub unsafe extern "C" fn quarter_to_r(memory: *mut u8, sp: *mut usize, rp: *mut 
 
 /// JIT-callable R>: ( -- n ) (R: n -- )
 /// Moves value from return stack to data stack
+/// # Safety
+/// The caller must ensure:
+/// - `memory` points to a valid memory buffer of at least 8MB
+/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
+/// - `rp` points to a valid return stack pointer within return stack bounds
+/// - The return stack contains at least 1 value (8 bytes)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_r_from(memory: *mut u8, sp: *mut usize, rp: *mut usize) {
     unsafe {
@@ -1489,6 +1568,12 @@ pub unsafe extern "C" fn quarter_r_from(memory: *mut u8, sp: *mut usize, rp: *mu
 
 /// JIT-callable R@: ( -- n ) (R: n -- n)
 /// Copies top of return stack to data stack
+/// # Safety
+/// The caller must ensure:
+/// - `memory` points to a valid memory buffer of at least 8MB
+/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
+/// - `rp` points to a valid return stack pointer within return stack bounds
+/// - The return stack contains at least 1 value (8 bytes)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_r_fetch(memory: *mut u8, sp: *mut usize, rp: *mut usize) {
     unsafe {
@@ -1522,6 +1607,11 @@ pub unsafe extern "C" fn quarter_r_fetch(memory: *mut u8, sp: *mut usize, rp: *m
 
 /// JIT-callable over: ( a b -- a b a )
 /// Copies second stack item to top
+/// # Safety
+/// The caller must ensure:
+/// - `memory` points to a valid memory buffer of at least 8MB
+/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
+/// - The data stack contains at least 2 values (16 bytes)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_over(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
@@ -1540,6 +1630,11 @@ pub unsafe extern "C" fn quarter_over(memory: *mut u8, sp: *mut usize, _rp: *mut
 
 /// JIT-callable rot: ( a b c -- b c a )
 /// Rotates top three stack items
+/// # Safety
+/// The caller must ensure:
+/// - `memory` points to a valid memory buffer of at least 8MB
+/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
+/// - The data stack contains at least 3 values (24 bytes)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_rot(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
@@ -1563,6 +1658,11 @@ pub unsafe extern "C" fn quarter_rot(memory: *mut u8, sp: *mut usize, _rp: *mut 
 
 /// JIT-callable pick: ( ... n -- ... xn )
 /// Copies nth stack item to top (0=top)
+/// # Safety
+/// The caller must ensure:
+/// - `memory` points to a valid memory buffer of at least 8MB
+/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
+/// - The data stack contains at least (n+1) values
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_pick(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
@@ -1588,6 +1688,10 @@ pub unsafe extern "C" fn quarter_pick(memory: *mut u8, sp: *mut usize, _rp: *mut
 
 /// JIT-callable depth: ( -- n )
 /// Returns number of items on stack
+/// # Safety
+/// The caller must ensure:
+/// - `memory` points to a valid memory buffer of at least 8MB
+/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_depth(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
@@ -1618,6 +1722,10 @@ two_result_binary_op!(quarter_slash_mod, |a, b| {
 
 /// JIT-callable i: ( -- n ) (L: index limit -- index limit)
 /// Returns current loop index
+/// # Safety
+/// The caller must ensure:
+/// - `memory` points to a valid memory buffer of at least 8MB
+/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_i(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     // Note: This needs loop stack access which isn't passed to JIT functions
@@ -1632,6 +1740,10 @@ pub unsafe extern "C" fn quarter_i(memory: *mut u8, sp: *mut usize, _rp: *mut us
 
 /// JIT-callable j: ( -- n ) (L: ... outer_index outer_limit ... -- ...)
 /// Returns outer loop index
+/// # Safety
+/// The caller must ensure:
+/// - `memory` points to a valid memory buffer of at least 8MB
+/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_j(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     // Note: Same issue as quarter_i - needs loop stack access
@@ -1649,6 +1761,11 @@ pub unsafe extern "C" fn quarter_j(memory: *mut u8, sp: *mut usize, _rp: *mut us
 
 /// JIT-callable emit: ( c -- )
 /// Outputs character
+/// # Safety
+/// The caller must ensure:
+/// - `memory` points to a valid memory buffer of at least 8MB
+/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
+/// - The data stack contains at least 1 value (8 bytes)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_emit(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
@@ -1667,6 +1784,9 @@ pub unsafe extern "C" fn quarter_emit(memory: *mut u8, sp: *mut usize, _rp: *mut
 
 /// JIT-callable space: ( -- )
 /// Outputs a space character
+/// # Safety
+/// The caller must ensure:
+/// - All pointers are valid (though this function doesn't use them)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_space(_memory: *mut u8, _sp: *mut usize, _rp: *mut usize) {
     print!(" ");
@@ -1674,6 +1794,10 @@ pub unsafe extern "C" fn quarter_space(_memory: *mut u8, _sp: *mut usize, _rp: *
 
 /// JIT-callable key: ( -- c )
 /// Reads character (placeholder - needs proper I/O handling)
+/// # Safety
+/// The caller must ensure:
+/// - `memory` points to a valid memory buffer of at least 8MB
+/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_key(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
@@ -1686,14 +1810,22 @@ pub unsafe extern "C" fn quarter_key(memory: *mut u8, sp: *mut usize, _rp: *mut 
 
 /// JIT-callable cr: ( -- )
 /// Outputs newline
+/// # Safety
+/// The caller must ensure:
+/// - All pointers are valid (though this function doesn't use them)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_cr(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    print!("\n");
+    println!();
     let _ = (memory, sp, _rp);  // Suppress warnings
 }
 
 /// JIT-callable dot: ( n -- )
 /// Prints number
+/// # Safety
+/// The caller must ensure:
+/// - `memory` points to a valid memory buffer of at least 8MB
+/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
+/// - The data stack contains at least 1 value (8 bytes)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_dot(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
@@ -1710,6 +1842,11 @@ pub unsafe extern "C" fn quarter_dot(memory: *mut u8, sp: *mut usize, _rp: *mut 
 
 /// JIT-callable u_dot: ( u -- )
 /// Prints unsigned number
+/// # Safety
+/// The caller must ensure:
+/// - `memory` points to a valid memory buffer of at least 8MB
+/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
+/// - The data stack contains at least 1 value (8 bytes)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_u_dot(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
@@ -1727,6 +1864,11 @@ pub unsafe extern "C" fn quarter_u_dot(memory: *mut u8, sp: *mut usize, _rp: *mu
 
 /// JIT-callable dot_r: ( n width -- )
 /// Prints number right-justified in field of width
+/// # Safety
+/// The caller must ensure:
+/// - `memory` points to a valid memory buffer of at least 8MB
+/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
+/// - The data stack contains at least 2 values (16 bytes)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_dot_r(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
@@ -1751,6 +1893,11 @@ pub unsafe extern "C" fn quarter_dot_r(memory: *mut u8, sp: *mut usize, _rp: *mu
 
 /// JIT-callable u_dot_r: ( u width -- )
 /// Prints unsigned number right-justified in field of width
+/// # Safety
+/// The caller must ensure:
+/// - `memory` points to a valid memory buffer of at least 8MB
+/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
+/// - The data stack contains at least 2 values (16 bytes)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_u_dot_r(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
@@ -1776,6 +1923,11 @@ pub unsafe extern "C" fn quarter_u_dot_r(memory: *mut u8, sp: *mut usize, _rp: *
 
 /// JIT-callable type: ( addr len -- )
 /// Prints string from memory
+/// # Safety
+/// The caller must ensure:
+/// - `memory` points to a valid memory buffer of at least 8MB
+/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
+/// - The data stack contains at least 2 values (16 bytes)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_type(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
@@ -1825,6 +1977,10 @@ pointer_store!(quarter_rp_store, rp, true);   // RP! needs to pop from data stac
 
 /// JIT-callable here: ( -- addr )
 /// Push current dictionary pointer
+/// # Safety
+/// The caller must ensure:
+/// - `memory` points to a valid memory buffer of at least 8MB
+/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_here(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
@@ -1843,6 +1999,11 @@ pub unsafe extern "C" fn quarter_here(memory: *mut u8, sp: *mut usize, _rp: *mut
 
 /// JIT-callable allot: ( n -- )
 /// Allocate n bytes in dictionary space
+/// # Safety
+/// The caller must ensure:
+/// - `memory` points to a valid memory buffer of at least 8MB
+/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
+/// - The data stack contains at least 1 value (8 bytes)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_allot(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
@@ -1877,6 +2038,11 @@ pub unsafe extern "C" fn quarter_allot(memory: *mut u8, sp: *mut usize, _rp: *mu
 
 /// JIT-callable comma: ( n -- )
 /// Store n at HERE and advance dictionary pointer by 8 bytes
+/// # Safety
+/// The caller must ensure:
+/// - `memory` points to a valid memory buffer of at least 8MB
+/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
+/// - The data stack contains at least 1 value (8 bytes)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_comma(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
@@ -3253,22 +3419,24 @@ pub fn evaluate_word(
                     Some((dict_ptr, loop_stack_ptr, return_stack_ptr, _memory_ptr, included_files_ptr)) => {
                         // Get config flags
                         let (no_jit, dump_ir, verify_ir) = crate::get_reentrant_config();
+                        let config = crate::CompilerConfig::new(no_jit, dump_ir, verify_ir);
+                        let options = crate::ExecutionOptions::new(false, false);
 
                         // SAFETY: Using raw pointers from execution context
                         // These are valid for the lifetime of the execution context
                         unsafe {
-                            match crate::execute_line(
-                                &code,
+                            let mut ctx = crate::RuntimeContext::new(
                                 stack,
                                 &mut *dict_ptr,
                                 &mut *loop_stack_ptr,
                                 &mut *return_stack_ptr,
                                 memory,
-                                no_jit,
-                                dump_ir,
-                                verify_ir,
-                                false,  // use_forth_compiler
-                                false,  // define_only
+                            );
+                            match crate::execute_line(
+                                &code,
+                                &mut ctx,
+                                config,
+                                options,
                                 &mut *included_files_ptr,
                             ) {
                                 Ok(()) => {

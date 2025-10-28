@@ -863,7 +863,7 @@ impl LLVMRegistry {
             .map_err(|e| format!("Failed to build select: {}", e))?;
 
         let handle = self.next_handle();
-        self.values.insert(handle, result.into());
+        self.values.insert(handle, result);
         Ok(handle)
     }
 

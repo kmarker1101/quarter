@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use quarter::{execute_line, Dictionary, LoopStack, Memory, ReturnStack, Stack};
+use quarter::{execute_line, Dictionary, LoopStack, Memory, ReturnStack, Stack, RuntimeContext, CompilerConfig, ExecutionOptions};
 
 #[test]
 fn test_s_quote_basic() {
@@ -9,19 +9,16 @@ fn test_s_quote_basic() {
     let mut return_stack = ReturnStack::new();
     let mut memory = Memory::new();
 
+    let config = CompilerConfig::new(false, false, false);
+    let options = ExecutionOptions::new(false, false);
+    let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+
     // Define a word that creates a string
     execute_line(
         ": TEST S\" Hello\" ;",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
+        &mut ctx,
+        config,
+        options,
         &mut HashSet::new(),
     )
     .unwrap();
@@ -29,16 +26,9 @@ fn test_s_quote_basic() {
     // Execute it
     execute_line(
         "TEST",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
+        &mut ctx,
+        config,
+        options,
         &mut HashSet::new(),
     )
     .unwrap();
@@ -59,35 +49,25 @@ fn test_s_quote_fetch_string() {
     let mut return_stack = ReturnStack::new();
     let mut memory = Memory::new();
 
+    let config = CompilerConfig::new(false, false, false);
+    let options = ExecutionOptions::new(false, false);
+    let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+
     // Create a string
     execute_line(
         ": TEST S\" Hi!\" ;",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
+        &mut ctx,
+        config,
+        options,
         &mut HashSet::new(),
     )
     .unwrap();
 
     execute_line(
         "TEST",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
+        &mut ctx,
+        config,
+        options,
         &mut HashSet::new(),
     )
     .unwrap();
@@ -110,75 +90,58 @@ fn test_s_quote_multiple_strings() {
     let mut return_stack = ReturnStack::new();
     let mut memory = Memory::new();
 
-    // Create two different strings
-    execute_line(
-        ": STR1 S\" First\" ;",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
-        &mut HashSet::new(),
-    )
-    .unwrap();
+    let config = CompilerConfig::new(false, false, false);
+    let options = ExecutionOptions::new(false, false);
 
-    execute_line(
-        ": STR2 S\" Second\" ;",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
-        &mut HashSet::new(),
-    )
-    .unwrap();
+    {
+        let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
 
-    // Get first string
-    execute_line(
-        "STR1",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
-        &mut HashSet::new(),
-    )
-    .unwrap();
+        // Create two different strings
+        execute_line(
+            ": STR1 S\" First\" ;",
+            &mut ctx,
+            config,
+            options,
+            &mut HashSet::new(),
+        )
+        .unwrap();
+
+        execute_line(
+            ": STR2 S\" Second\" ;",
+            &mut ctx,
+            config,
+            options,
+            &mut HashSet::new(),
+        )
+        .unwrap();
+
+        // Get first string
+        execute_line(
+            "STR1",
+            &mut ctx,
+            config,
+            options,
+            &mut HashSet::new(),
+        )
+        .unwrap();
+    }
 
     let len1 = stack.pop(&mut memory).unwrap();
     let addr1 = stack.pop(&mut memory).unwrap();
 
-    // Get second string
-    execute_line(
-        "STR2",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
-        &mut HashSet::new(),
-    )
-    .unwrap();
+    {
+        let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+
+        // Get second string
+        execute_line(
+            "STR2",
+            &mut ctx,
+            config,
+            options,
+            &mut HashSet::new(),
+        )
+        .unwrap();
+    }
 
     let len2 = stack.pop(&mut memory).unwrap();
     let addr2 = stack.pop(&mut memory).unwrap();
@@ -197,34 +160,24 @@ fn test_s_quote_empty_string() {
     let mut return_stack = ReturnStack::new();
     let mut memory = Memory::new();
 
+    let config = CompilerConfig::new(false, false, false);
+    let options = ExecutionOptions::new(false, false);
+    let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+
     execute_line(
         ": EMPTY S\" \" ;",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
+        &mut ctx,
+        config,
+        options,
         &mut HashSet::new(),
     )
     .unwrap();
 
     execute_line(
         "EMPTY",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
+        &mut ctx,
+        config,
+        options,
         &mut HashSet::new(),
     )
     .unwrap();
@@ -243,34 +196,24 @@ fn test_s_quote_with_spaces() {
     let mut return_stack = ReturnStack::new();
     let mut memory = Memory::new();
 
+    let config = CompilerConfig::new(false, false, false);
+    let options = ExecutionOptions::new(false, false);
+    let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+
     execute_line(
         ": PHRASE S\" Hello World\" ;",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
+        &mut ctx,
+        config,
+        options,
         &mut HashSet::new(),
     )
     .unwrap();
 
     execute_line(
         "PHRASE",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
+        &mut ctx,
+        config,
+        options,
         &mut HashSet::new(),
     )
     .unwrap();
@@ -292,45 +235,42 @@ fn test_s_quote_advances_here() {
     let mut return_stack = ReturnStack::new();
     let mut memory = Memory::new();
 
+    let config = CompilerConfig::new(false, false, false);
+    let options = ExecutionOptions::new(false, false);
+
     // Get initial HERE
     let initial_here = memory.here();
 
-    // Create a 10-character string
-    execute_line(
-        ": TEN S\" 1234567890\" ;",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
-        &mut HashSet::new(),
-    )
-    .unwrap();
+    {
+        let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+
+        // Create a 10-character string
+        execute_line(
+            ": TEN S\" 1234567890\" ;",
+            &mut ctx,
+            config,
+            options,
+            &mut HashSet::new(),
+        )
+        .unwrap();
+    }
 
     // HERE should still be at initial (string not yet allocated)
     assert_eq!(memory.here(), initial_here);
 
-    // Execute the word (allocates the string)
-    execute_line(
-        "TEN",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
-        &mut HashSet::new(),
-    )
-    .unwrap();
+    {
+        let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+
+        // Execute the word (allocates the string)
+        execute_line(
+            "TEN",
+            &mut ctx,
+            config,
+            options,
+            &mut HashSet::new(),
+        )
+        .unwrap();
+    }
 
     // HERE should have advanced by 10 bytes
     assert_eq!(memory.here(), initial_here + 10);
@@ -348,34 +288,24 @@ fn test_s_quote_with_special_chars() {
     let mut return_stack = ReturnStack::new();
     let mut memory = Memory::new();
 
+    let config = CompilerConfig::new(false, false, false);
+    let options = ExecutionOptions::new(false, false);
+    let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+
     execute_line(
         ": SPECIAL S\" !@#$%\" ;",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
+        &mut ctx,
+        config,
+        options,
         &mut HashSet::new(),
     )
     .unwrap();
 
     execute_line(
         "SPECIAL",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
+        &mut ctx,
+        config,
+        options,
         &mut HashSet::new(),
     )
     .unwrap();
