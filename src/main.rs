@@ -316,24 +316,84 @@ fn compile_to_executable(
         println!("Step 5: Linking...");
     }
 
-    // Use absolute paths to Homebrew libraries for better compatibility
-    let link_result = std::process::Command::new("cc")
-        .args([
-            &main_o_path,
-            &forth_obj_path,
-            "target/release/libquarter.a",
-            "-o",
-            output_file,
+    // Build portable linker command
+    let mut link_cmd = std::process::Command::new("cc");
+    link_cmd.args([
+        &main_o_path,
+        &forth_obj_path,
+        "target/release/libquarter.a",
+        "-o",
+        output_file,
+    ]);
+
+    // Platform-specific linker flags
+    #[cfg(target_os = "macos")]
+    {
+        // Add Homebrew library paths if they exist (both ARM and Intel)
+        let homebrew_paths = [
+            "/opt/homebrew/lib",      // Apple Silicon (M1/M2/M3)
+            "/usr/local/lib",          // Intel Mac
+            "/opt/homebrew/opt/libffi/lib",  // libffi specific path
+            "/opt/homebrew/opt/zlib/lib",    // zlib specific path
+        ];
+
+        for path in &homebrew_paths {
+            if std::path::Path::new(path).exists() {
+                link_cmd.arg(format!("-L{}", path));
+            }
+        }
+
+        link_cmd.args([
             "-lc++",    // LLVM requires C++ standard library
-            "/opt/homebrew/lib/libzstd.dylib",        // zstd (compression)
-            "/opt/homebrew/opt/libffi/lib/libffi.dylib", // libffi (foreign function interface)
-            "/opt/homebrew/opt/zlib/lib/libz.dylib",  // zlib (compression)
+            "-lzstd",   // zstd (compression) - let system linker find it
+            "-lffi",    // libffi (foreign function interface)
+            "-lz",      // zlib (compression)
             "-Wl,-U,_del_curterm",  // Allow undefined ncurses symbols
             "-Wl,-U,_set_curterm",
             "-Wl,-U,_setupterm",
             "-Wl,-U,_tigetnum",
-        ])
-        .output();
+        ]);
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // Add common Linux library paths if they exist
+        let linux_paths = [
+            "/usr/lib",
+            "/usr/local/lib",
+            "/usr/lib/x86_64-linux-gnu",    // Debian/Ubuntu x64
+            "/usr/lib/aarch64-linux-gnu",   // Debian/Ubuntu ARM64
+        ];
+
+        for path in &linux_paths {
+            if std::path::Path::new(path).exists() {
+                link_cmd.arg(format!("-L{}", path));
+            }
+        }
+
+        link_cmd.args([
+            "-lstdc++", // LLVM requires C++ standard library
+            "-lzstd",   // zstd (compression)
+            "-lffi",    // libffi (foreign function interface)
+            "-lz",      // zlib (compression)
+            "-ldl",     // Dynamic linking library
+            "-lpthread", // Threading library
+            "-lm",      // Math library
+        ]);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        link_cmd.args([
+            // Windows uses different library names and linking
+            "msvcrt.lib",
+            "zstd.lib",
+            "ffi.lib",
+            "zlib.lib",
+        ]);
+    }
+
+    let link_result = link_cmd.output();
 
     match link_result {
         Ok(output) => {
