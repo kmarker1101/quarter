@@ -29,6 +29,7 @@ pub enum AstNode {
     Execute,  // EXECUTE - takes xt from stack and executes the word
     InlineInstruction(String),  // INLINE directive - maps to LLVM instruction (e.g., "LLVM-ADD")
     TickLiteral(String),  // ['] - compile-only, stores word name, pushes xt at runtime
+    Find,  // FIND - searches dictionary for word name (c-addr -- c-addr 0 | xt 1 | xt -1)
 }
 
 impl AstNode {
@@ -47,6 +48,7 @@ impl AstNode {
             AstNode::Unloop => Ok(()),
             AstNode::Execute => Ok(()),  // Execute resolves word at runtime, no compile-time validation
             AstNode::InlineInstruction(_) => Ok(()),  // Inline instructions are validated at JIT time
+            AstNode::Find => Ok(()),  // Find searches dictionary at runtime, no compile-time validation
             AstNode::TickLiteral(name) => {
                 // ['] validates word exists at compile time
                 if dict.has_word(name) {
@@ -363,6 +365,50 @@ impl AstNode {
 
                 // Push xt (address of counted string) onto stack
                 stack.push(xt_addr, memory);
+                Ok(())
+            }
+            AstNode::Find => {
+                // FIND ( c-addr -- c-addr 0 | xt 1 | xt -1 )
+                // Search dictionary for word name given as counted string
+                let c_addr = stack.pop(memory).ok_or("Stack underflow for FIND")?;
+
+                // Read counted string
+                let len = memory.fetch_byte(c_addr as usize)? as usize;
+                let mut word_name = String::with_capacity(len);
+                for offset in 0..len {
+                    let byte = memory.fetch_byte(c_addr as usize + 1 + offset)? as u8;
+                    word_name.push(byte as char);
+                }
+
+                let word_name_upper = word_name.to_uppercase();
+
+                // Search for the word
+                if dict.has_word(&word_name_upper) {
+                    // Word found - create xt and push result
+                    let xt_addr = memory.here();
+                    let name_bytes = word_name_upper.as_bytes();
+
+                    // Store counted string at HERE
+                    memory.store_byte(xt_addr as usize, name_bytes.len() as i64)?;
+                    for (offset, &byte) in name_bytes.iter().enumerate() {
+                        memory.store_byte(xt_addr as usize + 1 + offset, byte as i64)?;
+                    }
+                    memory.allot((1 + name_bytes.len()) as i64)?;
+
+                    // Push xt
+                    stack.push(xt_addr, memory);
+
+                    // Push 1 if immediate, -1 if not
+                    if dict.is_immediate(&word_name_upper) {
+                        stack.push(1, memory);
+                    } else {
+                        stack.push(-1, memory);
+                    }
+                } else {
+                    // Word not found - push original c-addr and 0
+                    stack.push(c_addr, memory);
+                    stack.push(0, memory);
+                }
                 Ok(())
             }
         }

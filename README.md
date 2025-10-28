@@ -152,6 +152,8 @@ cargo test test_tco_interpreted
 
 **Memory Allocation**: `HERE`, `ALLOT`, `,`, `CELLS`, `CELL+`, `VARIABLE`, `CONSTANT`, `CREATE`
 
+**Memory Alignment**: `ALIGNED` (round address to cell boundary), `ALIGN` (advance HERE to aligned boundary), `FILL` (fill memory region with byte)
+
 **Stack Pointers**: `SP@`, `SP!`, `RP@`, `RP!`
 
 **Bitwise Logic**: `AND`, `OR`, `XOR`, `INVERT`, `LSHIFT`, `RSHIFT`
@@ -184,6 +186,8 @@ cargo test test_tco_interpreted
 - `CHAR` ( "name" -- char ) - Get ASCII value of first character of next word
 - `[CHAR]` ( "name" -- char ) - Compile-only version of CHAR
 - `COUNT` ( c-addr -- addr u ) - Convert counted string to address/length pair
+- `FIND` ( c-addr -- c-addr 0 | xt 1 | xt -1 ) - Search dictionary for word by counted string
+- `IMMEDIATE` ( -- ) - Mark most recently defined word as immediate
 
 **Comments**: `\` (line comment), `( )` (inline comment)
 

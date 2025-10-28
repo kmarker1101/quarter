@@ -679,6 +679,97 @@ S" Passing xt as parameter - APPLY-TWICE with SQUARE" TEST:
 T{ 4 ' SQUARE APPLY-TWICE -> 256 }T
 
 \ =============================================================================
+\ IMMEDIATE AND FIND TESTS
+\ =============================================================================
+
+\ Define a word and mark it as immediate
+: IMMED-TEST 99 ;
+IMMEDIATE
+
+S" FIND with non-immediate word DUP" TEST:
+\ Create counted string "DUP" at 500000
+3 500000 C!
+68 500001 C! 85 500002 C! 80 500003 C!
+T{ 500000 FIND SWAP DROP -> -1 }T
+
+S" FIND with immediate word" TEST:
+\ Create counted string "IMMED-TEST" at 500100
+10 500100 C!
+73 500101 C! 77 500102 C! 77 500103 C! 69 500104 C! 68 500105 C!
+45 500106 C! 84 500107 C! 69 500108 C! 83 500109 C! 84 500110 C!
+T{ 500100 FIND SWAP DROP -> 1 }T
+
+S" FIND with non-existent word" TEST:
+\ Create counted string "NOTFOUND" at 500200
+8 500200 C!
+78 500201 C! 79 500202 C! 84 500203 C! 70 500204 C!
+79 500205 C! 85 500206 C! 78 500207 C! 68 500208 C!
+T{ 500200 FIND -> 500200 0 }T
+
+S" IMMEDIATE marks last defined word" TEST:
+: TEST-IMM 123 ;
+IMMEDIATE
+8 500300 C!
+84 500301 C! 69 500302 C! 83 500303 C! 84 500304 C! 45 500305 C! 73 500306 C! 77 500307 C! 77 500308 C!
+T{ 500300 FIND SWAP DROP -> 1 }T
+
+\ =============================================================================
+\ ALIGNED, ALIGN, AND FILL TESTS
+\ =============================================================================
+
+S" ALIGNED with already aligned address" TEST:
+T{ 0 ALIGNED -> 0 }T
+T{ 8 ALIGNED -> 8 }T
+T{ 16 ALIGNED -> 16 }T
+T{ 800 ALIGNED -> 800 }T
+
+S" ALIGNED rounds up to next 8-byte boundary" TEST:
+T{ 1 ALIGNED -> 8 }T
+T{ 5 ALIGNED -> 8 }T
+T{ 7 ALIGNED -> 8 }T
+T{ 9 ALIGNED -> 16 }T
+T{ 15 ALIGNED -> 16 }T
+T{ 17 ALIGNED -> 24 }T
+
+S" ALIGN makes HERE aligned" TEST:
+1 ALLOT  \ Make HERE unaligned
+ALIGN
+T{ HERE 7 AND -> 0 }T  \ Bottom 3 bits should be 0
+
+S" FILL fills memory region with character" TEST:
+\ Fill 5 bytes at 600000 with character 65 ('A')
+600000 5 65 FILL
+T{ 600000 C@ -> 65 }T
+T{ 600001 C@ -> 65 }T
+T{ 600002 C@ -> 65 }T
+T{ 600003 C@ -> 65 }T
+T{ 600004 C@ -> 65 }T
+
+S" FILL with different character" TEST:
+\ Fill 3 bytes at 600100 with character 88 ('X')
+600100 3 88 FILL
+T{ 600100 C@ -> 88 }T
+T{ 600101 C@ -> 88 }T
+T{ 600102 C@ -> 88 }T
+
+S" FILL with zero bytes does nothing" TEST:
+\ Store a value, then FILL 0 bytes shouldn't change it
+99 600200 C!
+600200 0 65 FILL
+T{ 600200 C@ -> 99 }T
+
+S" FILL overwrites existing data" TEST:
+\ Store some values
+10 600300 C!
+20 600301 C!
+30 600302 C!
+\ Fill with 42
+600300 3 42 FILL
+T{ 600300 C@ -> 42 }T
+T{ 600301 C@ -> 42 }T
+T{ 600302 C@ -> 42 }T
+
+\ =============================================================================
 \ REPORT
 \ =============================================================================
 

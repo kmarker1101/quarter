@@ -1279,6 +1279,11 @@ pub fn execute_line(
             let ch = word.chars().next().unwrap();
             ctx.stack.push(ch as i64, ctx.memory);
             i += 2;
+        } else if token_upper == "IMMEDIATE" {
+            // IMMEDIATE ( -- )
+            // Mark the most recently defined word as immediate
+            ctx.dict.mark_immediate();
+            i += 1;
         } else if token_upper == "INCLUDED" {
             // INCLUDED ( addr len -- )
             // Takes filename from stack and loads the file

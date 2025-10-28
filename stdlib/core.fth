@@ -87,3 +87,23 @@
 \ Convert counted string to address/length pair
 \ A counted string has its length in the first byte
 : COUNT DUP 1+ SWAP C@ ;
+
+\ =============================================================================
+\ MEMORY ALIGNMENT
+\ =============================================================================
+
+\ ALIGNED ( addr -- a-addr )
+\ Round up address to cell boundary
+: ALIGNED DUP 7 AND IF 8 + -8 AND THEN ;
+
+\ ALIGN ( -- )
+\ Advance HERE to aligned boundary
+: ALIGN HERE ALIGNED HERE - ALLOT ;
+
+\ =============================================================================
+\ MEMORY FILL
+\ =============================================================================
+\ FILL ( c-addr u char -- )
+\ Fill memory region with character
+: FILL -ROT 0 DO 2DUP I + C! LOOP 2DROP ;
+

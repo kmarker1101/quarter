@@ -28,6 +28,8 @@ pub enum Word {
 pub struct Dictionary {
     words: HashMap<String, Word>,
     frozen_words: HashSet<String>,
+    immediate_words: HashSet<String>,
+    last_defined_word: Option<String>,
 }
 
 impl Default for Dictionary {
@@ -41,6 +43,8 @@ impl Dictionary {
         let mut dict = Dictionary {
             words: HashMap::new(),
             frozen_words: HashSet::new(),
+            immediate_words: HashSet::new(),
+            last_defined_word: None,
         };
 
         // Register all built-in primitive words using macro
@@ -205,6 +209,9 @@ impl Dictionary {
         // Add EXECUTE as a compiled word that takes xt from stack and executes it
         dict.add_compiled("EXECUTE".to_string(), AstNode::Execute);
 
+        // Add FIND as a compiled word that searches dictionary
+        dict.add_compiled("FIND".to_string(), AstNode::Find);
+
         dict
     }
 
@@ -217,10 +224,12 @@ impl Dictionary {
     }
 
     pub fn add_compiled(&mut self, name: String, ast: AstNode) {
+        self.last_defined_word = Some(name.clone());
         self.words.insert(name, Word::Compiled(ast));
     }
 
     pub fn add_jit_compiled(&mut self, name: String, func: JITFunction) {
+        self.last_defined_word = Some(name.clone());
         self.words.insert(name, Word::JITCompiled(func));
     }
 
@@ -246,6 +255,23 @@ impl Dictionary {
     /// Check if a word is frozen (cannot be re-defined)
     pub fn is_frozen(&self, name: &str) -> bool {
         self.frozen_words.contains(&name.to_uppercase())
+    }
+
+    /// Mark the most recently defined word as immediate
+    pub fn mark_immediate(&mut self) {
+        if let Some(ref word_name) = self.last_defined_word {
+            self.immediate_words.insert(word_name.to_uppercase());
+        }
+    }
+
+    /// Check if a word is immediate (executes during compilation)
+    pub fn is_immediate(&self, name: &str) -> bool {
+        self.immediate_words.contains(&name.to_uppercase())
+    }
+
+    /// Get the last defined word name
+    pub fn get_last_defined_word(&self) -> Option<&String> {
+        self.last_defined_word.as_ref()
     }
 
     /// Check if an AST node is a tail-recursive call to the given word
