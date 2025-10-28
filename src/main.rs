@@ -190,14 +190,14 @@ fn compile_to_executable(
         println!("  Debug symbols: {}", if debug_symbols { "yes" } else { "no" });
     }
 
-    // Step 1: Ensure runtime library is built
+    // Step 1: Build runtime library (Rust staticlib)
     if verbose {
         println!("Step 1: Building runtime library...");
     }
-    let runtime_result = std::process::Command::new("make")
-        .current_dir("runtime")
+    let runtime_result = std::process::Command::new("cargo")
+        .args(&["build", "--lib", "--release"])
         .output()
-        .map_err(|e| format!("Failed to run make: {}", e));
+        .map_err(|e| format!("Failed to run cargo: {}", e));
 
     match runtime_result {
         Ok(output) => {
@@ -281,18 +281,20 @@ fn compile_to_executable(
 
     eprintln!();
     eprintln!("Partial success:");
-    eprintln!("  ✓ Runtime library built (runtime/runtime.o)");
+    eprintln!("  ✓ Runtime library built (target/release/libquarter.a - Rust staticlib)");
     eprintln!("  ✓ Main wrapper generated ({})", main_c_path);
     eprintln!("  ✓ Main wrapper compiled ({})", main_o_path);
     eprintln!();
     eprintln!("Still needed:");
     eprintln!("  ✗ Compile Forth source to forth_code.o");
-    eprintln!("  ✗ Link: cc {} forth_code.o runtime/runtime.o -o {}", main_o_path, output_file);
+    eprintln!("  ✗ Link: cc {} forth_code.o target/release/libquarter.a -o {}", main_o_path, output_file);
     eprintln!();
     eprintln!("Next steps:");
     eprintln!("  1. Create FINALIZE-AOT word in stdlib/compiler.fth");
     eprintln!("  2. Create compile_forth_to_object() function in src/lib.rs");
     eprintln!("  3. Wire up linking in this function");
+    eprintln!();
+    eprintln!("Note: Using Rust runtime (not C) - all quarter_* functions from src/words.rs");
 
     std::process::exit(1);
 }

@@ -3,6 +3,11 @@ name = "quarter"
 version = "0.2.0"
 edition = "2024"
 
+[lib]
+name = "quarter"
+path = "src/lib.rs"
+crate-type = ["lib", "staticlib"]
+
 [dependencies]
 rustyline = "14.0"
 inkwell = { version = "0.6.0", features = ["llvm18-1"] }
