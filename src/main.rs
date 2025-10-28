@@ -2,6 +2,9 @@ use quarter::{Dictionary, LoopStack, Stack, load_file, load_stdlib, CompilerConf
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+/// Version number from Cargo.toml
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 /// Track whether the Forth compiler has been loaded
 #[allow(dead_code)]
 static FORTH_COMPILER_LOADED: AtomicBool = AtomicBool::new(false);
@@ -183,11 +186,25 @@ fn compile_to_executable(
     opt_level: u8,
     debug_symbols: bool,
     verbose: bool,
+    keep_temps: bool,
 ) {
+    use std::fs;
+
     if verbose {
         println!("Compiling {} to {}...", source_file, output_file);
         println!("  Optimization level: {}", opt_level);
         println!("  Debug symbols: {}", if debug_symbols { "yes" } else { "no" });
+    }
+
+    // Create temp directory for build artifacts
+    let temp_dir = std::env::temp_dir().join(format!("quarter_build_{}", std::process::id()));
+    if let Err(e) = fs::create_dir_all(&temp_dir) {
+        eprintln!("Failed to create temp directory: {}", e);
+        std::process::exit(1);
+    }
+
+    if verbose {
+        println!("Build directory: {}", temp_dir.display());
     }
 
     // Step 1: Build minimal runtime library (compile runtime.rs to object file)
@@ -195,7 +212,8 @@ fn compile_to_executable(
         println!("Step 1: Building minimal runtime library...");
     }
 
-    let runtime_obj_path = format!("{}_runtime.o", output_file);
+    let runtime_obj_path = temp_dir.join("runtime.o");
+    let runtime_obj_str = runtime_obj_path.to_string_lossy();
     let runtime_result = std::process::Command::new("rustc")
         .args([
             "--crate-type=lib",
@@ -204,7 +222,7 @@ fn compile_to_executable(
             "-C", "opt-level=3",
             "-C", "lto=fat",
             "src/runtime.rs",
-            "-o", &runtime_obj_path
+            "-o", &runtime_obj_str
         ])
         .output()
         .map_err(|e| format!("Failed to run rustc: {}", e));
@@ -228,7 +246,8 @@ fn compile_to_executable(
         println!("Step 2: Compiling Forth source to object file...");
     }
 
-    let forth_obj_path = format!("{}_forth.o", output_file);
+    let forth_obj_path = temp_dir.join("forth.o");
+    let forth_obj_str = forth_obj_path.to_string_lossy();
 
     // Initialize Quarter execution context
     quarter::init_execution_context(
@@ -263,13 +282,13 @@ fn compile_to_executable(
         }
 
         // Compile to object file
-        quarter::compile_to_object_file(&mut ctx, &forth_obj_path, opt_level, exec_ctx.config, &mut exec_ctx.included_files)
+        quarter::compile_to_object_file(&mut ctx, &forth_obj_str, opt_level, exec_ctx.config, &mut exec_ctx.included_files)
     });
 
     match compile_result {
         Some(Ok(())) => {
             if verbose {
-                println!("  Successfully compiled to {}", forth_obj_path);
+                println!("  Successfully compiled to {}", forth_obj_str);
             }
         }
         Some(Err(e)) => {
@@ -290,9 +309,10 @@ fn compile_to_executable(
 
     // TODO: Determine main word (could be "MAIN" or first defined word)
     let main_word = "MAIN";
-    let main_c_path = format!("{}_main.c", output_file);
+    let main_c_path = temp_dir.join("main.c");
+    let main_c_str = main_c_path.to_string_lossy();
 
-    if let Err(e) = generate_main_wrapper(main_word, &main_c_path) {
+    if let Err(e) = generate_main_wrapper(main_word, &main_c_str) {
         eprintln!("Failed to generate main wrapper: {}", e);
         std::process::exit(1);
     }
@@ -302,9 +322,10 @@ fn compile_to_executable(
         println!("Step 4: Compiling main wrapper...");
     }
 
-    let main_o_path = format!("{}_main.o", output_file);
+    let main_o_path = temp_dir.join("main.o");
+    let main_o_str = main_o_path.to_string_lossy();
     let cc_result = std::process::Command::new("cc")
-        .args(["-c", "-O2", &main_c_path, "-o", &main_o_path])
+        .args(["-c", "-O2", &main_c_str, "-o", &main_o_str])
         .output();
 
     match cc_result {
@@ -329,9 +350,9 @@ fn compile_to_executable(
     // Build portable linker command
     let mut link_cmd = std::process::Command::new("cc");
     link_cmd.args([
-        &main_o_path,
-        &forth_obj_path,
-        &runtime_obj_path,  // Use minimal runtime instead of full libquarter.a
+        main_o_str.as_ref(),
+        forth_obj_str.as_ref(),
+        runtime_obj_str.as_ref(),  // Use minimal runtime instead of full libquarter.a
         "-o",
         output_file,
     ]);
@@ -427,21 +448,37 @@ fn compile_to_executable(
         println!("✓ Successfully created executable: {}", output_file);
         println!("===========================================");
         println!();
-        println!("Files generated:");
-        println!("  - {} (main wrapper - C source)", main_c_path);
-        println!("  - {} (main wrapper - object)", main_o_path);
-        println!("  - {} (Forth code - object)", forth_obj_path);
-        println!("  - {} (minimal runtime - object)", runtime_obj_path);
-        println!("  - {} (final executable)", output_file);
+        if keep_temps {
+            println!("Build artifacts kept in: {}", temp_dir.display());
+            println!("  - {} (main wrapper - C source)", main_c_str);
+            println!("  - {} (main wrapper - object)", main_o_str);
+            println!("  - {} (Forth code - object)", forth_obj_str);
+            println!("  - {} (minimal runtime - object)", runtime_obj_str);
+            println!("  - {} (final executable)", output_file);
+        }
         println!();
         println!("Run with: ./{}", output_file);
     } else {
         println!("Successfully created: {}", output_file);
     }
+
+    // Clean up temporary files unless --keep-temps is set
+    if !keep_temps {
+        if verbose {
+            println!("Cleaning up build artifacts...");
+        }
+        if verbose {
+            if let Err(e) = fs::remove_dir_all(&temp_dir) {
+                eprintln!("Warning: Failed to remove temp directory: {}", e);
+            }
+        } else {
+            let _ = fs::remove_dir_all(&temp_dir);
+        }
+    }
 }
 
 fn print_help() {
-    println!("Quarter - Forth Interpreter and Compiler v0.2");
+    println!("Quarter - Forth Interpreter and Compiler v{}", VERSION);
     println!();
     println!("USAGE:");
     println!("  quarter [OPTIONS] [FILE]");
@@ -452,6 +489,7 @@ fn print_help() {
     println!("  --optimize, -O<level>  Optimization level: 0, 1, 2, 3 (default: 2)");
     println!("  --debug, -g            Include debug symbols");
     println!("  --verbose, -v          Show compilation progress");
+    println!("  --keep-temps           Keep intermediate build files (for debugging)");
     println!("  --jit                  Enable JIT compilation mode");
     println!("  --no-jit               Disable JIT compilation");
     println!("  --dump-ir              Dump LLVM IR to stdout");
@@ -490,6 +528,7 @@ fn main() {
     let mut opt_level: u8 = 2;  // Default optimization level
     let mut debug_symbols = false;
     let mut verbose = false;
+    let mut keep_temps = false;
     let mut filename: Option<String> = None;
 
     let mut i = 1;
@@ -548,11 +587,13 @@ fn main() {
             debug_symbols = true;
         } else if arg == "--verbose" || arg == "-v" {
             verbose = true;
+        } else if arg == "--keep-temps" {
+            keep_temps = true;
         } else if arg == "--help" || arg == "-h" {
             print_help();
             std::process::exit(0);
         } else if arg == "--version" {
-            println!("Quarter Forth Interpreter v0.2");
+            println!("Quarter Forth Interpreter v{}", VERSION);
             std::process::exit(0);
         } else if !arg.starts_with("-") {
             filename = Some(arg.clone());
@@ -608,7 +649,10 @@ fn main() {
         }
     }
 
-    println!("Forth Interpreter v0.2");
+    // Only print banner in interpreter mode (not when compiling)
+    if !compile_mode {
+        println!("Forth Interpreter v{}", VERSION);
+    }
 
     // Initialize global execution context for EVALUATE, CATCH/THROW, and Forth REPL
     quarter::init_execution_context(
@@ -637,6 +681,7 @@ fn main() {
                 opt_level,
                 debug_symbols,
                 verbose,
+                keep_temps,
             );
 
             return;

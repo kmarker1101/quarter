@@ -99,22 +99,29 @@ cargo run myprogram.fth --jit       # JIT compile and run
 
 #### 3. AOT Mode (Ahead-of-Time Compilation)
 Compiles Forth programs to standalone native executables via LLVM.
-Produces optimized binaries that can run without the Quarter interpreter.
+Produces optimized binaries (~50KB) that can run without the Quarter interpreter.
 
 ```bash
 # Compile to standalone executable (default: a.out)
-cargo run myprogram.fth --compile
+cargo run -- --compile myprogram.fth
 
 # Produces: a.out (native executable)
 ./a.out                             # Run without Quarter
 
 # Specify output name with -o
-cargo run myprogram.fth --compile -o mybinary
+cargo run -- --compile myprogram.fth -o mybinary
 ./mybinary
 
 # Compile with optimization level
-cargo run myprogram.fth --compile -o myapp -O3
+cargo run -- -c myprogram.fth -o myapp -O3
 ```
+
+**See [docs/aot-compilation.md](docs/aot-compilation.md) for comprehensive AOT documentation including:**
+- Compilation process details
+- Optimization levels and performance
+- Build artifacts and cleanup
+- Debug symbols and troubleshooting
+- Technical implementation details
 
 ## Command Line Arguments
 
@@ -130,6 +137,7 @@ Options:
   --optimize, -O<n>   Optimization level: 0, 1, 2, 3 (default: 2)
   --debug, -g         Include debug symbols
   --verbose, -v       Show compilation progress
+  --keep-temps        Keep temporary build files (in /tmp/quarter_build_<pid>/)
   --jit               Enable JIT compilation (batch compiles all words to native code)
   --no-jit            Disable JIT compilation (keep interpreted)
   --compile-stdlib    Compile standard library to native code
