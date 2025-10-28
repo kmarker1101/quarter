@@ -3182,15 +3182,12 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
 
     \ Declare all primitive functions
     DECLARE-ALL-PRIMITIVES
-    ." DEBUG: DECLARE-ALL-PRIMITIVES completed" CR
 
     \ Create global builder
     CURRENT-CTX @ LLVM-CREATE-BUILDER CURRENT-BUILDER !
-    ." DEBUG: LLVM-CREATE-BUILDER completed" CR
 
     \ Set batch mode flag
     -1 BATCH-MODE !
-    ." DEBUG: INIT-BATCH-COMPILER completed" CR
 ;
 
 \ Finalize batch compilation - creates JIT and returns handle

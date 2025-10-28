@@ -38,6 +38,7 @@ fn register_quarter_symbols() -> usize {
         crate::words::quarter_sub,
         crate::words::quarter_mul,
         crate::words::quarter_div,
+        crate::words::quarter_mod,
         crate::words::quarter_slash_mod,
         crate::words::quarter_negate,
         crate::words::quarter_abs,
@@ -62,6 +63,7 @@ fn register_quarter_symbols() -> usize {
         crate::words::quarter_fetch,
         crate::words::quarter_c_store,
         crate::words::quarter_c_fetch,
+        crate::words::quarter_base,
 
         // Bitwise operations
         crate::words::quarter_and,
