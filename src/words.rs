@@ -1,3 +1,5 @@
+#![allow(clippy::manual_is_multiple_of)]  // .is_multiple_of() is nightly-only
+
 use crate::LoopStack;
 use crate::stack::Stack;
 use std::cell::RefCell;
@@ -1050,18 +1052,29 @@ pub fn base(
 // Signature: void primitive(u8* memory, usize* sp, usize* rp)
 // =============================================================================
 
+// Memory and stack constants
+#[allow(dead_code)]
+const MEMORY_SIZE: usize = 8 * 1024 * 1024;  // 8MB total memory
 // Data stack region: 0x000000 to 0x01FFFF (128KB)
 const DATA_STACK_END: usize = 0x020000;
 
 /// Check if stack pointer is valid for reading N bytes
 #[inline]
 unsafe fn check_sp_read(sp_val: usize, bytes_needed: usize) -> bool {
+    debug_assert!(sp_val % 8 == 0, "Misaligned stack pointer: 0x{:x}", sp_val);
+    debug_assert!(sp_val >= bytes_needed, "Stack underflow: sp={}, need={}", sp_val, bytes_needed);
+    debug_assert!(sp_val < DATA_STACK_END, "Stack pointer out of bounds: 0x{:x}", sp_val);
+
     sp_val >= bytes_needed && sp_val < DATA_STACK_END
 }
 
 /// Check if stack can grow by N bytes without overflow
 #[inline]
 unsafe fn check_sp_write(sp_val: usize, bytes_to_add: usize) -> bool {
+    debug_assert!(sp_val % 8 == 0, "Misaligned stack pointer: 0x{:x}", sp_val);
+    debug_assert!(sp_val < DATA_STACK_END, "Stack pointer out of bounds: 0x{:x}", sp_val);
+    debug_assert!(sp_val + bytes_to_add <= DATA_STACK_END, "Stack overflow: sp={}, adding={}, limit={}", sp_val, bytes_to_add, DATA_STACK_END);
+
     sp_val < DATA_STACK_END && sp_val + bytes_to_add <= DATA_STACK_END
 }
 
@@ -1098,7 +1111,10 @@ macro_rules! binary_op {
                 *addr_a = $op(a, b);
 
                 // Decrement sp by 8
-                *sp = sp_val - 8;
+                let new_sp = sp_val - 8;
+                debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after operation");
+                debug_assert!(new_sp < DATA_STACK_END, "Stack pointer out of bounds after operation");
+                *sp = new_sp;
             }
         }
     };
@@ -1197,11 +1213,17 @@ macro_rules! pointer_fetch {
         ) {
             unsafe {
                 let sp_val = *sp;
+                debug_assert!(sp_val % 8 == 0, "Misaligned stack pointer: 0x{:x}", sp_val);
+                debug_assert!(sp_val + 8 <= DATA_STACK_END, "Stack overflow: sp=0x{:x}", sp_val);
+
                 let ptr_val = *$pointer;
                 // Push pointer value onto data stack
                 let dest = memory.add(sp_val) as *mut i64;
                 dest.write_unaligned(ptr_val as i64);
-                *sp = sp_val + 8;
+
+                let new_sp = sp_val + 8;
+                debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after operation");
+                *sp = new_sp;
             }
         }
     };
@@ -1232,7 +1254,10 @@ macro_rules! pointer_store {
                 let addr_ptr = memory.add(sp_val - 8) as *const i64;
                 let new_ptr_val = addr_ptr.read_unaligned() as usize;
                 if $update_sp {
-                    *sp = sp_val - 8;
+                    let new_sp = sp_val - 8;
+                    debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after operation");
+                    debug_assert!(new_sp < DATA_STACK_END, "Stack pointer out of bounds after operation");
+                    *sp = new_sp;
                 }
                 *$pointer = new_ptr_val;
             }
@@ -1262,7 +1287,10 @@ pub unsafe extern "C" fn quarter_dup(memory: *mut u8, sp: *mut usize, _rp: *mut 
         let dest = memory.add(sp_val) as *mut i64;
         *dest = val;
         // Increment sp by 8
-        *sp = sp_val + 8;
+        let new_sp = sp_val + 8;
+        debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after DUP");
+        debug_assert!(new_sp <= DATA_STACK_END, "Stack overflow after DUP");
+        *sp = new_sp;
     }
 }
 
@@ -1282,7 +1310,10 @@ pub unsafe extern "C" fn quarter_drop(memory: *mut u8, sp: *mut usize, _rp: *mut
         }
 
         // Decrement sp by 8
-        *sp = sp_val - 8;
+        let new_sp = sp_val - 8;
+        debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after DROP");
+        debug_assert!(new_sp < DATA_STACK_END, "Stack pointer out of bounds after DROP");
+        *sp = new_sp;
         let _ = memory; // Suppress warning
     }
 }
@@ -1514,6 +1545,8 @@ pub unsafe extern "C" fn quarter_to_r(memory: *mut u8, sp: *mut usize, rp: *mut 
         }
 
         // Check return stack bounds (return stack is at 0x010000-0x01FFFF)
+        debug_assert!(rp_val % 8 == 0, "Misaligned return stack pointer: 0x{:x}", rp_val);
+        debug_assert!((0x010000..0x020000).contains(&rp_val), "Return stack pointer out of bounds: 0x{:x}", rp_val);
         if rp_val + 8 > 0x020000 {
             return;  // Return stack overflow
         }
@@ -1521,12 +1554,17 @@ pub unsafe extern "C" fn quarter_to_r(memory: *mut u8, sp: *mut usize, rp: *mut 
         // Pop from data stack
         let value_addr = memory.add(sp_val - 8) as *const i64;
         let value = *value_addr;
-        *sp = sp_val - 8;
+        let new_sp = sp_val - 8;
+        debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after >R");
+        *sp = new_sp;
 
         // Push to return stack
         let r_dest = memory.add(rp_val) as *mut i64;
         *r_dest = value;
-        *rp = rp_val + 8;
+        let new_rp = rp_val + 8;
+        debug_assert!(new_rp % 8 == 0, "Return stack pointer misalignment after >R");
+        debug_assert!(new_rp <= 0x020000, "Return stack overflow after >R");
+        *rp = new_rp;
     }
 }
 
@@ -1545,11 +1583,15 @@ pub unsafe extern "C" fn quarter_r_from(memory: *mut u8, sp: *mut usize, rp: *mu
         let rp_val = *rp;
 
         // Check return stack underflow
+        debug_assert!(rp_val % 8 == 0, "Misaligned return stack pointer: 0x{:x}", rp_val);
+        debug_assert!(rp_val >= 0x010000 + 8, "Return stack underflow: rp=0x{:x}", rp_val);
         if rp_val < 0x010000 + 8 {
             return;  // Return stack underflow
         }
 
         // Check data stack bounds
+        debug_assert!(sp_val % 8 == 0, "Misaligned stack pointer: 0x{:x}", sp_val);
+        debug_assert!(sp_val + 8 <= DATA_STACK_END, "Data stack overflow: sp=0x{:x}", sp_val);
         if sp_val + 8 > 0x010000 {
             return;  // Data stack overflow
         }
@@ -1557,12 +1599,16 @@ pub unsafe extern "C" fn quarter_r_from(memory: *mut u8, sp: *mut usize, rp: *mu
         // Pop from return stack
         let r_addr = memory.add(rp_val - 8) as *const i64;
         let value = *r_addr;
-        *rp = rp_val - 8;
+        let new_rp = rp_val - 8;
+        debug_assert!(new_rp % 8 == 0, "Return stack pointer misalignment after R>");
+        *rp = new_rp;
 
         // Push to data stack
         let dest = memory.add(sp_val) as *mut i64;
         *dest = value;
-        *sp = sp_val + 8;
+        let new_sp = sp_val + 8;
+        debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after R>");
+        *sp = new_sp;
     }
 }
 
@@ -1581,11 +1627,15 @@ pub unsafe extern "C" fn quarter_r_fetch(memory: *mut u8, sp: *mut usize, rp: *m
         let rp_val = *rp;
 
         // Check return stack underflow
+        debug_assert!(rp_val % 8 == 0, "Misaligned return stack pointer: 0x{:x}", rp_val);
+        debug_assert!(rp_val >= 0x010000 + 8, "Return stack underflow: rp=0x{:x}", rp_val);
         if rp_val < 0x010000 + 8 {
             return;
         }
 
         // Check data stack bounds
+        debug_assert!(sp_val % 8 == 0, "Misaligned stack pointer: 0x{:x}", sp_val);
+        debug_assert!(sp_val + 8 <= DATA_STACK_END, "Data stack overflow: sp=0x{:x}", sp_val);
         if sp_val + 8 > 0x010000 {
             return;
         }
@@ -1597,7 +1647,9 @@ pub unsafe extern "C" fn quarter_r_fetch(memory: *mut u8, sp: *mut usize, rp: *m
         // Push to data stack
         let dest = memory.add(sp_val) as *mut i64;
         *dest = value;
-        *sp = sp_val + 8;
+        let new_sp = sp_val + 8;
+        debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after R@");
+        *sp = new_sp;
     }
 }
 
@@ -1624,7 +1676,10 @@ pub unsafe extern "C" fn quarter_over(memory: *mut u8, sp: *mut usize, _rp: *mut
         let value = addr.read_unaligned();
         let dest = memory.add(sp_val) as *mut i64;
         dest.write_unaligned(value);
-        *sp = sp_val + 8;
+        let new_sp = sp_val + 8;
+        debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after OVER");
+        debug_assert!(new_sp <= DATA_STACK_END, "Stack overflow after OVER");
+        *sp = new_sp;
     }
 }
 
@@ -1696,10 +1751,16 @@ pub unsafe extern "C" fn quarter_pick(memory: *mut u8, sp: *mut usize, _rp: *mut
 pub unsafe extern "C" fn quarter_depth(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
+        debug_assert!(sp_val % 8 == 0, "Misaligned stack pointer: 0x{:x}", sp_val);
+        debug_assert!(sp_val < DATA_STACK_END, "Stack pointer out of bounds: 0x{:x}", sp_val);
+
         let depth = sp_val / 8;  // Each cell is 8 bytes
         let dest = memory.add(sp_val) as *mut i64;
         dest.write_unaligned(depth as i64);
-        *sp = sp_val + 8;
+        let new_sp = sp_val + 8;
+        debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after DEPTH");
+        debug_assert!(new_sp <= DATA_STACK_END, "Stack overflow after DEPTH");
+        *sp = new_sp;
     }
 }
 
@@ -1732,9 +1793,13 @@ pub unsafe extern "C" fn quarter_i(memory: *mut u8, sp: *mut usize, _rp: *mut us
     // For now, mark as unimplemented - this will need special handling
     unsafe {
         let sp_val = *sp;
+        debug_assert!(sp_val % 8 == 0, "Misaligned stack pointer: 0x{:x}", sp_val);
         let dest = memory.add(sp_val) as *mut i64;
         dest.write_unaligned(0);  // Placeholder
-        *sp = sp_val + 8;
+        let new_sp = sp_val + 8;
+        debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after I");
+        debug_assert!(new_sp <= DATA_STACK_END, "Stack overflow after I");
+        *sp = new_sp;
     }
 }
 
@@ -1749,9 +1814,13 @@ pub unsafe extern "C" fn quarter_j(memory: *mut u8, sp: *mut usize, _rp: *mut us
     // Note: Same issue as quarter_i - needs loop stack access
     unsafe {
         let sp_val = *sp;
+        debug_assert!(sp_val % 8 == 0, "Misaligned stack pointer: 0x{:x}", sp_val);
         let dest = memory.add(sp_val) as *mut i64;
         dest.write_unaligned(0);  // Placeholder
-        *sp = sp_val + 8;
+        let new_sp = sp_val + 8;
+        debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after J");
+        debug_assert!(new_sp <= DATA_STACK_END, "Stack overflow after J");
+        *sp = new_sp;
     }
 }
 
@@ -1778,7 +1847,9 @@ pub unsafe extern "C" fn quarter_emit(memory: *mut u8, sp: *mut usize, _rp: *mut
         if let Some(ch) = char::from_u32(code) {
             print!("{}", ch);
         }
-        *sp = sp_val - 8;
+        let new_sp = sp_val - 8;
+        debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after EMIT");
+        *sp = new_sp;
     }
 }
 
@@ -1802,9 +1873,13 @@ pub unsafe extern "C" fn quarter_space(_memory: *mut u8, _sp: *mut usize, _rp: *
 pub unsafe extern "C" fn quarter_key(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
+        debug_assert!(sp_val % 8 == 0, "Misaligned stack pointer: 0x{:x}", sp_val);
         let dest = memory.add(sp_val) as *mut i64;
         dest.write_unaligned(0);  // Placeholder
-        *sp = sp_val + 8;
+        let new_sp = sp_val + 8;
+        debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after KEY");
+        debug_assert!(new_sp <= DATA_STACK_END, "Stack overflow after KEY");
+        *sp = new_sp;
     }
 }
 
@@ -1836,7 +1911,9 @@ pub unsafe extern "C" fn quarter_dot(memory: *mut u8, sp: *mut usize, _rp: *mut 
         let addr = memory.add(sp_val - 8) as *const i64;
         let value = addr.read_unaligned();
         print!("{} ", value);
-        *sp = sp_val - 8;
+        let new_sp = sp_val - 8;
+        debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after .");
+        *sp = new_sp;
     }
 }
 
@@ -1858,7 +1935,9 @@ pub unsafe extern "C" fn quarter_u_dot(memory: *mut u8, sp: *mut usize, _rp: *mu
         let value = addr.read_unaligned();
         let unsigned_value = value as u64;
         print!("{} ", unsigned_value);
-        *sp = sp_val - 8;
+        let new_sp = sp_val - 8;
+        debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after U.");
+        *sp = new_sp;
     }
 }
 
@@ -1887,7 +1966,9 @@ pub unsafe extern "C" fn quarter_dot_r(memory: *mut u8, sp: *mut usize, _rp: *mu
         } else {
             print!("{} ", num_str);
         }
-        *sp = sp_val - 16;
+        let new_sp = sp_val - 16;
+        debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after .R");
+        *sp = new_sp;
     }
 }
 
@@ -1917,7 +1998,9 @@ pub unsafe extern "C" fn quarter_u_dot_r(memory: *mut u8, sp: *mut usize, _rp: *
         } else {
             print!("{} ", num_str);
         }
-        *sp = sp_val - 16;
+        let new_sp = sp_val - 16;
+        debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after U.R");
+        *sp = new_sp;
     }
 }
 
@@ -1957,7 +2040,9 @@ pub unsafe extern "C" fn quarter_type(memory: *mut u8, sp: *mut usize, _rp: *mut
                 }
             }
         }
-        *sp = sp_val - 16;
+        let new_sp = sp_val - 16;
+        debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after TYPE");
+        *sp = new_sp;
     }
 }
 
@@ -1991,9 +2076,13 @@ pub unsafe extern "C" fn quarter_here(memory: *mut u8, sp: *mut usize, _rp: *mut
 
         // Push dp onto stack
         let sp_val = *sp;
+        debug_assert!(sp_val % 8 == 0, "Misaligned stack pointer: 0x{:x}", sp_val);
         let dest = memory.add(sp_val) as *mut i64;
         dest.write_unaligned(dp_val);
-        *sp = sp_val + 8;
+        let new_sp = sp_val + 8;
+        debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after HERE");
+        debug_assert!(new_sp <= DATA_STACK_END, "Stack overflow after HERE");
+        *sp = new_sp;
     }
 }
 
@@ -2015,7 +2104,9 @@ pub unsafe extern "C" fn quarter_allot(memory: *mut u8, sp: *mut usize, _rp: *mu
         // Pop n from stack
         let n_ptr = memory.add(sp_val - 8) as *const i64;
         let n = n_ptr.read_unaligned();
-        *sp = sp_val - 8;
+        let new_sp = sp_val - 8;
+        debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after ALLOT");
+        *sp = new_sp;
 
         // Read current dp from memory
         const DP_ADDR: usize = 0x01FFF8;
@@ -2054,7 +2145,9 @@ pub unsafe extern "C" fn quarter_comma(memory: *mut u8, sp: *mut usize, _rp: *mu
         // Pop n from stack
         let n_ptr = memory.add(sp_val - 8) as *const i64;
         let n = n_ptr.read_unaligned();
-        *sp = sp_val - 8;
+        let new_sp = sp_val - 8;
+        debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after ,");
+        *sp = new_sp;
 
         // Read current dp from memory
         const DP_ADDR: usize = 0x01FFF8;
