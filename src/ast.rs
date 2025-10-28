@@ -23,10 +23,14 @@ pub enum AstNode {
     },
     PrintString(String),
     StackString(String),  // S" - push address and length
+    AbortQuote(String),  // ABORT" - compile-only, conditionally abort with message
     Leave,
     Exit,
     Unloop,  // Discard loop parameters (used before EXIT when exiting from within a loop)
+    Execute,  // EXECUTE - takes xt from stack and executes the word
     InlineInstruction(String),  // INLINE directive - maps to LLVM instruction (e.g., "LLVM-ADD")
+    TickLiteral(String),  // ['] - compile-only, stores word name, pushes xt at runtime
+    Find,  // FIND - searches dictionary for word name (c-addr -- c-addr 0 | xt 1 | xt -1)
 }
 
 impl AstNode {
@@ -40,10 +44,21 @@ impl AstNode {
             AstNode::PushNumber(_) => Ok(()),
             AstNode::PrintString(_) => Ok(()),
             AstNode::StackString(_) => Ok(()),
+            AstNode::AbortQuote(_) => Ok(()),
             AstNode::Leave => Ok(()),
             AstNode::Exit => Ok(()),
             AstNode::Unloop => Ok(()),
+            AstNode::Execute => Ok(()),  // Execute resolves word at runtime, no compile-time validation
             AstNode::InlineInstruction(_) => Ok(()),  // Inline instructions are validated at JIT time
+            AstNode::Find => Ok(()),  // Find searches dictionary at runtime, no compile-time validation
+            AstNode::TickLiteral(name) => {
+                // ['] validates word exists at compile time
+                if dict.has_word(name) {
+                    Ok(())
+                } else {
+                    Err(format!("Undefined word in [']:  {}", name))
+                }
+            }
             AstNode::CallWord(name) => {
                 // Allow forward reference if this is the word being defined (for recursion)
                 if let Some(def_name) = defining_word
@@ -275,6 +290,16 @@ impl AstNode {
                 print!("{}", s);
                 Ok(())
             }
+            AstNode::AbortQuote(s) => {
+                // ABORT" - ( flag -- )
+                // If flag is true, print message and abort
+                let flag = stack.pop(memory).ok_or("Stack underflow for ABORT\"")?;
+                if flag != 0 {
+                    eprintln!("{}", s);
+                    std::process::exit(-2);
+                }
+                Ok(())
+            }
             AstNode::StackString(s) => {
                 // S" - Store string in memory and push address and length
                 let addr = memory.here();
@@ -308,9 +333,95 @@ impl AstNode {
                 loop_stack.pop_loop();
                 Ok(())
             }
+            AstNode::Execute => {
+                // EXECUTE ( xt -- )
+                // Execute word from execution token
+                // xt is the address of a counted string (length byte + characters)
+                let xt = stack.pop(memory).ok_or("Stack underflow for EXECUTE")?;
+                let addr = xt as usize;
+
+                // Read the length byte
+                let len = memory.fetch_byte(addr)? as usize;
+
+                // Read the word name from memory
+                let mut word_name = String::with_capacity(len);
+                for i in 0..len {
+                    let byte = memory.fetch_byte(addr + 1 + i)? as u8;
+                    word_name.push(byte as char);
+                }
+
+                // Execute the word
+                dict.execute_word(&word_name, stack, loop_stack, return_stack, memory)?;
+                Ok(())
+            }
             AstNode::InlineInstruction(instruction) => {
                 // Inline instructions can only be executed in JIT-compiled code
                 Err(format!("Inline instruction {} can only be used in JIT-compiled words", instruction))
+            }
+            AstNode::TickLiteral(word_name) => {
+                // ['] ( -- xt )
+                // Store word name as counted string at HERE, push xt (address)
+                let xt_addr = memory.here();
+                let name_bytes = word_name.as_bytes();
+
+                // Store length byte
+                memory.store_byte(xt_addr as usize, name_bytes.len() as i64)?;
+
+                // Store character bytes
+                for (offset, &byte) in name_bytes.iter().enumerate() {
+                    memory.store_byte(xt_addr as usize + 1 + offset, byte as i64)?;
+                }
+
+                // Advance HERE
+                memory.allot((1 + name_bytes.len()) as i64)?;
+
+                // Push xt (address of counted string) onto stack
+                stack.push(xt_addr, memory);
+                Ok(())
+            }
+            AstNode::Find => {
+                // FIND ( c-addr -- c-addr 0 | xt 1 | xt -1 )
+                // Search dictionary for word name given as counted string
+                let c_addr = stack.pop(memory).ok_or("Stack underflow for FIND")?;
+
+                // Read counted string
+                let len = memory.fetch_byte(c_addr as usize)? as usize;
+                let mut word_name = String::with_capacity(len);
+                for offset in 0..len {
+                    let byte = memory.fetch_byte(c_addr as usize + 1 + offset)? as u8;
+                    word_name.push(byte as char);
+                }
+
+                let word_name_upper = word_name.to_uppercase();
+
+                // Search for the word
+                if dict.has_word(&word_name_upper) {
+                    // Word found - create xt and push result
+                    let xt_addr = memory.here();
+                    let name_bytes = word_name_upper.as_bytes();
+
+                    // Store counted string at HERE
+                    memory.store_byte(xt_addr as usize, name_bytes.len() as i64)?;
+                    for (offset, &byte) in name_bytes.iter().enumerate() {
+                        memory.store_byte(xt_addr as usize + 1 + offset, byte as i64)?;
+                    }
+                    memory.allot((1 + name_bytes.len()) as i64)?;
+
+                    // Push xt
+                    stack.push(xt_addr, memory);
+
+                    // Push 1 if immediate, -1 if not
+                    if dict.is_immediate(&word_name_upper) {
+                        stack.push(1, memory);
+                    } else {
+                        stack.push(-1, memory);
+                    }
+                } else {
+                    // Word not found - push original c-addr and 0
+                    stack.push(c_addr, memory);
+                    stack.push(0, memory);
+                }
+                Ok(())
             }
         }
     }

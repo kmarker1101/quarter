@@ -2,7 +2,7 @@
 
 Quarter is a Forth interpreter written in Rust with a **self-hosting JIT compiler** that compiles Forth code to native machine code via LLVM.
 
-[![Tests](https://img.shields.io/badge/tests-139%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-153%20passing-brightgreen)]()
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-orange)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)]()
 
@@ -36,7 +36,7 @@ cargo test
 - **Self-hosting compiler** written entirely in Forth
 - **Two execution modes**: Interpreted (AST evaluation) and JIT (native code via LLVM)
 - **Full recursion support**: Both `RECURSE` word and direct recursion
-- **Comprehensive test suite**: 139 tests across unit and integration testing
+- **Comprehensive test suite**: 153 tests across unit and integration testing
 - **Interactive REPL** with history and line editing
 - **Standard Forth compliance**: Case-insensitive, standard control flow, memory model
 
@@ -126,15 +126,17 @@ cargo test test_recurse_jit
 cargo test test_tco_interpreted
 ```
 
-**Test Suite** (139 tests):
-- 133 unit tests (Rust)
-- 6 integration tests (Forth programs in both interpreted and JIT modes)
+**Test Suite** (153 tests):
+- 145 unit tests (Rust)
+- 8 integration tests (Forth programs in both interpreted and JIT modes)
   - `test_forth_tests_interpreted` - Main test suite (interpreted)
   - `test_forth_tests_jit` - Main test suite (JIT)
   - `test_tco_interpreted` - Tail call optimization tests
   - `test_tco_jit` - TCO in JIT mode
   - `test_recurse_interpreted` - RECURSE word tests
   - `test_recurse_jit` - RECURSE in JIT mode
+  - `test_repl_multiline_interpreted` - Multi-line REPL (interpreted)
+  - `test_repl_multiline_jit` - Multi-line REPL (JIT)
 
 ## Implemented Features
 
@@ -151,6 +153,8 @@ cargo test test_tco_interpreted
 **Memory Access**: `!`, `@`, `C!`, `C@`, `+!`
 
 **Memory Allocation**: `HERE`, `ALLOT`, `,`, `CELLS`, `CELL+`, `VARIABLE`, `CONSTANT`, `CREATE`
+
+**Memory Alignment**: `ALIGNED` (round address to cell boundary), `ALIGN` (advance HERE to aligned boundary), `FILL` (fill memory region with byte)
 
 **Stack Pointers**: `SP@`, `SP!`, `RP@`, `RP!`
 
@@ -173,9 +177,24 @@ cargo test test_tco_interpreted
 
 **Constants**: `TRUE` (-1), `FALSE` (0), `BL` (32 - space character)
 
+**Error Handling**:
+- `ABORT` ( i*x -- ) ( R: j*x -- ) - Clear stacks and abort execution
+- `ABORT"` ( flag -- ) - Conditionally abort with message (compile-only)
+
 **Word Definition**: `:` and `;` - Define new words
 
 **File Loading**: `INCLUDE`, `INCLUDED` - Load and execute Forth files
+
+**Metaprogramming**:
+- `EXECUTE` ( xt -- ) - Execute word from execution token
+- `'` (TICK) ( "name" -- xt ) - Get execution token for a word (works in definitions and top-level)
+- `[']` ( "name" -- xt ) - Compile-only version of ' (gets xt at compile time)
+- `CHAR` ( "name" -- char ) - Get ASCII value of first character of next word
+- `[CHAR]` ( "name" -- char ) - Compile-only version of CHAR
+- `COUNT` ( c-addr -- addr u ) - Convert counted string to address/length pair
+- `FIND` ( c-addr -- c-addr 0 | xt 1 | xt -1 ) - Search dictionary for word by counted string
+- `IMMEDIATE` ( -- ) - Mark most recently defined word as immediate
+- `>NUMBER` ( ud1-lo ud1-hi c-addr u -- ud2-lo ud2-hi c-addr' u' ) - Convert string to double-cell number with accumulation
 
 **Comments**: `\` (line comment), `( )` (inline comment)
 

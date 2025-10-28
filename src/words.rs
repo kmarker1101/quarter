@@ -1046,6 +1046,96 @@ pub fn base(
     stack.push(memory.base(), memory);
 }
 
+/// >NUMBER: ( ud1-lo ud1-hi c-addr u -- ud2-lo ud2-hi c-addr u )
+///
+/// Convert string to number with accumulation using double-cell unsigned arithmetic.
+/// Converts characters from string using BASE, accumulating into ud1.
+/// Returns updated accumulator and address/length of unconverted portion.
+pub fn to_number(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    // Pop arguments: u1, c-addr1, ud1-hi, ud1-lo
+    let u1 = match stack.pop(memory) {
+        Some(n) => n as usize,
+        None => { println!("Stack underflow in >NUMBER"); return; }
+    };
+    let c_addr1 = match stack.pop(memory) {
+        Some(n) => n as usize,
+        None => { println!("Stack underflow in >NUMBER"); return; }
+    };
+    let ud1_hi = match stack.pop(memory) {
+        Some(n) => n as u64,
+        None => { println!("Stack underflow in >NUMBER"); return; }
+    };
+    let ud1_lo = match stack.pop(memory) {
+        Some(n) => n as u64,
+        None => { println!("Stack underflow in >NUMBER"); return; }
+    };
+
+    // Get BASE value
+    let base_addr = memory.base() as usize;
+    let base_val = match memory.fetch(base_addr) {
+        Ok(n) => n as u32,
+        Err(e) => { println!("Error fetching BASE: {}", e); return; }
+    };
+
+    if !(2..=36).contains(&base_val) {
+        println!("Invalid BASE value: {}", base_val);
+        return;
+    }
+
+    // Convert ud1 to u128 for arithmetic
+    let mut accumulator = ((ud1_hi as u128) << 64) | (ud1_lo as u128);
+    let mut current_addr = c_addr1;
+    let mut remaining = u1;
+
+    // Convert characters
+    while remaining > 0 {
+        // Fetch character
+        let ch = match memory.fetch_byte(current_addr) {
+            Ok(byte) => byte as u8 as char,
+            Err(_) => break,
+        };
+
+        // Convert character to digit value
+        let digit_val = if ch.is_ascii_digit() {
+            ch as u32 - '0' as u32
+        } else if ch.is_ascii_uppercase() {
+            ch as u32 - 'A' as u32 + 10
+        } else if ch.is_ascii_lowercase() {
+            ch as u32 - 'a' as u32 + 10
+        } else {
+            // Not a valid digit character, stop conversion
+            break;
+        };
+
+        // Check if digit is valid for current base
+        if digit_val >= base_val {
+            // Digit out of range for base, stop conversion
+            break;
+        }
+
+        // Accumulate: accumulator = accumulator * base + digit
+        accumulator = accumulator * (base_val as u128) + (digit_val as u128);
+
+        current_addr += 1;
+        remaining -= 1;
+    }
+
+    // Split accumulator back into lo and hi
+    let ud2_lo = (accumulator & 0xFFFFFFFFFFFFFFFF) as i64;
+    let ud2_hi = ((accumulator >> 64) & 0xFFFFFFFFFFFFFFFF) as i64;
+
+    // Push results: ud2-lo, ud2-hi, c-addr2, u2
+    stack.push(ud2_lo, memory);
+    stack.push(ud2_hi, memory);
+    stack.push(current_addr as i64, memory);
+    stack.push(remaining as i64, memory);
+}
+
 // =============================================================================
 // JIT-callable wrappers for primitives
 // These functions have C calling convention and can be called from LLVM IR
@@ -3599,6 +3689,24 @@ pub fn bye_word(
 ) {
     println!("\nGoodbye!");
     std::process::exit(0);
+}
+
+/// ABORT: ( i*x -- ) ( R: j*x -- )
+/// Clear data and return stacks, then abort execution
+pub fn abort_word(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    // Clear data stack
+    while stack.pop(memory).is_some() {}
+
+    // Clear return stack
+    while return_stack.pop(memory).is_some() {}
+
+    eprintln!("ABORT");
+    std::process::exit(-1);
 }
 
 /// THROW: ( k*x n -- k*x | i*x n )

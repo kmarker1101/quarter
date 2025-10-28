@@ -606,6 +606,227 @@ S" .S shows empty stack" TEST:
 T{ .S DEPTH -> 0 }T
 
 \ =============================================================================
+\ METAPROGRAMMING TESTS (ISSUE #89)
+\ =============================================================================
+
+S" CHAR A returns ASCII 65" TEST:
+T{ CHAR A -> 65 }T
+
+S" CHAR Z returns ASCII 90" TEST:
+T{ CHAR Z -> 90 }T
+
+S" CHAR 0 returns ASCII 48" TEST:
+T{ CHAR 0 -> 48 }T
+
+S" CHAR of multi-char word gets first char" TEST:
+T{ CHAR HELLO -> 72 }T
+
+S" [CHAR] in definition" TEST:
+: TEST-BRACKET-CHAR-A [CHAR] A ;
+T{ TEST-BRACKET-CHAR-A -> 65 }T
+
+S" [CHAR] with SPACE keyword" TEST:
+: TEST-BRACKET-CHAR-SPACE [CHAR] SPACE ;
+T{ TEST-BRACKET-CHAR-SPACE -> 83 }T
+
+S" ' (TICK) returns xt for DUP" TEST:
+T{ 5 ' DUP EXECUTE -> 5 5 }T
+
+S" EXECUTE with +" TEST:
+T{ 3 4 ' + EXECUTE -> 7 }T
+
+S" EXECUTE with *" TEST:
+T{ 5 6 ' * EXECUTE -> 30 }T
+
+S" ['] in definition with DUP" TEST:
+: TEST-TICK-DUP ['] DUP EXECUTE ;
+T{ 10 TEST-TICK-DUP -> 10 10 }T
+
+S" ['] in definition with +" TEST:
+: TEST-TICK-ADD ['] + EXECUTE ;
+T{ 3 4 TEST-TICK-ADD -> 7 }T
+
+S" ['] in definition with SWAP" TEST:
+: TEST-TICK-SWAP ['] SWAP EXECUTE ;
+T{ 1 2 TEST-TICK-SWAP -> 2 1 }T
+
+S" COUNT converts counted string" TEST:
+2 500000 C!
+72 500001 C!
+73 500002 C!
+T{ 500000 COUNT -> 500001 2 }T
+
+S" COUNT - verify character data" TEST:
+2 500100 C!
+72 500101 C!
+73 500102 C!
+500100 COUNT DROP
+T{ C@ -> 72 }T
+
+S" EXECUTE with user-defined SQUARE" TEST:
+: SQUARE DUP * ;
+T{ 5 ' SQUARE EXECUTE -> 25 }T
+
+S" EXECUTE with user-defined DOUBLE" TEST:
+: DOUBLE 2 * ;
+T{ 7 ' DOUBLE EXECUTE -> 14 }T
+
+S" Passing xt as parameter - APPLY-TWICE with DOUBLE" TEST:
+: APPLY-TWICE ( n xt -- n' ) DUP >R EXECUTE R> EXECUTE ;
+T{ 3 ' DOUBLE APPLY-TWICE -> 12 }T
+
+S" Passing xt as parameter - APPLY-TWICE with SQUARE" TEST:
+T{ 4 ' SQUARE APPLY-TWICE -> 256 }T
+
+\ =============================================================================
+\ IMMEDIATE AND FIND TESTS
+\ =============================================================================
+
+\ Define a word and mark it as immediate
+: IMMED-TEST 99 ;
+IMMEDIATE
+
+S" FIND with non-immediate word DUP" TEST:
+\ Create counted string "DUP" at 500000
+3 500000 C!
+68 500001 C! 85 500002 C! 80 500003 C!
+T{ 500000 FIND SWAP DROP -> -1 }T
+
+S" FIND with immediate word" TEST:
+\ Create counted string "IMMED-TEST" at 500100
+10 500100 C!
+73 500101 C! 77 500102 C! 77 500103 C! 69 500104 C! 68 500105 C!
+45 500106 C! 84 500107 C! 69 500108 C! 83 500109 C! 84 500110 C!
+T{ 500100 FIND SWAP DROP -> 1 }T
+
+S" FIND with non-existent word" TEST:
+\ Create counted string "NOTFOUND" at 500200
+8 500200 C!
+78 500201 C! 79 500202 C! 84 500203 C! 70 500204 C!
+79 500205 C! 85 500206 C! 78 500207 C! 68 500208 C!
+T{ 500200 FIND -> 500200 0 }T
+
+S" IMMEDIATE marks last defined word" TEST:
+: TEST-IMM 123 ;
+IMMEDIATE
+8 500300 C!
+84 500301 C! 69 500302 C! 83 500303 C! 84 500304 C! 45 500305 C! 73 500306 C! 77 500307 C! 77 500308 C!
+T{ 500300 FIND SWAP DROP -> 1 }T
+
+\ =============================================================================
+\ ALIGNED, ALIGN, AND FILL TESTS
+\ =============================================================================
+
+S" ALIGNED with already aligned address" TEST:
+T{ 0 ALIGNED -> 0 }T
+T{ 8 ALIGNED -> 8 }T
+T{ 16 ALIGNED -> 16 }T
+T{ 800 ALIGNED -> 800 }T
+
+S" ALIGNED rounds up to next 8-byte boundary" TEST:
+T{ 1 ALIGNED -> 8 }T
+T{ 5 ALIGNED -> 8 }T
+T{ 7 ALIGNED -> 8 }T
+T{ 9 ALIGNED -> 16 }T
+T{ 15 ALIGNED -> 16 }T
+T{ 17 ALIGNED -> 24 }T
+
+S" ALIGN makes HERE aligned" TEST:
+1 ALLOT  \ Make HERE unaligned
+ALIGN
+T{ HERE 7 AND -> 0 }T  \ Bottom 3 bits should be 0
+
+S" FILL fills memory region with character" TEST:
+\ Fill 5 bytes at 600000 with character 65 ('A')
+600000 5 65 FILL
+T{ 600000 C@ -> 65 }T
+T{ 600001 C@ -> 65 }T
+T{ 600002 C@ -> 65 }T
+T{ 600003 C@ -> 65 }T
+T{ 600004 C@ -> 65 }T
+
+S" FILL with different character" TEST:
+\ Fill 3 bytes at 600100 with character 88 ('X')
+600100 3 88 FILL
+T{ 600100 C@ -> 88 }T
+T{ 600101 C@ -> 88 }T
+T{ 600102 C@ -> 88 }T
+
+S" FILL with zero bytes does nothing" TEST:
+\ Store a value, then FILL 0 bytes shouldn't change it
+99 600200 C!
+600200 0 65 FILL
+T{ 600200 C@ -> 99 }T
+
+S" FILL overwrites existing data" TEST:
+\ Store some values
+10 600300 C!
+20 600301 C!
+30 600302 C!
+\ Fill with 42
+600300 3 42 FILL
+T{ 600300 C@ -> 42 }T
+T{ 600301 C@ -> 42 }T
+T{ 600302 C@ -> 42 }T
+
+\ =============================================================================
+\ ABORT" TESTS (non-aborting cases only)
+\ =============================================================================
+
+S" ABORT-QUOTE with false flag does not abort" TEST:
+: TEST-ABORT-FALSE 0 ABORT" This should not print" 42 ;
+T{ TEST-ABORT-FALSE -> 42 }T
+
+S" ABORT-QUOTE with false flag in conditional" TEST:
+: TEST-COND-ABORT-FALSE
+  DUP 0= ABORT" Should not see this"
+  ;
+T{ 5 TEST-COND-ABORT-FALSE -> 5 }T
+
+\ Note: Cannot test ABORT or ABORT" with true flag in test framework
+\ as they would exit the test runner. See /tmp/test_abort*.fth for
+\ manual verification tests.
+
+\ =============================================================================
+\ >NUMBER TESTS
+\ =============================================================================
+
+S" >NUMBER converts decimal string" TEST:
+\ Store "123" at address 600000
+3 600000 C!
+49 600001 C!  \ '1'
+50 600002 C!  \ '2'
+51 600003 C!  \ '3'
+T{ 0 0 600001 3 >NUMBER -> 123 0 600004 0 }T
+
+S" >NUMBER converts hex string" TEST:
+\ Store "FF" at address 600100
+2 600100 C!
+70 600101 C!  \ 'F'
+70 600102 C!  \ 'F'
+HEX
+T{ 0 0 600101 2 >NUMBER -> 255 0 600103 0 }T
+DECIMAL
+
+S" >NUMBER stops at invalid character" TEST:
+\ Store "12X45" at address 600200
+5 600200 C!
+49 600201 C!  \ '1'
+50 600202 C!  \ '2'
+88 600203 C!  \ 'X'
+52 600204 C!  \ '4'
+53 600205 C!  \ '5'
+T{ 0 0 600201 5 >NUMBER -> 12 0 600203 3 }T
+
+S" >NUMBER accumulates to existing value" TEST:
+\ Store "99" at address 600300
+2 600300 C!
+57 600301 C!  \ '9'
+57 600302 C!  \ '9'
+\ Start with 100 in accumulator, add 99
+T{ 100 0 600301 2 >NUMBER -> 10099 0 600303 0 }T
+
+\ =============================================================================
 \ REPORT
 \ =============================================================================
 

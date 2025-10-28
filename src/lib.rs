@@ -616,6 +616,109 @@ pub fn parse_tokens(tokens: &[&str], dict: &crate::Dictionary, current_word: Opt
                 let string_content = string_parts.join(" ");
                 nodes.push(AstNode::StackString(string_content));
             }
+            "ABORT\"" => {
+                // Handle ABORT" string literals: collect tokens until closing "
+                let mut string_parts: Vec<String> = Vec::new();
+                i += 1; // Skip past ABORT"
+
+                while i < tokens.len() {
+                    let part = tokens[i];
+                    if let Some(without_quote) = part.strip_suffix('"') {
+                        // Found closing quote
+                        if part == "\"" {
+                            // Just a closing quote - means there was a trailing space
+                            // Add space to the last part if there is one
+                            if !string_parts.is_empty() {
+                                let last_idx = string_parts.len() - 1;
+                                string_parts[last_idx].push(' ');
+                            }
+                        } else {
+                            // Text followed by quote
+                            if !without_quote.is_empty() {
+                                string_parts.push(without_quote.to_string());
+                            }
+                        }
+                        i += 1;
+                        break;
+                    } else {
+                        string_parts.push(part.to_string());
+                        i += 1;
+                    }
+                }
+
+                let string_content = string_parts.join(" ");
+                nodes.push(AstNode::AbortQuote(string_content));
+            }
+            "[']" => {
+                // ['] <name> (BRACKET-TICK) - compile-only
+                // Parse next word name at compile time, compile code to push xt at runtime
+                if i + 1 >= tokens.len() {
+                    return Err("['] requires a word name".to_string());
+                }
+
+                let word_name = tokens[i + 1].to_uppercase();
+
+                // Check that the word exists (compile-time validation)
+                if !dict.has_word(&word_name) {
+                    return Err(format!("['] cannot find word: {}", word_name));
+                }
+
+                // Compile TickLiteral node - creates xt at runtime
+                nodes.push(AstNode::TickLiteral(word_name));
+                i += 2;
+            }
+            "[CHAR]" => {
+                // [CHAR] <name> - compile-only
+                // Parse next word, compile code to push ASCII value of first character
+                if i + 1 >= tokens.len() {
+                    return Err("[CHAR] requires a word".to_string());
+                }
+
+                let word = tokens[i + 1];
+                if word.is_empty() {
+                    return Err("[CHAR] requires a non-empty word".to_string());
+                }
+
+                // Get first character and compile a literal
+                let ch = word.chars().next().unwrap();
+                nodes.push(AstNode::PushNumber(ch as i64));
+                i += 2;
+            }
+            "CHAR" => {
+                // CHAR <name> - can be used in definitions too
+                // Parse next word, compile code to push ASCII value of first character
+                if i + 1 >= tokens.len() {
+                    return Err("CHAR requires a word".to_string());
+                }
+
+                let word = tokens[i + 1];
+                if word.is_empty() {
+                    return Err("CHAR requires a non-empty word".to_string());
+                }
+
+                // Get first character and compile a literal
+                let ch = word.chars().next().unwrap();
+                nodes.push(AstNode::PushNumber(ch as i64));
+                i += 2;
+            }
+            "'" => {
+                // ' <name> (TICK) - can be used in definitions
+                // Parse next word name, compile code to create xt at runtime
+                if i + 1 >= tokens.len() {
+                    return Err("' requires a word name".to_string());
+                }
+
+                let word_name = tokens[i + 1].to_uppercase();
+
+                // Check that the word exists (compile-time validation)
+                if !dict.has_word(&word_name) {
+                    return Err(format!("' cannot find word: {}", word_name));
+                }
+
+                // Compile TickLiteral node - creates xt at runtime
+                nodes.push(AstNode::TickLiteral(word_name));
+                i += 2;
+            }
             "BEGIN" => {
                 // Find matching UNTIL or WHILE/REPEAT
                 let end_pos = find_begin_end(&tokens[i + 1..])?;
@@ -1160,6 +1263,60 @@ pub fn execute_line(
             let create_ast = AstNode::PushNumber(addr);
             ctx.dict.add_compiled(create_name, create_ast);
             i += 2;
+        } else if token_upper == "'" {
+            // ' <name> (TICK)
+            // Parse next word name, store as counted string at HERE, push address
+            if i + 1 >= tokens.len() {
+                return Err("' requires a word name".to_string());
+            }
+
+            let word_name = tokens[i + 1].to_uppercase();
+
+            // Check that the word exists
+            if !ctx.dict.has_word(&word_name) {
+                return Err(format!("' cannot find word: {}", word_name));
+            }
+
+            // Store word name as counted string at HERE
+            // Format: [length byte][character bytes...]
+            let xt_addr = ctx.memory.here();
+            let name_bytes = word_name.as_bytes();
+
+            // Store length byte
+            ctx.memory.store_byte(xt_addr as usize, name_bytes.len() as i64)?;
+
+            // Store character bytes
+            for (offset, &byte) in name_bytes.iter().enumerate() {
+                ctx.memory.store_byte(xt_addr as usize + 1 + offset, byte as i64)?;
+            }
+
+            // Advance HERE
+            ctx.memory.allot((1 + name_bytes.len()) as i64)?;
+
+            // Push xt (address of counted string) onto stack
+            ctx.stack.push(xt_addr, ctx.memory);
+            i += 2;
+        } else if token_upper == "CHAR" {
+            // CHAR <name>
+            // Parse next word, push ASCII value of first character
+            if i + 1 >= tokens.len() {
+                return Err("CHAR requires a word".to_string());
+            }
+
+            let word = tokens[i + 1];
+            if word.is_empty() {
+                return Err("CHAR requires a non-empty word".to_string());
+            }
+
+            // Get first character and push its ASCII value
+            let ch = word.chars().next().unwrap();
+            ctx.stack.push(ch as i64, ctx.memory);
+            i += 2;
+        } else if token_upper == "IMMEDIATE" {
+            // IMMEDIATE ( -- )
+            // Mark the most recently defined word as immediate
+            ctx.dict.mark_immediate();
+            i += 1;
         } else if token_upper == "INCLUDED" {
             // INCLUDED ( addr len -- )
             // Takes filename from stack and loads the file
