@@ -190,14 +190,24 @@ fn compile_to_executable(
         println!("  Debug symbols: {}", if debug_symbols { "yes" } else { "no" });
     }
 
-    // Step 1: Build runtime library (Rust staticlib)
+    // Step 1: Build minimal runtime library (compile runtime.rs to object file)
     if verbose {
-        println!("Step 1: Building runtime library...");
+        println!("Step 1: Building minimal runtime library...");
     }
-    let runtime_result = std::process::Command::new("cargo")
-        .args(["build", "--lib", "--release"])
+
+    let runtime_obj_path = format!("{}_runtime.o", output_file);
+    let runtime_result = std::process::Command::new("rustc")
+        .args([
+            "--crate-type=lib",
+            "--emit=obj",
+            "--edition", "2021",
+            "-C", "opt-level=3",
+            "-C", "lto=fat",
+            "src/runtime.rs",
+            "-o", &runtime_obj_path
+        ])
         .output()
-        .map_err(|e| format!("Failed to run cargo: {}", e));
+        .map_err(|e| format!("Failed to run rustc: {}", e));
 
     match runtime_result {
         Ok(output) => {
@@ -321,7 +331,7 @@ fn compile_to_executable(
     link_cmd.args([
         &main_o_path,
         &forth_obj_path,
-        "target/release/libquarter.a",
+        &runtime_obj_path,  // Use minimal runtime instead of full libquarter.a
         "-o",
         output_file,
     ]);
@@ -344,14 +354,8 @@ fn compile_to_executable(
         }
 
         link_cmd.args([
-            "-lc++",    // LLVM requires C++ standard library
-            "-lzstd",   // zstd (compression) - let system linker find it
-            "-lffi",    // libffi (foreign function interface)
-            "-lz",      // zlib (compression)
-            "-Wl,-U,_del_curterm",  // Allow undefined ncurses symbols
-            "-Wl,-U,_set_curterm",
-            "-Wl,-U,_setupterm",
-            "-Wl,-U,_tigetnum",
+            "-Wl,-dead_strip",  // Remove unused code
+            "-Wl,-x",           // Strip local symbols
         ]);
     }
 
@@ -372,13 +376,9 @@ fn compile_to_executable(
         }
 
         link_cmd.args([
-            "-lstdc++", // LLVM requires C++ standard library
-            "-lzstd",   // zstd (compression)
-            "-lffi",    // libffi (foreign function interface)
-            "-lz",      // zlib (compression)
-            "-ldl",     // Dynamic linking library
-            "-lpthread", // Threading library
-            "-lm",      // Math library
+            "-lm",      // Math library (for abs, etc.)
+            "-Wl,--gc-sections",  // Remove unused sections
+            "-s",                  // Strip all symbols
         ]);
     }
 
@@ -409,6 +409,17 @@ fn compile_to_executable(
         }
     }
 
+    // Strip the binary to further reduce size
+    #[cfg(target_os = "macos")]
+    {
+        if verbose {
+            println!("Stripping debug symbols...");
+        }
+        let _ = std::process::Command::new("strip")
+            .arg(output_file)
+            .output();
+    }
+
     // Success!
     if verbose {
         println!();
@@ -420,10 +431,8 @@ fn compile_to_executable(
         println!("  - {} (main wrapper - C source)", main_c_path);
         println!("  - {} (main wrapper - object)", main_o_path);
         println!("  - {} (Forth code - object)", forth_obj_path);
+        println!("  - {} (minimal runtime - object)", runtime_obj_path);
         println!("  - {} (final executable)", output_file);
-        println!();
-        println!("Linked with:");
-        println!("  - target/release/libquarter.a (Rust runtime)");
         println!();
         println!("Run with: ./{}", output_file);
     } else {

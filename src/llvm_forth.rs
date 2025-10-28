@@ -75,7 +75,7 @@ fn register_quarter_symbols() -> usize {
 
         // Return stack operations
         crate::words::quarter_to_r,
-        crate::words::quarter_r_from,
+        crate::words::quarter_from_r,
         crate::words::quarter_r_fetch,
 
         // Loop operations

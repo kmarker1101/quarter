@@ -11,6 +11,65 @@ thread_local! {
     static READLINE_EDITOR: RefCell<Option<DefaultEditor>> = const { RefCell::new(None) };
 }
 
+// ============================================================================
+// External primitives from runtime.rs
+// These are linked in from libquarter_runtime.a via build.rs
+// ============================================================================
+
+unsafe extern "C" {
+    // Arithmetic
+    pub fn quarter_add(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_sub(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_mul(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_div(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_mod(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_negate(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_abs(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_1plus(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_1minus(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_2star(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_2slash(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_min(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_max(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+
+    // Comparison
+    pub fn quarter_less_than(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_gt(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_equal(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_not_equal(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_less_equal(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_greater_equal(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+
+    // Bitwise
+    pub fn quarter_and(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_or(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_xor(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_invert(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_lshift(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_rshift(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+
+    // Stack operations
+    pub fn quarter_dup(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_drop(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_swap(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_over(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_rot(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+
+    // Memory operations
+    pub fn quarter_store(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_fetch(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_c_store(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_c_fetch(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_base(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+
+    // Return stack
+    pub fn quarter_to_r(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_from_r(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_r_fetch(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+
+    // I/O (emit, cr, dot, space are defined in this module)
+}
+
 // Built-in word definitions
 pub fn dot(
     stack: &mut Stack,
@@ -1046,22 +1105,6 @@ pub fn base(
     stack.push(memory.base(), memory);
 }
 
-/// BASE primitive for compiled code
-/// Stack: ( -- addr )
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_base(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        // Get base address (0x7FFFF8 - must match BASE_ADDR in lib.rs)
-        const BASE_ADDR: i64 = 0x7FFFF8;
-
-        // Push base address onto stack
-        let sp_val = *sp;
-        let dest = memory.add(sp_val) as *mut i64;
-        dest.write_unaligned(BASE_ADDR);
-        *sp = sp_val + 8;
-    }
-}
-
 /// >NUMBER: ( ud1-lo ud1-hi c-addr u -- ud2-lo ud2-hi c-addr u )
 ///
 /// Convert string to number with accumulation using double-cell unsigned arithmetic.
@@ -1172,92 +1215,6 @@ unsafe fn check_sp_read(sp_val: usize, bytes_needed: usize) -> bool {
     debug_assert!(sp_val < DATA_STACK_END, "Stack pointer out of bounds: 0x{:x}", sp_val);
 
     sp_val >= bytes_needed && sp_val < DATA_STACK_END
-}
-
-/// Check if stack can grow by N bytes without overflow
-#[inline]
-unsafe fn check_sp_write(sp_val: usize, bytes_to_add: usize) -> bool {
-    debug_assert!(sp_val % 8 == 0, "Misaligned stack pointer: 0x{:x}", sp_val);
-    debug_assert!(sp_val < DATA_STACK_END, "Stack pointer out of bounds: 0x{:x}", sp_val);
-    debug_assert!(sp_val + bytes_to_add <= DATA_STACK_END, "Stack overflow: sp={}, adding={}, limit={}", sp_val, bytes_to_add, DATA_STACK_END);
-
-    sp_val < DATA_STACK_END && sp_val + bytes_to_add <= DATA_STACK_END
-}
-
-/// Macro for binary operations (a b -- result)
-/// Takes two values from stack, applies operation, pushes result
-macro_rules! binary_op {
-    ($name:ident, $op:expr) => {
-        /// # Safety
-        /// The caller must ensure:
-        /// - `memory` points to a valid memory buffer of at least 8MB
-        /// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
-        /// - The data stack contains at least 2 values (16 bytes)
-        #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn $name(
-            memory: *mut u8,
-            sp: *mut usize,
-            _rp: *mut usize
-        ) {
-            unsafe {
-                let sp_val = *sp;
-
-                // Bounds check: need at least 2 values (16 bytes)
-                if !check_sp_read(sp_val, 16) {
-                    return;  // Stack underflow
-                }
-
-                // Pop b from sp-8, a from sp-16
-                let addr_a = memory.add(sp_val - 16) as *mut i64;
-                let addr_b = memory.add(sp_val - 8) as *const i64;
-                let a = *addr_a;
-                let b = *addr_b;
-
-                // Apply operation and store result
-                *addr_a = $op(a, b);
-
-                // Decrement sp by 8
-                let new_sp = sp_val - 8;
-                debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after operation");
-                debug_assert!(new_sp < DATA_STACK_END, "Stack pointer out of bounds after operation");
-                *sp = new_sp;
-            }
-        }
-    };
-}
-
-/// Macro for unary operations (a -- result)
-/// Takes one value from stack, applies operation, pushes result
-macro_rules! unary_op {
-    ($name:ident, $op:expr) => {
-        /// # Safety
-        /// The caller must ensure:
-        /// - `memory` points to a valid memory buffer of at least 8MB
-        /// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
-        /// - The data stack contains at least 1 value (8 bytes)
-        #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn $name(
-            memory: *mut u8,
-            sp: *mut usize,
-            _rp: *mut usize
-        ) {
-            unsafe {
-                let sp_val = *sp;
-
-                // Bounds check: need at least 1 value (8 bytes)
-                if !check_sp_read(sp_val, 8) {
-                    return;  // Stack underflow
-                }
-
-                // Get address of top value
-                let addr = memory.add(sp_val - 8) as *mut i64;
-                let a = *addr;
-
-                // Apply operation and store result
-                *addr = $op(a);
-            }
-        }
-    };
 }
 
 /// Macro for binary operations that return two results (a b -- result1 result2)
@@ -1371,98 +1328,11 @@ macro_rules! pointer_store {
     };
 }
 
-/// # Safety
-/// The caller must ensure:
-/// - `memory` points to a valid memory buffer of at least 8MB
-/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
-/// - The data stack contains at least 1 value (8 bytes)
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_dup(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
+// NOTE: Stack primitives (DUP, DROP, SWAP, etc.) are now defined in runtime.rs
+// and declared as extern "C" at the top of this file.
 
-        // Bounds check: need at least 1 value (4 bytes) and room for 1 more
-        if !check_sp_read(sp_val, 8) || !check_sp_write(sp_val, 8) {
-            return;  // Stack underflow or overflow
-        }
-
-        // Read value from top of stack (sp - 4)
-        let addr = memory.add(sp_val - 8) as *const i64;
-        let val = *addr;
-        // Write value to next position (sp)
-        let dest = memory.add(sp_val) as *mut i64;
-        *dest = val;
-        // Increment sp by 8
-        let new_sp = sp_val + 8;
-        debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after DUP");
-        debug_assert!(new_sp <= DATA_STACK_END, "Stack overflow after DUP");
-        *sp = new_sp;
-    }
-}
-
-/// # Safety
-/// The caller must ensure:
-/// - `memory` points to a valid memory buffer of at least 8MB
-/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
-/// - The data stack contains at least 1 value (8 bytes)
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_drop(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-
-        // Bounds check: need at least 1 value (4 bytes) to drop
-        if !check_sp_read(sp_val, 8) {
-            return;  // Stack underflow
-        }
-
-        // Decrement sp by 8
-        let new_sp = sp_val - 8;
-        debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after DROP");
-        debug_assert!(new_sp < DATA_STACK_END, "Stack pointer out of bounds after DROP");
-        *sp = new_sp;
-        let _ = memory; // Suppress warning
-    }
-}
-
-/// # Safety
-/// The caller must ensure:
-/// - `memory` points to a valid memory buffer of at least 8MB
-/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
-/// - The data stack contains at least 2 values (16 bytes)
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_swap(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-
-        // Bounds check: need at least 2 values (16 bytes) to swap
-        if !check_sp_read(sp_val, 16) {
-            return;  // Stack underflow
-        }
-
-        // Read a from sp-16, b from sp-8
-        let addr_a = memory.add(sp_val - 16) as *mut i64;
-        let addr_b = memory.add(sp_val - 8) as *mut i64;
-        let a = *addr_a;
-        let b = *addr_b;
-        // Swap them
-        *addr_a = b;
-        *addr_b = a;
-    }
-}
-
-// Arithmetic operations using macros
-binary_op!(quarter_add, |a, b| a + b);
-binary_op!(quarter_sub, |a, b| a - b);
-binary_op!(quarter_mul, |a, b| a * b);
-binary_op!(quarter_div, |a, b| if b != 0 { a / b } else { 0 });
-binary_op!(quarter_mod, |a, b| if b != 0 { a % b } else { 0 });
-
-// Comparison operations using macros
-binary_op!(quarter_less_than, |a, b| if a < b { -1 } else { 0 });
-binary_op!(quarter_gt, |a, b| if a > b { -1 } else { 0 });
-binary_op!(quarter_equal, |a, b| if a == b { -1 } else { 0 });
-binary_op!(quarter_not_equal, |a, b| if a != b { -1 } else { 0 });
-binary_op!(quarter_less_equal, |a, b| if a <= b { -1 } else { 0 });
+// NOTE: Arithmetic and comparison primitives are now defined in runtime.rs
+// and declared as extern "C" at the top of this file.
 
 /// JIT-callable less than (alias for quarter_less_than): ( a b -- flag )
 /// # Safety
@@ -1478,345 +1348,30 @@ pub unsafe extern "C" fn quarter_lt(memory: *mut u8, sp: *mut usize, rp: *mut us
     }
 }
 
-binary_op!(quarter_greater_equal, |a, b| if a >= b { -1 } else { 0 });
-
-// Unary arithmetic operations
-unary_op!(quarter_negate, |a: i64| -a);
-unary_op!(quarter_abs, |a: i64| a.abs());
-unary_op!(quarter_1plus, |a: i64| a + 1);
-unary_op!(quarter_1minus, |a: i64| a - 1);
-
-// Binary min/max operations
-binary_op!(quarter_min, |a, b| if a < b { a } else { b });
-binary_op!(quarter_max, |a, b| if a > b { a } else { b });
-
-// Multiply/divide by 2 operations
-unary_op!(quarter_2star, |a: i64| a * 2);
-unary_op!(quarter_2slash, |a: i64| a / 2);
-
 // ============================================================================
 // Memory Operations
 // ============================================================================
 
-/// JIT-callable store: ( n addr -- )
-/// Stores n at address addr (8-byte cell)
-/// # Safety
-/// The caller must ensure:
-/// - `memory` points to a valid memory buffer of at least 8MB
-/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
-/// - The data stack contains at least 2 values (16 bytes)
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_store(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 16) {
-            return;
-        }
-        // Pop addr from sp-8, value from sp-16 using unaligned read
-        let value_ptr = memory.add(sp_val - 16) as *const i64;
-        let addr_ptr = memory.add(sp_val - 8) as *const i64;
-        let value = value_ptr.read_unaligned();
-        let addr = addr_ptr.read_unaligned() as usize;
-
-        // Store value at addr using unaligned write
-        if addr + 8 <= 8 * 1024 * 1024 {  // 8MB bounds check
-            let dest = memory.add(addr) as *mut i64;
-            dest.write_unaligned(value);
-        }
-
-        // Decrement sp by 16 (consumed both values)
-        *sp = sp_val - 16;
-    }
-}
-
-/// JIT-callable fetch: ( addr -- n )
-/// Fetches 8-byte cell from address addr
-/// # Safety
-/// The caller must ensure:
-/// - `memory` points to a valid memory buffer of at least 8MB
-/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
-/// - The data stack contains at least 1 value (8 bytes)
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_fetch(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 8) {
-            return;
-        }
-        // Pop addr from sp-8 using unaligned read
-        let addr_ptr = memory.add(sp_val - 8) as *const i64;
-        let addr = addr_ptr.read_unaligned() as usize;
-
-        // Fetch value from addr
-        if addr + 8 <= 8 * 1024 * 1024 {
-            let src = memory.add(addr) as *const i64;
-            let value = src.read_unaligned();
-            // Replace addr on stack with value using unaligned write
-            let dest = memory.add(sp_val - 8) as *mut i64;
-            dest.write_unaligned(value);
-        }
-    }
-}
-
-/// JIT-callable c-store: ( c addr -- )
-/// Stores byte c at address addr
-/// # Safety
-/// The caller must ensure:
-/// - `memory` points to a valid memory buffer of at least 8MB
-/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
-/// - The data stack contains at least 2 values (16 bytes)
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_c_store(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 16) {
-            return;
-        }
-        // Pop addr from sp-8, value from sp-16 using unaligned read
-        let value_ptr = memory.add(sp_val - 16) as *const i64;
-        let addr_ptr = memory.add(sp_val - 8) as *const i64;
-        let value = (value_ptr.read_unaligned() & 0xFF) as u8;
-        let addr = addr_ptr.read_unaligned() as usize;
-
-        // Store byte at addr
-        if addr < 8 * 1024 * 1024 {
-            let dest = memory.add(addr);
-            *dest = value;
-        }
-
-        // Decrement sp by 16
-        *sp = sp_val - 16;
-    }
-}
-
-/// JIT-callable c-fetch: ( addr -- c )
-/// Fetches byte from address addr
-/// # Safety
-/// The caller must ensure:
-/// - `memory` points to a valid memory buffer of at least 8MB
-/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
-/// - The data stack contains at least 1 value (8 bytes)
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_c_fetch(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 8) {
-            return;
-        }
-        // Pop addr from sp-8 using unaligned read
-        let addr_ptr = memory.add(sp_val - 8) as *const i64;
-        let addr = addr_ptr.read_unaligned() as usize;
-
-        // Fetch byte from addr
-        if addr < 8 * 1024 * 1024 {
-            let byte_val = *memory.add(addr) as i64;
-            // Replace addr on stack with byte value using unaligned write
-            let dest = memory.add(sp_val - 8) as *mut i64;
-            dest.write_unaligned(byte_val);
-        }
-    }
-}
+// NOTE: Memory primitives (!, @, C!, C@) are now defined in runtime.rs
+// and declared as extern "C" at the top of this file.
 
 // ============================================================================
 // Bitwise Operations
 // ============================================================================
 
-// Bitwise operations using macros
-binary_op!(quarter_and, |a, b| a & b);
-binary_op!(quarter_or, |a, b| a | b);
-binary_op!(quarter_xor, |a, b| a ^ b);
-binary_op!(quarter_lshift, |a, b| a << (b as u32));
-binary_op!(quarter_rshift, |a, b| a >> (b as u32));
-unary_op!(quarter_invert, |a: i64| !a);
+// NOTE: Bitwise primitives (AND, OR, XOR, INVERT, LSHIFT, RSHIFT) are now
+// defined in runtime.rs and declared as extern "C" at the top of this file.
 
 // ============================================================================
 // Return Stack Operations
 // ============================================================================
 
-/// JIT-callable >R: ( n -- ) (R: -- n)
-/// Moves value from data stack to return stack
-/// # Safety
-/// The caller must ensure:
-/// - `memory` points to a valid memory buffer of at least 8MB
-/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
-/// - `rp` points to a valid return stack pointer within return stack bounds
-/// - The data stack contains at least 1 value (8 bytes)
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_to_r(memory: *mut u8, sp: *mut usize, rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        let rp_val = *rp;
-
-        if !check_sp_read(sp_val, 8) {
-            return;
-        }
-
-        // Check return stack bounds (return stack is at 0x010000-0x01FFFF)
-        debug_assert!(rp_val % 8 == 0, "Misaligned return stack pointer: 0x{:x}", rp_val);
-        debug_assert!((0x010000..0x020000).contains(&rp_val), "Return stack pointer out of bounds: 0x{:x}", rp_val);
-        if rp_val + 8 > 0x020000 {
-            return;  // Return stack overflow
-        }
-
-        // Pop from data stack
-        let value_addr = memory.add(sp_val - 8) as *const i64;
-        let value = *value_addr;
-        let new_sp = sp_val - 8;
-        debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after >R");
-        *sp = new_sp;
-
-        // Push to return stack
-        let r_dest = memory.add(rp_val) as *mut i64;
-        *r_dest = value;
-        let new_rp = rp_val + 8;
-        debug_assert!(new_rp % 8 == 0, "Return stack pointer misalignment after >R");
-        debug_assert!(new_rp <= 0x020000, "Return stack overflow after >R");
-        *rp = new_rp;
-    }
-}
-
-/// JIT-callable R>: ( -- n ) (R: n -- )
-/// Moves value from return stack to data stack
-/// # Safety
-/// The caller must ensure:
-/// - `memory` points to a valid memory buffer of at least 8MB
-/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
-/// - `rp` points to a valid return stack pointer within return stack bounds
-/// - The return stack contains at least 1 value (8 bytes)
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_r_from(memory: *mut u8, sp: *mut usize, rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        let rp_val = *rp;
-
-        // Check return stack underflow
-        debug_assert!(rp_val % 8 == 0, "Misaligned return stack pointer: 0x{:x}", rp_val);
-        debug_assert!(rp_val >= 0x010000 + 8, "Return stack underflow: rp=0x{:x}", rp_val);
-        if rp_val < 0x010000 + 8 {
-            return;  // Return stack underflow
-        }
-
-        // Check data stack bounds
-        debug_assert!(sp_val % 8 == 0, "Misaligned stack pointer: 0x{:x}", sp_val);
-        debug_assert!(sp_val + 8 <= DATA_STACK_END, "Data stack overflow: sp=0x{:x}", sp_val);
-        if sp_val + 8 > 0x010000 {
-            return;  // Data stack overflow
-        }
-
-        // Pop from return stack
-        let r_addr = memory.add(rp_val - 8) as *const i64;
-        let value = *r_addr;
-        let new_rp = rp_val - 8;
-        debug_assert!(new_rp % 8 == 0, "Return stack pointer misalignment after R>");
-        *rp = new_rp;
-
-        // Push to data stack
-        let dest = memory.add(sp_val) as *mut i64;
-        *dest = value;
-        let new_sp = sp_val + 8;
-        debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after R>");
-        *sp = new_sp;
-    }
-}
-
-/// JIT-callable R@: ( -- n ) (R: n -- n)
-/// Copies top of return stack to data stack
-/// # Safety
-/// The caller must ensure:
-/// - `memory` points to a valid memory buffer of at least 8MB
-/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
-/// - `rp` points to a valid return stack pointer within return stack bounds
-/// - The return stack contains at least 1 value (8 bytes)
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_r_fetch(memory: *mut u8, sp: *mut usize, rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        let rp_val = *rp;
-
-        // Check return stack underflow
-        debug_assert!(rp_val % 8 == 0, "Misaligned return stack pointer: 0x{:x}", rp_val);
-        debug_assert!(rp_val >= 0x010000 + 8, "Return stack underflow: rp=0x{:x}", rp_val);
-        if rp_val < 0x010000 + 8 {
-            return;
-        }
-
-        // Check data stack bounds
-        debug_assert!(sp_val % 8 == 0, "Misaligned stack pointer: 0x{:x}", sp_val);
-        debug_assert!(sp_val + 8 <= DATA_STACK_END, "Data stack overflow: sp=0x{:x}", sp_val);
-        if sp_val + 8 > 0x010000 {
-            return;
-        }
-
-        // Peek from return stack
-        let r_addr = memory.add(rp_val - 8) as *const i64;
-        let value = *r_addr;
-
-        // Push to data stack
-        let dest = memory.add(sp_val) as *mut i64;
-        *dest = value;
-        let new_sp = sp_val + 8;
-        debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after R@");
-        *sp = new_sp;
-    }
-}
+// NOTE: Return stack primitives (>R, R>, R@) are now defined in runtime.rs
+// and declared as extern "C" at the top of this file.
 
 // ============================================================================
 // Additional Stack Operations
 // ============================================================================
-
-/// JIT-callable over: ( a b -- a b a )
-/// Copies second stack item to top
-/// # Safety
-/// The caller must ensure:
-/// - `memory` points to a valid memory buffer of at least 8MB
-/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
-/// - The data stack contains at least 2 values (16 bytes)
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_over(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 16) {
-            return;
-        }
-        // Read second item (at sp-16) and push it
-        let addr = memory.add(sp_val - 16) as *const i64;
-        let value = addr.read_unaligned();
-        let dest = memory.add(sp_val) as *mut i64;
-        dest.write_unaligned(value);
-        let new_sp = sp_val + 8;
-        debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after OVER");
-        debug_assert!(new_sp <= DATA_STACK_END, "Stack overflow after OVER");
-        *sp = new_sp;
-    }
-}
-
-/// JIT-callable rot: ( a b c -- b c a )
-/// Rotates top three stack items
-/// # Safety
-/// The caller must ensure:
-/// - `memory` points to a valid memory buffer of at least 8MB
-/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
-/// - The data stack contains at least 3 values (24 bytes)
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_rot(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 24) {
-            return;
-        }
-        // Read a (sp-24), b (sp-16), c (sp-8)
-        let addr_a = memory.add(sp_val - 24) as *mut i64;
-        let addr_b = memory.add(sp_val - 16) as *mut i64;
-        let addr_c = memory.add(sp_val - 8) as *mut i64;
-        let a = addr_a.read_unaligned();
-        let b = addr_b.read_unaligned();
-        let c = addr_c.read_unaligned();
-        // Write b, c, a
-        addr_a.write_unaligned(b);
-        addr_b.write_unaligned(c);
-        addr_c.write_unaligned(a);
-    }
-}
 
 /// JIT-callable pick: ( ... n -- ... xn )
 /// Copies nth stack item to top (0=top)
@@ -1825,7 +1380,6 @@ pub unsafe extern "C" fn quarter_rot(memory: *mut u8, sp: *mut usize, _rp: *mut 
 /// - `memory` points to a valid memory buffer of at least 8MB
 /// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
 /// - The data stack contains at least (n+1) values
-#[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_pick(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;
@@ -1950,8 +1504,8 @@ pub unsafe extern "C" fn quarter_emit(memory: *mut u8, sp: *mut usize, _rp: *mut
             return;
         }
         let addr = memory.add(sp_val - 8) as *const i64;
-        let code = addr.read_unaligned() as u32;
-        if let Some(ch) = char::from_u32(code) {
+        let code = addr.read_unaligned();
+        if let Some(ch) = char::from_u32(code as u32) {
             print!("{}", ch);
         }
         let new_sp = sp_val - 8;
@@ -1970,35 +1524,14 @@ pub unsafe extern "C" fn quarter_space(_memory: *mut u8, _sp: *mut usize, _rp: *
     print!(" ");
 }
 
-/// JIT-callable key: ( -- c )
-/// Reads character (placeholder - needs proper I/O handling)
-/// # Safety
-/// The caller must ensure:
-/// - `memory` points to a valid memory buffer of at least 8MB
-/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_key(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        debug_assert!(sp_val % 8 == 0, "Misaligned stack pointer: 0x{:x}", sp_val);
-        let dest = memory.add(sp_val) as *mut i64;
-        dest.write_unaligned(0);  // Placeholder
-        let new_sp = sp_val + 8;
-        debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after KEY");
-        debug_assert!(new_sp <= DATA_STACK_END, "Stack overflow after KEY");
-        *sp = new_sp;
-    }
-}
-
 /// JIT-callable cr: ( -- )
 /// Outputs newline
 /// # Safety
 /// The caller must ensure:
 /// - All pointers are valid (though this function doesn't use them)
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_cr(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+pub unsafe extern "C" fn quarter_cr(_memory: *mut u8, _sp: *mut usize, _rp: *mut usize) {
     println!();
-    let _ = (memory, sp, _rp);  // Suppress warnings
 }
 
 /// JIT-callable dot: ( n -- )
@@ -2024,6 +1557,26 @@ pub unsafe extern "C" fn quarter_dot(memory: *mut u8, sp: *mut usize, _rp: *mut 
     }
 }
 
+/// JIT-callable key: ( -- c )
+/// Reads character (placeholder - needs proper I/O handling)
+/// # Safety
+/// The caller must ensure:
+/// - `memory` points to a valid memory buffer of at least 8MB
+/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn quarter_key(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        debug_assert!(sp_val % 8 == 0, "Misaligned stack pointer: 0x{:x}", sp_val);
+        let dest = memory.add(sp_val) as *mut i64;
+        dest.write_unaligned(0);  // Placeholder
+        let new_sp = sp_val + 8;
+        debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after KEY");
+        debug_assert!(new_sp <= DATA_STACK_END, "Stack overflow after KEY");
+        *sp = new_sp;
+    }
+}
+
 /// JIT-callable u_dot: ( u -- )
 /// Prints unsigned number
 /// # Safety
@@ -2031,7 +1584,6 @@ pub unsafe extern "C" fn quarter_dot(memory: *mut u8, sp: *mut usize, _rp: *mut 
 /// - `memory` points to a valid memory buffer of at least 8MB
 /// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
 /// - The data stack contains at least 1 value (8 bytes)
-#[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_u_dot(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
         let sp_val = *sp;

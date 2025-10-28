@@ -2,7 +2,6 @@ pub mod ast;
 pub mod ast_forth;
 pub mod dictionary;
 pub mod llvm_forth;
-pub mod runtime;
 pub mod stack;
 pub mod words;
 

@@ -6,12 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**quarter** is a Forth interpreter written in Rust with a **self-hosting JIT compiler** that compiles Forth code to native machine code via LLVM.
+**quarter** is a Forth interpreter written in Rust with a **self-hosting JIT compiler** that compiles Forth code to native machine code via LLVM. It supports three execution modes: interpreted, JIT (runtime native code), and AOT (standalone executables).
 
 **Current Status:** v2 Complete ✅
 - ✅ Complete Forth interpreter with all core primitives
 - ✅ Self-hosting Forth compiler (stdlib/compiler.fth - 666 lines)
 - ✅ LLVM JIT compilation (100-500x speedup)
+- ✅ AOT compilation to standalone executables
 - ✅ Full recursion support (RECURSE + direct recursion)
 - ✅ 153 tests passing (145 unit + 8 integration)
 
@@ -37,6 +38,11 @@ cargo run myprogram.fth
 
 # Run with JIT compilation
 cargo run myprogram.fth --jit
+
+# AOT compile to standalone executable
+cargo run -- --compile myprogram.fth
+cargo run -- --compile myprogram.fth -o mybinary
+cargo run -- -c myprogram.fth -o myapp -O3
 
 # Tests
 cargo test                    # All tests
@@ -165,9 +171,22 @@ git commit -m "Brief description
 
 ## Dependencies
 
+**Rust Crates:**
 - **inkwell** (0.4) - LLVM bindings
 - **rustyline** (14.0) - REPL with history
-- Requires LLVM 18.x installed
+
+**System Requirements:**
+- **LLVM 18.x** - Required for JIT and AOT compilation
+- **libzstd** - Compression library (used by LLVM)
+- **libffi** - Foreign Function Interface library
+- **libc++** (macOS) or **libstdc++** (Linux) - C++ standard library
+- **libz** - Compression library
+
+**Installation:**
+- macOS: `brew install llvm zstd libffi`
+- Ubuntu/Debian: `sudo apt install llvm-18 libzstd-dev libffi-dev`
+
+**Note:** Interpreted mode works without LLVM, but JIT and AOT modes require these libraries.
 
 ## Key Implementation Details
 
@@ -175,4 +194,5 @@ git commit -m "Brief description
 - **Compile-time validation**: Word definitions validate all referenced words exist
 - **TCO**: Tail-call optimization for recursive words
 - **JIT Compilation**: Self-hosting Forth compiler in `stdlib/compiler.fth`
+- **AOT Compilation**: Compiles Forth programs to standalone native executables via LLVM
 - **Test Framework**: `T{ -> }T` syntax in `stdlib/test-framework.fth`
