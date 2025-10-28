@@ -1455,6 +1455,7 @@ binary_op!(quarter_add, |a, b| a + b);
 binary_op!(quarter_sub, |a, b| a - b);
 binary_op!(quarter_mul, |a, b| a * b);
 binary_op!(quarter_div, |a, b| if b != 0 { a / b } else { 0 });
+binary_op!(quarter_mod, |a, b| if b != 0 { a % b } else { 0 });
 
 // Comparison operations using macros
 binary_op!(quarter_less_than, |a, b| if a < b { -1 } else { 0 });
