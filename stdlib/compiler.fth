@@ -2777,19 +2777,21 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
     COMPILER-SCRATCH 15 DECLARE-PRIMITIVE
 
     \ Memory - quarter_base
-    113 COMPILER-SCRATCH 0 + C!  \ q
-    117 COMPILER-SCRATCH 1 + C!  \ u
-    97 COMPILER-SCRATCH 2 + C!   \ a
-    114 COMPILER-SCRATCH 3 + C!  \ r
-    116 COMPILER-SCRATCH 4 + C!  \ t
-    101 COMPILER-SCRATCH 5 + C!  \ e
-    114 COMPILER-SCRATCH 6 + C!  \ r
-    95 COMPILER-SCRATCH 7 + C!   \ _
-    98 COMPILER-SCRATCH 8 + C!   \ b
-    97 COMPILER-SCRATCH 9 + C!   \ a
-    115 COMPILER-SCRATCH 10 + C! \ s
-    101 COMPILER-SCRATCH 11 + C! \ e
-    COMPILER-SCRATCH 12 DECLARE-PRIMITIVE
+    \ FIXME: Declaring quarter_base causes JIT mode to hang (reason unknown)
+    \ Without this declaration, AOT gets LLVM-BUILD-CALL errors for HEX/DECIMAL/BINARY
+    \ 113 COMPILER-SCRATCH 0 + C!  \ q
+    \ 117 COMPILER-SCRATCH 1 + C!  \ u
+    \ 97 COMPILER-SCRATCH 2 + C!   \ a
+    \ 114 COMPILER-SCRATCH 3 + C!  \ r
+    \ 116 COMPILER-SCRATCH 4 + C!  \ t
+    \ 101 COMPILER-SCRATCH 5 + C!  \ e
+    \ 114 COMPILER-SCRATCH 6 + C!  \ r
+    \ 95 COMPILER-SCRATCH 7 + C!   \ _
+    \ 98 COMPILER-SCRATCH 8 + C!   \ b
+    \ 97 COMPILER-SCRATCH 9 + C!   \ a
+    \ 115 COMPILER-SCRATCH 10 + C! \ s
+    \ 101 COMPILER-SCRATCH 11 + C! \ e
+    \ COMPILER-SCRATCH 12 DECLARE-PRIMITIVE
 
     \ Bitwise - quarter_and
     113 COMPILER-SCRATCH 0 + C! 117 COMPILER-SCRATCH 1 + C! 97 COMPILER-SCRATCH 2 + C!
