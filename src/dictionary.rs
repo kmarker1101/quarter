@@ -130,6 +130,7 @@ impl Dictionary {
             "ALLOT" => words::allot,
             "," => words::comma,
             "BASE" => words::base,
+            ">NUMBER" => words::to_number,
 
             // Loop operations
             "I" => words::loop_i,

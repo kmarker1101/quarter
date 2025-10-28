@@ -788,6 +788,45 @@ T{ 5 TEST-COND-ABORT-FALSE -> 5 }T
 \ manual verification tests.
 
 \ =============================================================================
+\ >NUMBER TESTS
+\ =============================================================================
+
+S" >NUMBER converts decimal string" TEST:
+\ Store "123" at address 600000
+3 600000 C!
+49 600001 C!  \ '1'
+50 600002 C!  \ '2'
+51 600003 C!  \ '3'
+T{ 0 0 600001 3 >NUMBER -> 123 0 600004 0 }T
+
+S" >NUMBER converts hex string" TEST:
+\ Store "FF" at address 600100
+2 600100 C!
+70 600101 C!  \ 'F'
+70 600102 C!  \ 'F'
+HEX
+T{ 0 0 600101 2 >NUMBER -> 255 0 600103 0 }T
+DECIMAL
+
+S" >NUMBER stops at invalid character" TEST:
+\ Store "12X45" at address 600200
+5 600200 C!
+49 600201 C!  \ '1'
+50 600202 C!  \ '2'
+88 600203 C!  \ 'X'
+52 600204 C!  \ '4'
+53 600205 C!  \ '5'
+T{ 0 0 600201 5 >NUMBER -> 12 0 600203 3 }T
+
+S" >NUMBER accumulates to existing value" TEST:
+\ Store "99" at address 600300
+2 600300 C!
+57 600301 C!  \ '9'
+57 600302 C!  \ '9'
+\ Start with 100 in accumulator, add 99
+T{ 100 0 600301 2 >NUMBER -> 10099 0 600303 0 }T
+
+\ =============================================================================
 \ REPORT
 \ =============================================================================
 

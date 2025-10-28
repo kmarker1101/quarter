@@ -52,7 +52,7 @@ cargo fmt                     # Auto-format code
 
 ```
 src/
-  main.rs              # REPL and CLI
+  main.rs              # CLI
   lib.rs               # Parser, file loading
   stack.rs             # Data stack (64-bit cells in memory)
   dictionary.rs        # Word dictionary
@@ -65,6 +65,7 @@ src/
 stdlib/
   core.fth             # Core Forth standard library
   test-framework.fth   # Unit test framework
+  repl.fth             # Repl
 
 tests/
   *.rs                 # Rust unit tests (145 tests)

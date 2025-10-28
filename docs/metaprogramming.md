@@ -59,6 +59,48 @@ Defined in `stdlib/core.fth`:
 : COUNT DUP 1+ SWAP C@ ;
 ```
 
+## Number Parsing
+
+### >NUMBER ( ud1-lo ud1-hi c-addr u -- ud2-lo ud2-hi c-addr' u' )
+Convert string to double-cell unsigned number with accumulation.
+
+**Parameters:**
+- `ud1-lo ud1-hi`: Initial double-cell accumulator (64-bit low, 64-bit high)
+- `c-addr u`: String address and length
+- `ud2-lo ud2-hi`: Updated accumulator
+- `c-addr' u'`: Remaining unconverted portion
+
+**Behavior:**
+- Converts characters based on current BASE (2-36)
+- Accumulates into 128-bit unsigned number
+- Stops at first non-digit character
+- Returns address and length of remaining unconverted string
+
+```forth
+\ Store "123" at address 600000
+3 600000 C!
+49 600001 C!  \ '1'
+50 600002 C!  \ '2'
+51 600003 C!  \ '3'
+
+0 0 600001 3 >NUMBER  \ → 123 0 600004 0
+
+\ Hex conversion
+2 600100 C!
+70 600101 C!  \ 'F'
+70 600102 C!  \ 'F'
+HEX
+0 0 600101 2 >NUMBER  \ → 255 0 600103 0
+DECIMAL
+
+\ Stops at invalid character
+\ "12X45" at 600200
+0 0 600200 5 >NUMBER  \ → 12 0 600203 3 (converted "12", "X45" remains)
+
+\ Accumulation example
+100 0 600301 2 >NUMBER  \ Start with 100, add digits → 10099 0
+```
+
 ## Dictionary Manipulation
 
 ### FIND ( c-addr -- c-addr 0 | xt 1 | xt -1 )

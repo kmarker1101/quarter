@@ -36,7 +36,7 @@ cargo test
 - **Self-hosting compiler** written entirely in Forth
 - **Two execution modes**: Interpreted (AST evaluation) and JIT (native code via LLVM)
 - **Full recursion support**: Both `RECURSE` word and direct recursion
-- **Comprehensive test suite**: 139 tests across unit and integration testing
+- **Comprehensive test suite**: 153 tests across unit and integration testing
 - **Interactive REPL** with history and line editing
 - **Standard Forth compliance**: Case-insensitive, standard control flow, memory model
 
@@ -194,6 +194,7 @@ cargo test test_tco_interpreted
 - `COUNT` ( c-addr -- addr u ) - Convert counted string to address/length pair
 - `FIND` ( c-addr -- c-addr 0 | xt 1 | xt -1 ) - Search dictionary for word by counted string
 - `IMMEDIATE` ( -- ) - Mark most recently defined word as immediate
+- `>NUMBER` ( ud1-lo ud1-hi c-addr u -- ud2-lo ud2-hi c-addr' u' ) - Convert string to double-cell number with accumulation
 
 **Comments**: `\` (line comment), `( )` (inline comment)
 
