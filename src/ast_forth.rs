@@ -42,6 +42,7 @@ impl AstRegistry {
             AstNode::DoLoop { .. } => "DoLoop".to_string(),
             AstNode::PrintString(_) => "PrintString".to_string(),
             AstNode::StackString(_) => "StackString".to_string(),
+            AstNode::AbortQuote(_) => "AbortQuote".to_string(),
             AstNode::Leave => "Leave".to_string(),
             AstNode::Exit => "Exit".to_string(),
             AstNode::Unloop => "Unloop".to_string(),
@@ -83,6 +84,7 @@ impl AstRegistry {
             AstNode::Execute => 14,
             AstNode::TickLiteral(_) => 15,
             AstNode::Find => 16,
+            AstNode::AbortQuote(_) => 17,
         })
     }
 
@@ -135,7 +137,7 @@ impl AstRegistry {
         }
     }
 
-    /// Get string value from PrintString or StackString node
+    /// Get string value from PrintString, StackString, or AbortQuote node
     fn get_string(&self, handle: AstHandle, memory: &mut crate::Memory, addr: usize) -> Result<i64, String> {
         let node = self.nodes.get(&handle)
             .ok_or_else(|| format!("Invalid AST handle: {}", handle))?;
@@ -143,7 +145,8 @@ impl AstRegistry {
         let string = match node {
             AstNode::PrintString(s) => s,
             AstNode::StackString(s) => s,
-            _ => return Err("AST node is not a PrintString or StackString".to_string()),
+            AstNode::AbortQuote(s) => s,
+            _ => return Err("AST node is not a PrintString, StackString, or AbortQuote".to_string()),
         };
 
         // Store string bytes in memory

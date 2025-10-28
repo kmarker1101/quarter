@@ -3601,6 +3601,24 @@ pub fn bye_word(
     std::process::exit(0);
 }
 
+/// ABORT: ( i*x -- ) ( R: j*x -- )
+/// Clear data and return stacks, then abort execution
+pub fn abort_word(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    // Clear data stack
+    while stack.pop(memory).is_some() {}
+
+    // Clear return stack
+    while return_stack.pop(memory).is_some() {}
+
+    eprintln!("ABORT");
+    std::process::exit(-1);
+}
+
 /// THROW: ( k*x n -- k*x | i*x n )
 /// If n is non-zero, unwind to nearest CATCH with error code n
 /// If n is zero, do nothing

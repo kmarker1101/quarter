@@ -616,6 +616,39 @@ pub fn parse_tokens(tokens: &[&str], dict: &crate::Dictionary, current_word: Opt
                 let string_content = string_parts.join(" ");
                 nodes.push(AstNode::StackString(string_content));
             }
+            "ABORT\"" => {
+                // Handle ABORT" string literals: collect tokens until closing "
+                let mut string_parts: Vec<String> = Vec::new();
+                i += 1; // Skip past ABORT"
+
+                while i < tokens.len() {
+                    let part = tokens[i];
+                    if let Some(without_quote) = part.strip_suffix('"') {
+                        // Found closing quote
+                        if part == "\"" {
+                            // Just a closing quote - means there was a trailing space
+                            // Add space to the last part if there is one
+                            if !string_parts.is_empty() {
+                                let last_idx = string_parts.len() - 1;
+                                string_parts[last_idx].push(' ');
+                            }
+                        } else {
+                            // Text followed by quote
+                            if !without_quote.is_empty() {
+                                string_parts.push(without_quote.to_string());
+                            }
+                        }
+                        i += 1;
+                        break;
+                    } else {
+                        string_parts.push(part.to_string());
+                        i += 1;
+                    }
+                }
+
+                let string_content = string_parts.join(" ");
+                nodes.push(AstNode::AbortQuote(string_content));
+            }
             "[']" => {
                 // ['] <name> (BRACKET-TICK) - compile-only
                 // Parse next word name at compile time, compile code to push xt at runtime

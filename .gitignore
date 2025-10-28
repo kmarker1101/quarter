@@ -15,7 +15,6 @@
 
 # Claude Code
 .claude/
-CLAUDE.md
 
 # REPL history
 .quarter_history

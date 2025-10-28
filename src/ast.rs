@@ -23,6 +23,7 @@ pub enum AstNode {
     },
     PrintString(String),
     StackString(String),  // S" - push address and length
+    AbortQuote(String),  // ABORT" - compile-only, conditionally abort with message
     Leave,
     Exit,
     Unloop,  // Discard loop parameters (used before EXIT when exiting from within a loop)
@@ -43,6 +44,7 @@ impl AstNode {
             AstNode::PushNumber(_) => Ok(()),
             AstNode::PrintString(_) => Ok(()),
             AstNode::StackString(_) => Ok(()),
+            AstNode::AbortQuote(_) => Ok(()),
             AstNode::Leave => Ok(()),
             AstNode::Exit => Ok(()),
             AstNode::Unloop => Ok(()),
@@ -286,6 +288,16 @@ impl AstNode {
             }
             AstNode::PrintString(s) => {
                 print!("{}", s);
+                Ok(())
+            }
+            AstNode::AbortQuote(s) => {
+                // ABORT" - ( flag -- )
+                // If flag is true, print message and abort
+                let flag = stack.pop(memory).ok_or("Stack underflow for ABORT\"")?;
+                if flag != 0 {
+                    eprintln!("{}", s);
+                    std::process::exit(-2);
+                }
                 Ok(())
             }
             AstNode::StackString(s) => {

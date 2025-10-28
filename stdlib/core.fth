@@ -106,4 +106,3 @@
 \ FILL ( c-addr u char -- )
 \ Fill memory region with character
 : FILL -ROT 0 DO 2DUP I + C! LOOP 2DROP ;
-

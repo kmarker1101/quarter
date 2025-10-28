@@ -202,6 +202,7 @@ impl Dictionary {
             "EVALUATE" => words::evaluate_word,
             "CMOVE" => words::cmove_word,
             "BYE" => words::bye_word,
+            "ABORT" => words::abort_word,
             "THROW" => words::throw_word,
             "CATCH" => words::catch_word,
         );

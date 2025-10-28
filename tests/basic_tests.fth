@@ -770,6 +770,24 @@ T{ 600301 C@ -> 42 }T
 T{ 600302 C@ -> 42 }T
 
 \ =============================================================================
+\ ABORT" TESTS (non-aborting cases only)
+\ =============================================================================
+
+S" ABORT-QUOTE with false flag does not abort" TEST:
+: TEST-ABORT-FALSE 0 ABORT" This should not print" 42 ;
+T{ TEST-ABORT-FALSE -> 42 }T
+
+S" ABORT-QUOTE with false flag in conditional" TEST:
+: TEST-COND-ABORT-FALSE
+  DUP 0= ABORT" Should not see this"
+  ;
+T{ 5 TEST-COND-ABORT-FALSE -> 5 }T
+
+\ Note: Cannot test ABORT or ABORT" with true flag in test framework
+\ as they would exit the test runner. See /tmp/test_abort*.fth for
+\ manual verification tests.
+
+\ =============================================================================
 \ REPORT
 \ =============================================================================
 

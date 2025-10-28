@@ -2,7 +2,7 @@
 
 Quarter is a Forth interpreter written in Rust with a **self-hosting JIT compiler** that compiles Forth code to native machine code via LLVM.
 
-[![Tests](https://img.shields.io/badge/tests-139%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-153%20passing-brightgreen)]()
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-orange)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)]()
 
@@ -126,15 +126,17 @@ cargo test test_recurse_jit
 cargo test test_tco_interpreted
 ```
 
-**Test Suite** (139 tests):
-- 133 unit tests (Rust)
-- 6 integration tests (Forth programs in both interpreted and JIT modes)
+**Test Suite** (153 tests):
+- 145 unit tests (Rust)
+- 8 integration tests (Forth programs in both interpreted and JIT modes)
   - `test_forth_tests_interpreted` - Main test suite (interpreted)
   - `test_forth_tests_jit` - Main test suite (JIT)
   - `test_tco_interpreted` - Tail call optimization tests
   - `test_tco_jit` - TCO in JIT mode
   - `test_recurse_interpreted` - RECURSE word tests
   - `test_recurse_jit` - RECURSE in JIT mode
+  - `test_repl_multiline_interpreted` - Multi-line REPL (interpreted)
+  - `test_repl_multiline_jit` - Multi-line REPL (JIT)
 
 ## Implemented Features
 
@@ -174,6 +176,10 @@ cargo test test_tco_interpreted
 - `RECURSE` - Self-recursion (works in both interpreted and JIT modes!)
 
 **Constants**: `TRUE` (-1), `FALSE` (0), `BL` (32 - space character)
+
+**Error Handling**:
+- `ABORT` ( i*x -- ) ( R: j*x -- ) - Clear stacks and abort execution
+- `ABORT"` ( flag -- ) - Conditionally abort with message (compile-only)
 
 **Word Definition**: `:` and `;` - Define new words
 
