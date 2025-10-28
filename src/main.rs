@@ -102,6 +102,63 @@ fn try_forth_compile(
     false
 }
 
+/// Compile a Forth source file to a standalone executable
+fn compile_to_executable(
+    source_file: &str,
+    output_file: &str,
+    opt_level: u8,
+    debug_symbols: bool,
+    verbose: bool,
+) {
+    if verbose {
+        println!("  Parsing {}...", source_file);
+    }
+
+    // TODO: Implement AOT compilation
+    // 1. Load and parse source file
+    // 2. Compile all words to LLVM IR
+    // 3. Generate object file
+    // 4. Link to executable
+
+    eprintln!("Error: AOT compilation not yet implemented");
+    eprintln!("This feature requires:");
+    eprintln!("  - TargetMachine infrastructure");
+    eprintln!("  - Object file generation");
+    eprintln!("  - Runtime library");
+    eprintln!("  - Linking infrastructure");
+    std::process::exit(1);
+}
+
+fn print_help() {
+    println!("Quarter - Forth Interpreter and Compiler v0.2");
+    println!();
+    println!("USAGE:");
+    println!("  quarter [OPTIONS] [FILE]");
+    println!();
+    println!("OPTIONS:");
+    println!("  --compile, -c          Compile source file to native executable");
+    println!("  -o <output>            Output filename (default: a.out)");
+    println!("  --optimize, -O<level>  Optimization level: 0, 1, 2, 3 (default: 2)");
+    println!("  --debug, -g            Include debug symbols");
+    println!("  --verbose, -v          Show compilation progress");
+    println!("  --jit                  Enable JIT compilation mode");
+    println!("  --no-jit               Disable JIT compilation");
+    println!("  --dump-ir              Dump LLVM IR to stdout");
+    println!("  --verify-ir            Verify LLVM IR");
+    println!("  --compile-stdlib       Compile standard library");
+    println!("  --help, -h             Show this help message");
+    println!("  --version              Show version");
+    println!();
+    println!("EXAMPLES:");
+    println!("  quarter                           # Start interactive REPL");
+    println!("  quarter myapp.fth                 # Run source file (interpreted)");
+    println!("  quarter --jit myapp.fth           # Run with JIT compilation");
+    println!("  quarter --compile myapp.fth       # Compile to a.out");
+    println!("  quarter -c myapp.fth -o myapp     # Compile to 'myapp'");
+    println!("  quarter -c -O3 myapp.fth          # Compile with max optimization");
+    println!();
+}
+
 fn main() {
     let mut stack = Stack::new();
     let mut dict = Dictionary::new();
@@ -117,9 +174,17 @@ fn main() {
     let mut verify_ir = false;
     let mut compile_stdlib = false;
     let mut jit_mode = false;
+    let mut compile_mode = false;
+    let mut output_file: Option<String> = None;
+    let mut opt_level: u8 = 2;  // Default optimization level
+    let mut debug_symbols = false;
+    let mut verbose = false;
     let mut filename: Option<String> = None;
 
-    for arg in args.iter().skip(1) {
+    let mut i = 1;
+    while i < args.len() {
+        let arg = &args[i];
+
         if arg == "--no-jit" {
             no_jit = true;
         } else if arg == "--dump-ir" {
@@ -131,8 +196,72 @@ fn main() {
         } else if arg == "--jit" {
             jit_mode = true;
             compile_stdlib = true;  // JIT mode implies compile stdlib
-        } else if !arg.starts_with("--") {
+        } else if arg == "--compile" || arg == "-c" {
+            compile_mode = true;
+        } else if arg == "-o" {
+            // Get output filename from next argument
+            i += 1;
+            if i < args.len() {
+                output_file = Some(args[i].clone());
+            } else {
+                eprintln!("Error: -o requires an output filename");
+                std::process::exit(1);
+            }
+        } else if arg == "--optimize" {
+            // Get optimization level from next argument
+            i += 1;
+            if i < args.len() {
+                opt_level = args[i].parse().unwrap_or_else(|_| {
+                    eprintln!("Error: --optimize requires a number 0-3");
+                    std::process::exit(1);
+                });
+                if opt_level > 3 {
+                    eprintln!("Error: optimization level must be 0-3");
+                    std::process::exit(1);
+                }
+            } else {
+                eprintln!("Error: --optimize requires a level (0-3)");
+                std::process::exit(1);
+            }
+        } else if arg.starts_with("-O") {
+            // Handle -O0, -O1, -O2, -O3
+            opt_level = arg[2..].parse().unwrap_or_else(|_| {
+                eprintln!("Error: -O requires a number 0-3");
+                std::process::exit(1);
+            });
+            if opt_level > 3 {
+                eprintln!("Error: optimization level must be 0-3");
+                std::process::exit(1);
+            }
+        } else if arg == "--debug" || arg == "-g" {
+            debug_symbols = true;
+        } else if arg == "--verbose" || arg == "-v" {
+            verbose = true;
+        } else if arg == "--help" || arg == "-h" {
+            print_help();
+            std::process::exit(0);
+        } else if arg == "--version" {
+            println!("Quarter Forth Interpreter v0.2");
+            std::process::exit(0);
+        } else if !arg.starts_with("-") {
             filename = Some(arg.clone());
+        } else {
+            eprintln!("Unknown option: {}", arg);
+            std::process::exit(1);
+        }
+
+        i += 1;
+    }
+
+    // Validate compile mode
+    if compile_mode {
+        if filename.is_none() {
+            eprintln!("Error: --compile requires a source file");
+            std::process::exit(1);
+        }
+        // Set default output file if not specified
+        if output_file.is_none() {
+            output_file = Some("a.out".to_string());
         }
     }
 
@@ -184,6 +313,24 @@ fn main() {
     // Check for file argument
     // Supported extensions: .qtr, .fth, .forth, .quarter
     if let Some(file) = filename {
+        // Compile mode: generate standalone executable
+        if compile_mode {
+            if verbose {
+                println!("Compiling {} to {}...", file, output_file.as_ref().unwrap());
+            }
+
+            // Use the compilation function (to be implemented)
+            compile_to_executable(
+                &file,
+                output_file.as_ref().unwrap(),
+                opt_level,
+                debug_symbols,
+                verbose,
+            );
+
+            return;
+        }
+
         println!("Loading {}", file);
 
         // Load file - in JIT mode, only load definitions without executing
