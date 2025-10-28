@@ -1051,8 +1051,8 @@ pub fn base(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_base(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
     unsafe {
-        // Get base address (0x01FFF0)
-        const BASE_ADDR: i64 = 0x01FFF0;
+        // Get base address (0x7FFFF8 - must match BASE_ADDR in lib.rs)
+        const BASE_ADDR: i64 = 0x7FFFF8;
 
         // Push base address onto stack
         let sp_val = *sp;
