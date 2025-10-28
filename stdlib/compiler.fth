@@ -898,6 +898,38 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
     \ Push result back to stack
     COMPILE-PUSH ;
 
+\ Emit inline /MOD: pop b, pop a, push (a MOD b) (a / b)
+\ Stack effect: ( a b -- remainder quotient )
+\ ( -- )
+: EMIT-INLINE-/MOD
+    \ Pop two values from stack
+    COMPILE-POP  \ b (divisor, second operand)
+    COMPILE-POP  \ a (dividend, first operand)
+    \ Stack: ( b-handle a-handle )
+
+    \ Need both operands for two operations - duplicate them
+    2DUP
+    \ Stack: ( b-handle a-handle b-handle a-handle )
+
+    \ First: compute remainder (a MOD b)
+    SWAP  \ Get correct order for SREM
+    \ Stack: ( b-handle a-handle a-handle b-handle )
+    CURRENT-BUILDER @ -ROT LLVM-BUILD-SREM
+    \ Stack: ( b-handle a-handle remainder-handle )
+
+    \ Push remainder to data stack
+    COMPILE-PUSH
+    \ Stack: ( b-handle a-handle )
+
+    \ Second: compute quotient (a / b)
+    SWAP  \ Get correct order for SDIV
+    \ Stack: ( a-handle b-handle )
+    CURRENT-BUILDER @ -ROT LLVM-BUILD-SDIV
+    \ Stack: ( quotient-handle )
+
+    \ Push quotient to data stack
+    COMPILE-PUSH ;
+
 \ Emit inline negate: pop a, push (-a)
 \ ( -- )
 : EMIT-INLINE-NEGATE
@@ -1578,6 +1610,81 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
     \ Push the extended value to data stack
     COMPILE-PUSH ;
 
+\ Emit inline SP@: push data stack pointer to data stack
+\ ( -- )
+: EMIT-INLINE-SP@
+    \ Load current SP value (64-bit integer)
+    CURRENT-BUILDER @ CURRENT-CTX @ PARAM-SP @ 64 LLVM-BUILD-LOAD
+    \ Push to data stack
+    COMPILE-PUSH ;
+
+\ Emit inline SP!: pop from data stack and store as new SP
+\ ( -- )
+: EMIT-INLINE-SP!
+    \ Pop value from data stack (this will be the new SP)
+    COMPILE-POP
+    \ Store as new SP
+    \ STORE needs: ( builder value ptr )
+    CURRENT-BUILDER @
+    SWAP
+    PARAM-SP @
+    LLVM-BUILD-STORE
+    DROP ;
+
+\ Emit inline RP@: push return stack pointer to data stack
+\ ( -- )
+: EMIT-INLINE-RP@
+    \ Load current RP value (64-bit integer)
+    CURRENT-BUILDER @ CURRENT-CTX @ PARAM-RP @ 64 LLVM-BUILD-LOAD
+    \ Push to data stack
+    COMPILE-PUSH ;
+
+\ Emit inline RP!: pop from data stack and store as new RP
+\ ( -- )
+: EMIT-INLINE-RP!
+    \ Pop value from data stack (this will be the new RP)
+    COMPILE-POP
+    \ Store as new RP
+    \ STORE needs: ( builder value ptr )
+    CURRENT-BUILDER @
+    SWAP
+    PARAM-RP @
+    LLVM-BUILD-STORE
+    DROP ;
+
+\ Emit inline HERE: push dictionary pointer to data stack
+\ ( -- )
+: EMIT-INLINE-HERE
+    \ Dictionary pointer is stored at fixed memory location 0x01FFF8
+    \ Create constant for DP address (0x01FFF8 = 131064)
+    CURRENT-CTX @ 131064 64 LLVM-BUILD-CONST-INT
+    \ Stack: ( offset-constant )
+
+    \ GEP to get the actual address: memory + offset
+    \ GEP needs: ( builder ctx base offset -- ptr )
+    CURRENT-BUILDER @
+    CURRENT-CTX @
+    PARAM-MEMORY @
+    3 PICK
+    LLVM-BUILD-GEP
+    \ Stack: ( offset-constant dp-ptr )
+
+    \ Load the dp value from that address
+    \ LOAD needs: ( builder ctx ptr width -- value )
+    CURRENT-BUILDER @
+    CURRENT-CTX @
+    2 PICK
+    64
+    LLVM-BUILD-LOAD
+    \ Stack: ( offset-constant dp-ptr dp-value )
+
+    \ Clean up stack and push to data stack
+    NIP NIP
+    \ Stack: ( dp-value )
+
+    \ Push to data stack
+    COMPILE-PUSH ;
+
 \ =============================================================================
 \ AST COMPILATION
 \ =============================================================================
@@ -1910,6 +2017,17 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
         WORD-NAME-BUFFER OVER COMPILER-SCRATCH 3 STRING-EQUALS? IF
             DROP  \ Drop name-len
             EMIT-INLINE-MOD
+            EXIT
+        THEN
+
+        \ Check for '/MOD'
+        47 COMPILER-SCRATCH C!     \ /
+        77 COMPILER-SCRATCH 1 + C! \ M
+        79 COMPILER-SCRATCH 2 + C! \ O
+        68 COMPILER-SCRATCH 3 + C! \ D
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 4 STRING-EQUALS? IF
+            DROP  \ Drop name-len
+            EMIT-INLINE-/MOD
             EXIT
         THEN
 
@@ -2294,6 +2412,57 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
         WORD-NAME-BUFFER OVER COMPILER-SCRATCH 1 STRING-EQUALS? IF
             DROP
             EMIT-INLINE-J
+            EXIT
+        THEN
+
+        \ Check for 'SP@'
+        83 COMPILER-SCRATCH C!      \ S
+        80 COMPILER-SCRATCH 1 + C!  \ P
+        64 COMPILER-SCRATCH 2 + C!  \ @
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 3 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-SP@
+            EXIT
+        THEN
+
+        \ Check for 'SP!'
+        83 COMPILER-SCRATCH C!      \ S
+        80 COMPILER-SCRATCH 1 + C!  \ P
+        33 COMPILER-SCRATCH 2 + C!  \ !
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 3 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-SP!
+            EXIT
+        THEN
+
+        \ Check for 'RP@'
+        82 COMPILER-SCRATCH C!      \ R
+        80 COMPILER-SCRATCH 1 + C!  \ P
+        64 COMPILER-SCRATCH 2 + C!  \ @
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 3 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-RP@
+            EXIT
+        THEN
+
+        \ Check for 'RP!'
+        82 COMPILER-SCRATCH C!      \ R
+        80 COMPILER-SCRATCH 1 + C!  \ P
+        33 COMPILER-SCRATCH 2 + C!  \ !
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 3 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-RP!
+            EXIT
+        THEN
+
+        \ Check for 'HERE'
+        72 COMPILER-SCRATCH C!      \ H
+        69 COMPILER-SCRATCH 1 + C!  \ E
+        82 COMPILER-SCRATCH 2 + C!  \ R
+        69 COMPILER-SCRATCH 3 + C!  \ E
+        WORD-NAME-BUFFER OVER COMPILER-SCRATCH 4 STRING-EQUALS? IF
+            DROP
+            EMIT-INLINE-HERE
             EXIT
         THEN
 
