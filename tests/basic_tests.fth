@@ -40,8 +40,35 @@ T{ 15 5 MOD -> 0 }T
 S" Divide and modulo: 13 /MOD 5" TEST:
 T{ 13 5 /MOD -> 3 2 }T
 
+S" /MOD with exact division" TEST:
+T{ 15 3 /MOD -> 0 5 }T
+
+S" /MOD with larger numbers" TEST:
+T{ 100 7 /MOD -> 2 14 }T
+
+S" /MOD with negative dividend" TEST:
+T{ -17 5 /MOD -> -2 -3 }T
+
+S" /MOD edge case: 20 6" TEST:
+T{ 20 6 /MOD -> 2 3 }T
+
 S" 3 CELLS equals 24" TEST:
 T{ 3 CELLS -> 24 }T
+
+S" HERE returns initial dictionary pointer" TEST:
+T{ HERE 131072 >= -> -1 }T
+
+S" ALLOT advances HERE by n bytes" TEST:
+: TEST-ALLOT-HERE HERE 16 ALLOT HERE SWAP - ;
+T{ TEST-ALLOT-HERE -> 16 }T
+
+S" Comma advances HERE by 8 bytes" TEST:
+: TEST-COMMA-HERE HERE 42 , HERE SWAP - ;
+T{ TEST-COMMA-HERE -> 8 }T
+
+S" Comma stores value and HERE advances" TEST:
+: TEST-COMMA-STORE-FETCH HERE DUP 777 , @ ;
+T{ TEST-COMMA-STORE-FETCH -> 777 }T
 
 S" 5 1+ equals 6" TEST:
 T{ 5 1+ -> 6 }T
@@ -558,6 +585,25 @@ T{ 10 20 0 ?DUP -> 10 20 0 }T
 
 S" ?DUP increases depth with nonzero" TEST:
 T{ 10 20 5 ?DUP -> 10 20 5 5 }T
+
+\ =============================================================================
+\ OUTPUT PRIMITIVES TESTS
+\ =============================================================================
+
+S" U. prints unsigned and pops" TEST:
+T{ 42 U. DEPTH -> 0 }T
+
+S" .R prints right-justified and pops both" TEST:
+T{ 100 10 .R DEPTH -> 0 }T
+
+S" U.R prints unsigned right-justified and pops both" TEST:
+T{ 42 8 U.R DEPTH -> 0 }T
+
+S" .S is non-destructive" TEST:
+T{ 1 2 3 .S DEPTH -> 1 2 3 3 }T
+
+S" .S shows empty stack" TEST:
+T{ .S DEPTH -> 0 }T
 
 \ =============================================================================
 \ REPORT
