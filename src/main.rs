@@ -1,4 +1,4 @@
-use quarter::{Dictionary, LoopStack, Stack, load_file, load_stdlib};
+use quarter::{Dictionary, LoopStack, Stack, load_file, load_stdlib, CompilerConfig, ExecutionOptions, RuntimeContext};
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -12,19 +12,13 @@ static FORTH_COMPILER_LOADED: AtomicBool = AtomicBool::new(false);
 fn try_forth_compile(
     name: String,
     ast: &quarter::AstNode,
-    dict: &mut quarter::Dictionary,
-    stack: &mut quarter::Stack,
-    loop_stack: &mut quarter::LoopStack,
-    return_stack: &mut quarter::ReturnStack,
-    memory: &mut quarter::Memory,
+    ctx: &mut RuntimeContext,
     _use_batch: bool,  // Unused - batch compilation only
-    no_jit: bool,
-    dump_ir: bool,
-    verify_ir: bool,
+    config: CompilerConfig,
     _included_files: &mut HashSet<String>,  // Unused - function returns immediately
 ) -> bool {
     // Incremental compilation disabled - use batch_compile_all_words() instead
-    let _ = (name, ast, dict, stack, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir, _included_files);
+    let _ = (name, ast, ctx, config, _included_files);
     return false;
 
     // Load the Forth compiler if not already loaded
@@ -32,18 +26,12 @@ fn try_forth_compile(
     if !FORTH_COMPILER_LOADED.load(Ordering::Relaxed) {
         // Stdlib is already loaded by main(), no need to reload it here
         // Load compiler
+        let compiler_options = ExecutionOptions::new(false, false);
         if let Err(e) = load_file(
             "stdlib/compiler.fth",
-            stack,
-            dict,
-            loop_stack,
-            return_stack,
-            memory,
-            no_jit,
-            dump_ir,
-            verify_ir,
-            false,
-            false,  // Not define-only
+            ctx,
+            config,
+            compiler_options,
             _included_files,
         ) {
             eprintln!("Failed to load Forth compiler: {}", e);
@@ -52,16 +40,11 @@ fn try_forth_compile(
 
         // Now that compiler is loaded, recompile stdlib words to JIT-compiled versions
         // This replaces the interpreted versions with native code
+        let stdlib_options = ExecutionOptions::new(true, false);
         if let Err(e) = quarter::load_stdlib(
-            stack,
-            dict,
-            loop_stack,
-            return_stack,
-            memory,
-            no_jit,
-            dump_ir,
-            verify_ir,
-            true,
+            ctx,
+            config,
+            stdlib_options,
             _included_files,
         ) {
             eprintln!("Warning: Failed to JIT-compile stdlib: {}", e);
@@ -79,24 +62,24 @@ fn try_forth_compile(
     let name_addr = 302000;
     for (i, ch) in name.bytes().enumerate() {
         // Store each character as a byte
-        if let Err(_) = memory.store_byte(name_addr + i, ch as i64) {
+        if ctx.memory.store_byte(name_addr + i, ch as i64).is_err() {
             return false;
         }
     }
 
     // Push arguments for COMPILE-WORD: ( ast-handle name-addr name-len -- fn-ptr )
-    stack.push(ast_handle, memory);
-    stack.push(name_addr as i64, memory);
-    stack.push(name.len() as i64, memory);
+    ctx.stack.push(ast_handle, ctx.memory);
+    ctx.stack.push(name_addr as i64, ctx.memory);
+    ctx.stack.push(name.len() as i64, ctx.memory);
 
     // Execute COMPILE-WORD
-    if let Err(e) = dict.execute_word("COMPILE-WORD", stack, loop_stack, return_stack, memory) {
+    if let Err(e) = ctx.dict.execute_word("COMPILE-WORD", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory) {
         eprintln!("Forth compiler error: {}", e);
         return false;
     }
 
     // Get function pointer from stack (two 32-bit values: high, then low)
-    if let (Some(fn_ptr_high), Some(fn_ptr_low)) = (stack.pop(memory), stack.pop(memory)) {
+    if let (Some(fn_ptr_high), Some(fn_ptr_low)) = (ctx.stack.pop(ctx.memory), ctx.stack.pop(ctx.memory)) {
         // Reconstruct 64-bit pointer from two 32-bit values
         let fn_ptr = ((fn_ptr_high as u64) << 32) | ((fn_ptr_low as u64) & 0xFFFFFFFF);
 
@@ -111,7 +94,7 @@ fn try_forth_compile(
             unsafe { std::mem::transmute(fn_ptr as *const ()) };
 
         // Register in dictionary
-        dict.add_jit_compiled(name, jit_fn);
+        ctx.dict.add_jit_compiled(name, jit_fn);
         return true;
     }
 
@@ -153,36 +136,31 @@ fn main() {
         }
     }
 
+    // Create compiler configuration
+    let config = CompilerConfig::new(no_jit, dump_ir, verify_ir);
 
     // Load standard library (always interpreted initially)
-    if let Err(e) = load_stdlib(
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        no_jit,
-        dump_ir,
-        verify_ir,
-        false,  // Always load interpreted
-        &mut included_files,
-    ) {
-        eprintln!("Error loading stdlib: {}", e);
-        std::process::exit(1);
+    let load_options = ExecutionOptions::new(false, false);
+    {
+        let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+        if let Err(e) = load_stdlib(
+            &mut ctx,
+            config,
+            load_options,
+            &mut included_files,
+        ) {
+            eprintln!("Error loading stdlib: {}", e);
+            std::process::exit(1);
+        }
     }
 
     // Compile stdlib if requested (only for --compile-stdlib mode, not --jit)
     // In --jit mode, we batch compile everything together after loading user code
     if compile_stdlib && !jit_mode {
+        let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
         if let Err(e) = quarter::batch_compile_all_words(
-            &mut dict,
-            &mut stack,
-            &mut loop_stack,
-            &mut return_stack,
-            &mut memory,
-            no_jit,
-            dump_ir,
-            verify_ir,
+            &mut ctx,
+            config,
             &mut included_files,
         ) {
             eprintln!("Failed to compile stdlib: {}", e);
@@ -200,9 +178,7 @@ fn main() {
         return_stack,
         memory,
         included_files,
-        no_jit,
-        dump_ir,
-        verify_ir,
+        config,
     );
 
     // Check for file argument
@@ -211,20 +187,15 @@ fn main() {
         println!("Loading {}", file);
 
         // Load file - in JIT mode, only load definitions without executing
-        let result = quarter::with_execution_context(|ctx| {
+        let result = quarter::with_execution_context(|exec_ctx| {
+            let file_options = ExecutionOptions::new(false, jit_mode);
+            let mut ctx = RuntimeContext::new(&mut exec_ctx.stack, &mut exec_ctx.dict, &mut exec_ctx.loop_stack, &mut exec_ctx.return_stack, &mut exec_ctx.memory);
             load_file(
                 &file,
-                &mut ctx.stack,
-                &mut ctx.dict,
-                &mut ctx.loop_stack,
-                &mut ctx.return_stack,
-                &mut ctx.memory,
-                ctx.no_jit,
-                ctx.dump_ir,
-                ctx.verify_ir,
-                false,
-                jit_mode,  // define_only = true in JIT mode
-                &mut ctx.included_files,
+                &mut ctx,
+                exec_ctx.config,
+                file_options,
+                &mut exec_ctx.included_files,
             )
         });
 
@@ -232,17 +203,12 @@ fn main() {
             Some(Ok(_)) => {
                 // If JIT mode, batch compile user words now
                 if jit_mode {
-                    let compile_result = quarter::with_execution_context(|ctx| {
+                    let compile_result = quarter::with_execution_context(|exec_ctx| {
+                        let mut ctx = RuntimeContext::new(&mut exec_ctx.stack, &mut exec_ctx.dict, &mut exec_ctx.loop_stack, &mut exec_ctx.return_stack, &mut exec_ctx.memory);
                         quarter::batch_compile_all_words(
-                            &mut ctx.dict,
-                            &mut ctx.stack,
-                            &mut ctx.loop_stack,
-                            &mut ctx.return_stack,
-                            &mut ctx.memory,
-                            ctx.no_jit,
-                            ctx.dump_ir,
-                            ctx.verify_ir,
-                            &mut ctx.included_files,
+                            &mut ctx,
+                            exec_ctx.config,
+                            &mut exec_ctx.included_files,
                         )
                     });
 
@@ -258,20 +224,15 @@ fn main() {
                     });
 
                     // Now execute the file with JIT-compiled code
-                    let exec_result = quarter::with_execution_context(|ctx| {
+                    let exec_result = quarter::with_execution_context(|exec_ctx| {
+                        let exec_options = ExecutionOptions::new(false, false);
+                        let mut ctx = RuntimeContext::new(&mut exec_ctx.stack, &mut exec_ctx.dict, &mut exec_ctx.loop_stack, &mut exec_ctx.return_stack, &mut exec_ctx.memory);
                         load_file(
                             &file,
-                            &mut ctx.stack,
-                            &mut ctx.dict,
-                            &mut ctx.loop_stack,
-                            &mut ctx.return_stack,
-                            &mut ctx.memory,
-                            ctx.no_jit,
-                            ctx.dump_ir,
-                            ctx.verify_ir,
-                            false,
-                            false,  // define_only = false, now execute everything
-                            &mut ctx.included_files,
+                            &mut ctx,
+                            exec_ctx.config,
+                            exec_options,
+                            &mut exec_ctx.included_files,
                         )
                     });
 
@@ -294,20 +255,15 @@ fn main() {
     }
 
     // Load the Forth REPL
-    let result = quarter::with_execution_context(|ctx| {
+    let result = quarter::with_execution_context(|exec_ctx| {
+        let repl_options = ExecutionOptions::new(false, false);
+        let mut ctx = RuntimeContext::new(&mut exec_ctx.stack, &mut exec_ctx.dict, &mut exec_ctx.loop_stack, &mut exec_ctx.return_stack, &mut exec_ctx.memory);
         quarter::load_file(
             "stdlib/repl.fth",
-            &mut ctx.stack,
-            &mut ctx.dict,
-            &mut ctx.loop_stack,
-            &mut ctx.return_stack,
-            &mut ctx.memory,
-            ctx.no_jit,
-            ctx.dump_ir,
-            ctx.verify_ir,
-            false,
-            false,
-            &mut ctx.included_files,
+            &mut ctx,
+            exec_ctx.config,
+            repl_options,
+            &mut exec_ctx.included_files,
         )
     });
 

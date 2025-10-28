@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use quarter::{execute_line, load_stdlib, strip_comments, Dictionary, LoopStack, Memory, ReturnStack, Stack};
+use quarter::{execute_line, load_stdlib, strip_comments, Dictionary, LoopStack, Memory, ReturnStack, Stack, RuntimeContext, CompilerConfig, ExecutionOptions};
 
 #[test]
 fn test_strip_comments_backslash() {
@@ -30,18 +30,15 @@ fn test_backslash_comment_in_execution() {
     let mut return_stack = ReturnStack::new();
     let mut memory = Memory::new();
 
+    let config = CompilerConfig::new(false, false, false);
+    let options = ExecutionOptions::new(false, false);
+    let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+
     execute_line(
         "5 3 + \\ this is a comment",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
+        &mut ctx,
+        config,
+        options,
         &mut HashSet::new(),
     )
     .unwrap();
@@ -57,18 +54,15 @@ fn test_parenthesis_comment_in_execution() {
     let mut return_stack = ReturnStack::new();
     let mut memory = Memory::new();
 
+    let config = CompilerConfig::new(false, false, false);
+    let options = ExecutionOptions::new(false, false);
+    let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+
     execute_line(
         "10 ( first number ) 20 ( second number ) +",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
+        &mut ctx,
+        config,
+        options,
         &mut HashSet::new(),
     )
     .unwrap();
@@ -84,19 +78,16 @@ fn test_stack_effect_notation() {
     let mut return_stack = ReturnStack::new();
     let mut memory = Memory::new();
 
+    let config = CompilerConfig::new(false, false, false);
+    let options = ExecutionOptions::new(false, false);
+    let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+
     // Define a word with stack effect notation
     execute_line(
         ": SQUARE ( n -- n² ) DUP * ;",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
+        &mut ctx,
+        config,
+        options,
         &mut HashSet::new(),
     )
     .unwrap();
@@ -104,16 +95,9 @@ fn test_stack_effect_notation() {
     // Use the word
     execute_line(
         "5 SQUARE",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
+        &mut ctx,
+        config,
+        options,
         &mut HashSet::new(),
     )
     .unwrap();
@@ -129,62 +113,54 @@ fn test_mixed_comments_in_definition() {
     let mut return_stack = ReturnStack::new();
     let mut memory = Memory::new();
 
-    // Load stdlib to get NEGATE
-    load_stdlib(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory, false, false, false, false, &mut HashSet::new()).unwrap();
+    let config = CompilerConfig::new(false, false, false);
+    let options = ExecutionOptions::new(false, false);
 
-    // Define with both comment types
-    execute_line(
-        ": ABS ( n -- |n| ) DUP 0 < IF NEGATE THEN ; \\ absolute value",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
-        &mut HashSet::new(),
-    )
-    .unwrap();
+    {
+        let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+
+        // Load stdlib to get NEGATE
+        load_stdlib(&mut ctx, config, options, &mut HashSet::new()).unwrap();
+
+        // Define with both comment types
+        execute_line(
+            ": ABS ( n -- |n| ) DUP 0 < IF NEGATE THEN ; \\ absolute value",
+            &mut ctx,
+            config,
+            options,
+            &mut HashSet::new(),
+        )
+        .unwrap();
+    }
 
     // Test with negative number
     stack.push(-42, &mut memory);
-    execute_line(
-        "ABS",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
-        &mut HashSet::new(),
-    )
-    .unwrap();
+    {
+        let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+        execute_line(
+            "ABS",
+            &mut ctx,
+            config,
+            options,
+            &mut HashSet::new(),
+        )
+        .unwrap();
+    }
     assert_eq!(stack.pop(&mut memory), Some(42));
 
     // Test with positive number
     stack.push(42, &mut memory);
-    execute_line(
-        "ABS",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
-        &mut HashSet::new(),
-    )
-    .unwrap();
+    {
+        let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+        execute_line(
+            "ABS",
+            &mut ctx,
+            config,
+            options,
+            &mut HashSet::new(),
+        )
+        .unwrap();
+    }
     assert_eq!(stack.pop(&mut memory), Some(42));
 }
 
@@ -196,18 +172,15 @@ fn test_multiple_parenthesis_comments() {
     let mut return_stack = ReturnStack::new();
     let mut memory = Memory::new();
 
+    let config = CompilerConfig::new(false, false, false);
+    let options = ExecutionOptions::new(false, false);
+    let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+
     execute_line(
         "5 ( a ) DUP ( b ) * ( c ) 10 ( d ) +",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
+        &mut ctx,
+        config,
+        options,
         &mut HashSet::new(),
     )
     .unwrap();
@@ -224,35 +197,25 @@ fn test_comment_only_line() {
     let mut return_stack = ReturnStack::new();
     let mut memory = Memory::new();
 
+    let config = CompilerConfig::new(false, false, false);
+    let options = ExecutionOptions::new(false, false);
+    let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+
     // Should not error on comment-only input
     execute_line(
         "\\ just a comment",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
+        &mut ctx,
+        config,
+        options,
         &mut HashSet::new(),
     )
     .unwrap();
 
     execute_line(
         "( just a comment )",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
+        &mut ctx,
+        config,
+        options,
         &mut HashSet::new(),
     )
     .unwrap();

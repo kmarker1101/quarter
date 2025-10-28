@@ -18,6 +18,59 @@ use std::collections::HashSet;
 static FORTH_COMPILER_LOADED: AtomicBool = AtomicBool::new(false);
 
 // ============================================================================
+// Configuration and Options Structs
+// ============================================================================
+
+/// Compiler configuration flags
+#[derive(Clone, Copy, Debug)]
+pub struct CompilerConfig {
+    pub no_jit: bool,
+    pub dump_ir: bool,
+    pub verify_ir: bool,
+}
+
+impl CompilerConfig {
+    pub fn new(no_jit: bool, dump_ir: bool, verify_ir: bool) -> Self {
+        Self { no_jit, dump_ir, verify_ir }
+    }
+}
+
+/// Execution options for file loading and compilation
+#[derive(Clone, Copy, Debug)]
+pub struct ExecutionOptions {
+    pub use_forth_compiler: bool,
+    pub define_only: bool,
+}
+
+impl ExecutionOptions {
+    pub fn new(use_forth_compiler: bool, define_only: bool) -> Self {
+        Self { use_forth_compiler, define_only }
+    }
+}
+
+/// Runtime context grouping all mutable state
+/// Used to reduce parameter counts in functions
+pub struct RuntimeContext<'a> {
+    pub stack: &'a mut Stack,
+    pub dict: &'a mut Dictionary,
+    pub loop_stack: &'a mut LoopStack,
+    pub return_stack: &'a mut ReturnStack,
+    pub memory: &'a mut Memory,
+}
+
+impl<'a> RuntimeContext<'a> {
+    pub fn new(
+        stack: &'a mut Stack,
+        dict: &'a mut Dictionary,
+        loop_stack: &'a mut LoopStack,
+        return_stack: &'a mut ReturnStack,
+        memory: &'a mut Memory,
+    ) -> Self {
+        Self { stack, dict, loop_stack, return_stack, memory }
+    }
+}
+
+// ============================================================================
 // Global Execution Context (for EVALUATE and self-hosting REPL)
 // ============================================================================
 
@@ -36,9 +89,7 @@ pub struct ExecutionContext {
     pub return_stack: ReturnStack,
     pub memory: Memory,
     pub included_files: HashSet<String>,
-    pub no_jit: bool,
-    pub dump_ir: bool,
-    pub verify_ir: bool,
+    pub config: CompilerConfig,
     // Raw pointers for re-entrant access (used by EVALUATE)
     pub dict_ptr: *mut Dictionary,
     pub loop_stack_ptr: *mut LoopStack,
@@ -50,14 +101,14 @@ pub struct ExecutionContext {
 
 thread_local! {
     /// Thread-local execution context for EVALUATE and REPL
-    static EXECUTION_CONTEXT: RefCell<Option<ExecutionContext>> = RefCell::new(None);
+    static EXECUTION_CONTEXT: RefCell<Option<ExecutionContext>> = const { RefCell::new(None) };
 
     /// Raw pointers for re-entrant access (stored separately to avoid RefCell conflicts)
     static REENTRANT_POINTERS: std::cell::Cell<(*mut Dictionary, *mut LoopStack, *mut ReturnStack, *mut Memory, *mut HashSet<String>)> =
-        std::cell::Cell::new((std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut()));
+        const { std::cell::Cell::new((std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut())) };
 
     /// Config flags for re-entrant access
-    static REENTRANT_CONFIG: std::cell::Cell<(bool, bool, bool)> = std::cell::Cell::new((false, false, false));
+    static REENTRANT_CONFIG: std::cell::Cell<(bool, bool, bool)> = const { std::cell::Cell::new((false, false, false)) };
 }
 
 /// Initialize the global execution context
@@ -68,9 +119,7 @@ pub fn init_execution_context(
     return_stack: ReturnStack,
     memory: Memory,
     included_files: HashSet<String>,
-    no_jit: bool,
-    dump_ir: bool,
-    verify_ir: bool,
+    config: CompilerConfig,
 ) {
     EXECUTION_CONTEXT.with(|ctx| {
         let context = ExecutionContext {
@@ -80,9 +129,7 @@ pub fn init_execution_context(
             return_stack,
             memory,
             included_files,
-            no_jit,
-            dump_ir,
-            verify_ir,
+            config,
             dict_ptr: std::ptr::null_mut(),
             loop_stack_ptr: std::ptr::null_mut(),
             return_stack_ptr: std::ptr::null_mut(),
@@ -115,7 +162,7 @@ pub fn init_execution_context(
 
             // Store config flags
             REENTRANT_CONFIG.with(|cfg| {
-                cfg.set((context_ref.no_jit, context_ref.dump_ir, context_ref.verify_ir));
+                cfg.set((context_ref.config.no_jit, context_ref.config.dump_ir, context_ref.config.verify_ir));
             });
         }
     });
@@ -127,11 +174,7 @@ where
     F: FnOnce(&mut ExecutionContext) -> R,
 {
     EXECUTION_CONTEXT.with(|ctx| {
-        if let Some(context) = ctx.borrow_mut().as_mut() {
-            Some(f(context))
-        } else {
-            None
-        }
+        ctx.borrow_mut().as_mut().map(f)
     })
 }
 
@@ -720,16 +763,14 @@ pub fn parse_tokens(tokens: &[&str], dict: &crate::Dictionary, current_word: Opt
                 } else {
                     // Check if word is a simple constant (VARIABLE or CONSTANT)
                     // If so, inline it to avoid JIT lookup errors
-                    if let Some(word) = dict.get_word(&token_upper) {
-                        if let crate::dictionary::Word::Compiled(ast_node) = word {
-                            if let AstNode::PushNumber(value) = ast_node {
-                                // Inline the constant value directly
-                                nodes.push(AstNode::PushNumber(*value));
-                                i += 1;
-                                continue;
-                            }
+                    if let Some(word) = dict.get_word(&token_upper)
+                        && let crate::dictionary::Word::Compiled(ast_node) = word
+                        && let AstNode::PushNumber(value) = ast_node {
+                            // Inline the constant value directly
+                            nodes.push(AstNode::PushNumber(*value));
+                            i += 1;
+                            continue;
                         }
-                    }
 
                     // Store word names in uppercase for case-insensitive lookup
                     nodes.push(AstNode::CallWord(token_upper.clone()));
@@ -941,10 +982,8 @@ pub fn strip_comments(input: &str) -> String {
                 result.push(ch);
             }
             // Else: standalone ) outside any context - skip it
-        } else {
-            if !in_paren_comment {
-                result.push(ch);
-            }
+        } else if !in_paren_comment {
+            result.push(ch);
         }
 
         i += 1;
@@ -955,16 +994,9 @@ pub fn strip_comments(input: &str) -> String {
 
 pub fn load_file(
     filename: &str,
-    stack: &mut Stack,
-    dict: &mut Dictionary,
-    loop_stack: &mut LoopStack,
-    return_stack: &mut ReturnStack,
-    memory: &mut Memory,
-    no_jit: bool,
-    dump_ir: bool,
-    verify_ir: bool,
-    use_forth_compiler: bool,
-    define_only: bool,
+    ctx: &mut RuntimeContext,
+    config: CompilerConfig,
+    options: ExecutionOptions,
     included_files: &mut std::collections::HashSet<String>,
 ) -> Result<(), String> {
     // Check if file has already been included
@@ -993,16 +1025,9 @@ pub fn load_file(
     // Now execute the entire file as one token stream
     execute_line(
         &processed,
-        stack,
-        dict,
-        loop_stack,
-        return_stack,
-        memory,
-        no_jit,
-        dump_ir,
-        verify_ir,
-        use_forth_compiler,
-        define_only,
+        ctx,
+        config,
+        options,
         included_files,
     )?;
 
@@ -1012,16 +1037,9 @@ pub fn load_file(
 
 pub fn execute_line(
     input: &str,
-    stack: &mut Stack,
-    dict: &mut Dictionary,
-    loop_stack: &mut LoopStack,
-    return_stack: &mut ReturnStack,
-    memory: &mut Memory,
-    no_jit: bool,
-    dump_ir: bool,
-    verify_ir: bool,
-    use_forth_compiler: bool,
-    define_only: bool,
+    ctx: &mut RuntimeContext,
+    config: CompilerConfig,
+    options: ExecutionOptions,
     included_files: &mut std::collections::HashSet<String>,
 ) -> Result<(), String> {
     // Strip comments from input
@@ -1044,30 +1062,21 @@ pub fn execute_line(
 
             let filename = tokens[i + 1];
             // INCLUDE always executes (not define-only) because it's used for dependencies
+            let include_options = ExecutionOptions::new(options.use_forth_compiler, false);
             load_file(
                 filename,
-                stack,
-                dict,
-                loop_stack,
-                return_stack,
-                memory,
-                no_jit,
-                dump_ir,
-                verify_ir,
-                use_forth_compiler,
-                false,  // Always execute included files
+                ctx,
+                config,
+                include_options,
                 included_files,
             )?;
             i += 2;
         } else if token_upper == ":" {
             // Find matching semicolon for definition
-            let mut semicolon_pos = None;
-            for j in (i + 1)..tokens.len() {
-                if tokens[j].to_uppercase() == ";" {
-                    semicolon_pos = Some(j);
-                    break;
-                }
-            }
+            let semicolon_pos = tokens[(i + 1)..]
+                .iter()
+                .position(|t| t.to_uppercase() == ";")
+                .map(|pos| pos + i + 1);
 
             if let Some(end) = semicolon_pos {
                 if end - i < 2 {
@@ -1078,23 +1087,23 @@ pub fn execute_line(
                 let word_name = tokens[i + 1].to_uppercase();
 
                 // Check if word is frozen (JIT-compiled) - if so, skip re-definition
-                if dict.is_frozen(&word_name) {
+                if ctx.dict.is_frozen(&word_name) {
                     i = end + 1;
                     continue;
                 }
 
                 let word_tokens = &tokens[i + 2..end];
 
-                let ast = parse_tokens(word_tokens, dict, Some(&word_name))?;
+                let ast = parse_tokens(word_tokens, ctx.dict, Some(&word_name))?;
                 // Validate that all words in the AST exist (allow forward reference for recursion)
-                ast.validate_with_name(dict, Some(&word_name))?;
+                ast.validate_with_name(ctx.dict, Some(&word_name))?;
 
                 // Try JIT compilation if enabled
-                let is_redefinition = dict.has_word(&word_name);
-                if use_forth_compiler && !is_redefinition {
+                let is_redefinition = ctx.dict.has_word(&word_name);
+                if options.use_forth_compiler && !is_redefinition {
                     // Try to JIT compile - if successful, try_forth_compile will add it to dict
                     // If it fails, we fall back to interpreted mode below
-                    if crate::try_forth_compile_word(word_name.clone(), &ast, dict, stack, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir, included_files) {
+                    if crate::try_forth_compile_word(word_name.clone(), &ast, ctx, config, included_files) {
                         // JIT compilation succeeded, word is already in dictionary
                         i = end + 1;
                         continue;
@@ -1102,7 +1111,7 @@ pub fn execute_line(
                 }
 
                 // Add word to dictionary in interpreted mode (fallback or default)
-                dict.add_compiled(word_name, ast);
+                ctx.dict.add_compiled(word_name, ast);
                 i = end + 1;
             } else {
                 return Err("Missing ; in word definition".to_string());
@@ -1114,14 +1123,14 @@ pub fn execute_line(
             }
 
             let var_name = tokens[i + 1].to_uppercase();
-            let addr = memory.here();
+            let addr = ctx.memory.here();
 
             // Allocate 1 cell (8 bytes) for the variable
-            memory.allot(8)?;
+            ctx.memory.allot(8)?;
 
             // Create a word that pushes the variable's address
             let var_ast = AstNode::PushNumber(addr);
-            dict.add_compiled(var_name, var_ast);
+            ctx.dict.add_compiled(var_name, var_ast);
             i += 2;
         } else if token_upper == "CONSTANT" {
             // <value> CONSTANT <name>
@@ -1130,12 +1139,12 @@ pub fn execute_line(
             }
 
             // Pop value from stack
-            let value = stack.pop(memory).ok_or("Stack underflow for CONSTANT")?;
+            let value = ctx.stack.pop(ctx.memory).ok_or("Stack underflow for CONSTANT")?;
             let const_name = tokens[i + 1].to_uppercase();
 
             // Create a word that pushes the constant value
             let const_ast = AstNode::PushNumber(value);
-            dict.add_compiled(const_name, const_ast);
+            ctx.dict.add_compiled(const_name, const_ast);
             i += 2;
         } else if token_upper == "CREATE" {
             // CREATE <name>
@@ -1144,27 +1153,27 @@ pub fn execute_line(
             }
 
             let create_name = tokens[i + 1].to_uppercase();
-            let addr = memory.here();
+            let addr = ctx.memory.here();
 
             // Create a word that pushes the data address
             // User will typically follow with ALLOT to allocate space
             let create_ast = AstNode::PushNumber(addr);
-            dict.add_compiled(create_name, create_ast);
+            ctx.dict.add_compiled(create_name, create_ast);
             i += 2;
         } else if token_upper == "INCLUDED" {
             // INCLUDED ( addr len -- )
             // Takes filename from stack and loads the file
-            let len = stack
-                .pop(memory)
+            let len = ctx.stack
+                .pop(ctx.memory)
                 .ok_or("Stack underflow for INCLUDED (length)")?;
-            let addr = stack
-                .pop(memory)
+            let addr = ctx.stack
+                .pop(ctx.memory)
                 .ok_or("Stack underflow for INCLUDED (address)")?;
 
             // Read the filename from memory
             let mut filename_bytes = Vec::new();
             for offset in 0..len {
-                let byte = memory.fetch_byte((addr + offset) as usize)?;
+                let byte = ctx.memory.fetch_byte((addr + offset) as usize)?;
                 filename_bytes.push(byte as u8);
             }
 
@@ -1173,18 +1182,12 @@ pub fn execute_line(
 
             // Load the file - INCLUDED always executes (not define-only)
             // because it's used for loading dependencies that need to run
+            let include_options = ExecutionOptions::new(options.use_forth_compiler, false);
             load_file(
                 &filename,
-                stack,
-                dict,
-                loop_stack,
-                return_stack,
-                memory,
-                no_jit,
-                dump_ir,
-                verify_ir,
-                use_forth_compiler,
-                false,  // Always execute included files
+                ctx,
+                config,
+                include_options,
                 included_files,
             )?;
             i += 1;
@@ -1214,7 +1217,7 @@ pub fn execute_line(
                 let next_token_is_included = i < tokens.len() &&
                     tokens[i].to_uppercase() == "INCLUDED";
 
-                let should_execute = !define_only ||
+                let should_execute = !options.define_only ||
                     next_token_is_included ||
                     exec_tokens.last().map(|t| {
                         let upper = t.to_uppercase();
@@ -1284,8 +1287,8 @@ pub fn execute_line(
                         return Err("Control flow words (IF/THEN/ELSE/BEGIN/UNTIL/WHILE/REPEAT/DO/?DO/LOOP/LEAVE/EXIT/UNLOOP) are compile-only".to_string());
                     }
 
-                    let ast = parse_tokens(&exec_tokens, dict, None)?;
-                    ast.execute(stack, dict, loop_stack, return_stack, memory)?;
+                    let ast = parse_tokens(&exec_tokens, ctx.dict, None)?;
+                    ast.execute(ctx.stack, ctx.dict, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
                 }
             }
         }
@@ -1313,31 +1316,19 @@ fn process_stdlib_content(content: &str) -> String {
 /// Load standard library files embedded in the binary
 /// This is called automatically on startup to make stdlib words available
 pub fn load_stdlib(
-    stack: &mut Stack,
-    dict: &mut Dictionary,
-    loop_stack: &mut LoopStack,
-    return_stack: &mut ReturnStack,
-    memory: &mut Memory,
-    no_jit: bool,
-    dump_ir: bool,
-    verify_ir: bool,
-    use_forth_compiler: bool,
+    ctx: &mut RuntimeContext,
+    config: CompilerConfig,
+    options: ExecutionOptions,
     included_files: &mut std::collections::HashSet<String>,
 ) -> Result<(), String> {
     // Load core definitions
     let core_processed = process_stdlib_content(CORE_FTH);
+    let stdlib_options = ExecutionOptions::new(options.use_forth_compiler, false);
     execute_line(
         &core_processed,
-        stack,
-        dict,
-        loop_stack,
-        return_stack,
-        memory,
-        no_jit,
-        dump_ir,
-        verify_ir,
-        use_forth_compiler,
-        false,  // Not define-only for stdlib
+        ctx,
+        config,
+        stdlib_options,
         included_files,
     )?;
 
@@ -1355,19 +1346,13 @@ pub fn load_stdlib(
 /// Batch compile all Word::Compiled entries in the dictionary to JIT
 /// This creates one global LLVM module with all functions, then JITs them all at once
 pub fn batch_compile_all_words(
-    dict: &mut Dictionary,
-    stack: &mut Stack,
-    loop_stack: &mut LoopStack,
-    return_stack: &mut ReturnStack,
-    memory: &mut Memory,
-    no_jit: bool,
-    dump_ir: bool,
-    verify_ir: bool,
+    ctx: &mut RuntimeContext,
+    config: CompilerConfig,
     included_files: &mut std::collections::HashSet<String>,
 ) -> Result<(), String> {
     // IMPORTANT: Get list of words to compile BEFORE loading the compiler
     // Otherwise we'll try to compile the compiler's internal words too!
-    let all_words = dict.get_all_words();
+    let all_words = ctx.dict.get_all_words();
     let mut words_to_compile: Vec<(String, AstNode)> = Vec::new();
 
     for (name, word) in all_words {
@@ -1379,7 +1364,8 @@ pub fn batch_compile_all_words(
     // Load the Forth compiler if not already loaded (after capturing words to compile)
     if !FORTH_COMPILER_LOADED.load(Ordering::Relaxed) {
         // Load compiler
-        if let Err(e) = load_file("stdlib/compiler.fth", stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir, false, false, included_files) {
+        let compiler_options = ExecutionOptions::new(false, false);
+        if let Err(e) = load_file("stdlib/compiler.fth", ctx, config, compiler_options, included_files) {
             return Err(format!("Failed to load Forth compiler: {}", e));
         }
         FORTH_COMPILER_LOADED.store(true, Ordering::Relaxed);
@@ -1390,23 +1376,23 @@ pub fn batch_compile_all_words(
     }
 
     // Step 1: Initialize batch compiler
-    dict.execute_word("INIT-BATCH-COMPILER", stack, loop_stack, return_stack, memory)?;
+    ctx.dict.execute_word("INIT-BATCH-COMPILER", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
 
     // Step 2: Declare all functions (pass 1 - forward references)
     for (name, _ast) in &words_to_compile {
         // Store word name in memory at HERE
-        let here = memory.here() as usize;
+        let here = ctx.memory.here() as usize;
         let name_bytes = name.as_bytes();
         for (i, &byte) in name_bytes.iter().enumerate() {
-            memory.store_byte(here + i, byte as i64)?;
+            ctx.memory.store_byte(here + i, byte as i64)?;
         }
 
         // Push name address and length
-        stack.push(here as i64, memory);
-        stack.push(name_bytes.len() as i64, memory);
+        ctx.stack.push(here as i64, ctx.memory);
+        ctx.stack.push(name_bytes.len() as i64, ctx.memory);
 
         // Call DECLARE-FUNCTION (creates function signature)
-        dict.execute_word("DECLARE-FUNCTION", stack, loop_stack, return_stack, memory)
+        ctx.dict.execute_word("DECLARE-FUNCTION", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)
             .map_err(|e| format!("Declaration failed for {}: {}", name, e))?;
     }
 
@@ -1416,75 +1402,75 @@ pub fn batch_compile_all_words(
         let ast_handle = crate::ast_forth::ast_register_node(ast.clone());
 
         // Store word name in memory at HERE
-        let here = memory.here() as usize;
+        let here = ctx.memory.here() as usize;
         let name_bytes = name.as_bytes();
         for (i, &byte) in name_bytes.iter().enumerate() {
-            memory.store_byte(here + i, byte as i64)?;
+            ctx.memory.store_byte(here + i, byte as i64)?;
         }
 
         // Push AST handle
-        stack.push(ast_handle as i64, memory);
+        ctx.stack.push(ast_handle as i64, ctx.memory);
 
         // Push name address and length
-        stack.push(here as i64, memory);
-        stack.push(name_bytes.len() as i64, memory);
+        ctx.stack.push(here as i64, ctx.memory);
+        ctx.stack.push(name_bytes.len() as i64, ctx.memory);
 
         // Call COMPILE-WORD (returns 0 in batch mode)
-        dict.execute_word("COMPILE-WORD", stack, loop_stack, return_stack, memory)
+        ctx.dict.execute_word("COMPILE-WORD", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)
             .map_err(|e| format!("Compilation failed for {}: {}", name, e))?;
         // Pop and discard the result (0 in batch mode)
-        stack.pop(memory);
+        ctx.stack.pop(ctx.memory);
     }
 
     // Step 4: Finalize batch compilation (create JIT)
-    dict.execute_word("FINALIZE-BATCH", stack, loop_stack, return_stack, memory)?;
+    ctx.dict.execute_word("FINALIZE-BATCH", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
 
     // Stack now has JIT handle
-    let jit_handle = stack.peek(memory).ok_or("Failed to get JIT handle")?;
+    let jit_handle = ctx.stack.peek(ctx.memory).ok_or("Failed to get JIT handle")?;
 
     // Step 5: Get function pointers and update dictionary
     for (name, _ast) in &words_to_compile {
         // Store word name in memory
-        let here = memory.here() as usize;
+        let here = ctx.memory.here() as usize;
         let name_bytes = name.as_bytes();
         for (i, &byte) in name_bytes.iter().enumerate() {
-            memory.store_byte(here + i, byte as i64)?;
+            ctx.memory.store_byte(here + i, byte as i64)?;
         }
 
         // Push JIT handle (duplicate from stack)
-        stack.push(jit_handle, memory);
+        ctx.stack.push(jit_handle, ctx.memory);
 
         // Push function name: "_fn_WORDNAME"
         let fn_name = format!("_fn_{}", name);
         let fn_name_bytes = fn_name.as_bytes();
         let fn_name_addr = here + name_bytes.len() + 100; // Offset to avoid collision
         for (i, &byte) in fn_name_bytes.iter().enumerate() {
-            memory.store_byte(fn_name_addr + i, byte as i64)?;
+            ctx.memory.store_byte(fn_name_addr + i, byte as i64)?;
         }
 
-        stack.push(fn_name_addr as i64, memory);
-        stack.push(fn_name_bytes.len() as i64, memory);
+        ctx.stack.push(fn_name_addr as i64, ctx.memory);
+        ctx.stack.push(fn_name_bytes.len() as i64, ctx.memory);
 
         // Call LLVM-GET-FUNCTION (returns low and high words)
-        dict.execute_word("LLVM-GET-FUNCTION", stack, loop_stack, return_stack, memory)?;
+        ctx.dict.execute_word("LLVM-GET-FUNCTION", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
 
         // Get function pointer (two 32-bit values: low, then high)
-        let high = stack.pop(memory).ok_or(format!("Failed to get function pointer high word for {}", name))?;
-        let low = stack.pop(memory).ok_or(format!("Failed to get function pointer low word for {}", name))?;
+        let high = ctx.stack.pop(ctx.memory).ok_or(format!("Failed to get function pointer high word for {}", name))?;
+        let low = ctx.stack.pop(ctx.memory).ok_or(format!("Failed to get function pointer low word for {}", name))?;
 
         // Combine into 64-bit pointer
         let fn_ptr = ((high as u64) << 32) | (low as u64 & 0xFFFFFFFF);
 
         // Convert to JITFunction type and update dictionary
         let jit_fn: crate::dictionary::JITFunction = unsafe { std::mem::transmute(fn_ptr as usize) };
-        dict.add_jit_compiled(name.clone(), jit_fn);
+        ctx.dict.add_jit_compiled(name.clone(), jit_fn);
 
         // Freeze this word to prevent re-definition
-        dict.freeze_word(name);
+        ctx.dict.freeze_word(name);
     }
 
     // Pop JIT handle from stack
-    stack.pop(memory);
+    ctx.stack.pop(ctx.memory);
 
     Ok(())
 }
@@ -1495,25 +1481,20 @@ pub fn batch_compile_all_words(
 pub fn try_forth_compile_word(
     name: String,
     ast: &AstNode,
-    dict: &mut Dictionary,
-    stack: &mut Stack,
-    loop_stack: &mut LoopStack,
-    return_stack: &mut ReturnStack,
-    memory: &mut Memory,
-    no_jit: bool,
-    dump_ir: bool,
-    verify_ir: bool,
+    ctx: &mut RuntimeContext,
+    config: CompilerConfig,
     included_files: &mut std::collections::HashSet<String>,
 ) -> bool {
     // Load the Forth compiler if not already loaded
     if !FORTH_COMPILER_LOADED.load(Ordering::Relaxed) {
+        let load_options = ExecutionOptions::new(false, false);
         // Load stdlib first
-        if let Err(e) = load_file("stdlib/core.fth", stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir, false, false, included_files) {
+        if let Err(e) = load_file("stdlib/core.fth", ctx, config, load_options, included_files) {
             eprintln!("Failed to load stdlib for Forth compiler: {}", e);
             return false;
         }
         // Load compiler
-        if let Err(e) = load_file("stdlib/compiler.fth", stack, dict, loop_stack, return_stack, memory, no_jit, dump_ir, verify_ir, false, false, included_files) {
+        if let Err(e) = load_file("stdlib/compiler.fth", ctx, config, load_options, included_files) {
             eprintln!("Failed to load Forth compiler: {}", e);
             return false;
         }
@@ -1527,29 +1508,29 @@ pub fn try_forth_compile_word(
     // Write word name to memory at address 302000
     let name_addr = 302000;
     for (i, ch) in name.bytes().enumerate() {
-        if let Err(_) = memory.store_byte(name_addr + i, ch as i64) {
+        if ctx.memory.store_byte(name_addr + i, ch as i64).is_err() {
             return false;
         }
     }
 
     // Save stack pointer in case compilation fails
-    let saved_sp = stack.get_sp();
+    let saved_sp = ctx.stack.get_sp();
 
     // Push arguments for COMPILE-WORD: ( ast-handle name-addr name-len -- fn-ptr )
-    stack.push(ast_handle, memory);
-    stack.push(name_addr as i64, memory);
-    stack.push(name.len() as i64, memory);
+    ctx.stack.push(ast_handle, ctx.memory);
+    ctx.stack.push(name_addr as i64, ctx.memory);
+    ctx.stack.push(name.len() as i64, ctx.memory);
 
     // Execute COMPILE-WORD
-    if let Err(e) = dict.execute_word("COMPILE-WORD", stack, loop_stack, return_stack, memory) {
+    if let Err(e) = ctx.dict.execute_word("COMPILE-WORD", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory) {
         eprintln!("Forth compiler error: {}", e);
         // Restore stack pointer on failure
-        stack.set_sp(saved_sp);
+        ctx.stack.set_sp(saved_sp);
         return false;
     }
 
     // Get function pointer from stack (two 32-bit values: high, then low)
-    if let (Some(fn_ptr_high), Some(fn_ptr_low)) = (stack.pop(memory), stack.pop(memory)) {
+    if let (Some(fn_ptr_high), Some(fn_ptr_low)) = (ctx.stack.pop(ctx.memory), ctx.stack.pop(ctx.memory)) {
         // Reconstruct 64-bit pointer from two 32-bit values
         let fn_ptr = ((fn_ptr_high as u64) << 32) | ((fn_ptr_low as u64) & 0xFFFFFFFF);
 
@@ -1557,7 +1538,7 @@ pub fn try_forth_compile_word(
         if fn_ptr == 0 {
             eprintln!("ERROR: Forth compiler returned NULL function pointer!");
             // Restore stack pointer on failure
-            stack.set_sp(saved_sp);
+            ctx.stack.set_sp(saved_sp);
             return false;
         }
 
@@ -1567,12 +1548,12 @@ pub fn try_forth_compile_word(
         };
 
         // Register in dictionary
-        dict.add_jit_compiled(name.clone(), jit_fn);
+        ctx.dict.add_jit_compiled(name.clone(), jit_fn);
         return true;
     }
 
     eprintln!("ERROR: No function pointer on stack after COMPILE-WORD!");
     // Restore stack pointer on failure
-    stack.set_sp(saved_sp);
+    ctx.stack.set_sp(saved_sp);
     false
 }

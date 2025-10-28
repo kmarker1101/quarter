@@ -335,12 +335,11 @@ impl AstNode {
 
                     if is_last {
                         // Last node - check if it's a tail call
-                        if let AstNode::CallWord(name) = node {
-                            if name.to_uppercase() == word_name.to_uppercase() {
+                        if let AstNode::CallWord(name) = node
+                            && name.to_uppercase() == word_name.to_uppercase() {
                                 // Tail call detected! Signal to loop back WITHOUT executing
                                 return Ok(true);
                             }
-                        }
                         // Last node might be IfThenElse with tail calls
                         if let AstNode::IfThenElse { then_branch, else_branch } = node {
                             // Check if either branch has tail calls
@@ -374,13 +373,12 @@ impl AstNode {
                         // Execute then branch
                         for (i, node) in then_branch.iter().enumerate() {
                             let is_last = i == then_branch.len() - 1;
-                            if is_last {
-                                if let AstNode::CallWord(name) = node {
-                                    if name.to_uppercase() == word_name.to_uppercase() {
-                                        return Ok(true);  // Tail call
-                                    }
+                            if is_last
+                                && let AstNode::CallWord(name) = node
+                                && name.to_uppercase() == word_name.to_uppercase() {
+                                    return Ok(true);  // Tail call
                                 }
-                            }
+
                             match node.execute(stack, dict, loop_stack, return_stack, memory) {
                                 Err(msg) if msg == "EXIT" => return Err(msg),
                                 Err(e) => return Err(e),
@@ -391,13 +389,12 @@ impl AstNode {
                         // Execute else branch
                         for (i, node) in else_nodes.iter().enumerate() {
                             let is_last = i == else_nodes.len() - 1;
-                            if is_last {
-                                if let AstNode::CallWord(name) = node {
-                                    if name.to_uppercase() == word_name.to_uppercase() {
-                                        return Ok(true);  // Tail call
-                                    }
+                            if is_last
+                                && let AstNode::CallWord(name) = node
+                                && name.to_uppercase() == word_name.to_uppercase() {
+                                    return Ok(true);  // Tail call
                                 }
-                            }
+
                             match node.execute(stack, dict, loop_stack, return_stack, memory) {
                                 Err(msg) if msg == "EXIT" => return Err(msg),
                                 Err(e) => return Err(e),

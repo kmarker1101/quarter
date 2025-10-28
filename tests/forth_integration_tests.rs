@@ -6,7 +6,7 @@ use std::process::Command;
 fn test_forth_tests_interpreted() {
     // Build first to ensure binary is up to date
     let build_status = Command::new("cargo")
-        .args(&["build", "--quiet"])
+        .args(["build", "--quiet"])
         .status()
         .expect("Failed to build");
 
@@ -51,7 +51,7 @@ fn test_forth_tests_interpreted() {
 fn test_forth_tests_jit() {
     // Build first to ensure binary is up to date
     let build_status = Command::new("cargo")
-        .args(&["build", "--quiet"])
+        .args(["build", "--quiet"])
         .status()
         .expect("Failed to build");
 
@@ -97,7 +97,7 @@ fn test_forth_tests_jit() {
 fn test_tco_interpreted() {
     // Build first to ensure binary is up to date
     let build_status = Command::new("cargo")
-        .args(&["build", "--quiet"])
+        .args(["build", "--quiet"])
         .status()
         .expect("Failed to build");
 
@@ -142,7 +142,7 @@ fn test_tco_interpreted() {
 fn test_tco_jit() {
     // Build first to ensure binary is up to date
     let build_status = Command::new("cargo")
-        .args(&["build", "--quiet"])
+        .args(["build", "--quiet"])
         .status()
         .expect("Failed to build");
 
@@ -194,7 +194,7 @@ fn test_tco_jit() {
 fn test_recurse_interpreted() {
     // Build first to ensure binary is up to date
     let build_status = Command::new("cargo")
-        .args(&["build", "--quiet"])
+        .args(["build", "--quiet"])
         .status()
         .expect("Failed to build");
 
@@ -239,7 +239,7 @@ fn test_recurse_interpreted() {
 fn test_recurse_jit() {
     // Build first to ensure binary is up to date
     let build_status = Command::new("cargo")
-        .args(&["build", "--quiet"])
+        .args(["build", "--quiet"])
         .status()
         .expect("Failed to build");
 
@@ -309,7 +309,7 @@ fn test_recurse_jit() {
 fn test_repl_multiline_interpreted() {
     // Build first to ensure binary is up to date
     let build_status = Command::new("cargo")
-        .args(&["build", "--quiet"])
+        .args(["build", "--quiet"])
         .status()
         .expect("Failed to build");
 
@@ -354,7 +354,7 @@ fn test_repl_multiline_interpreted() {
 fn test_repl_multiline_jit() {
     // Build first to ensure binary is up to date
     let build_status = Command::new("cargo")
-        .args(&["build", "--quiet"])
+        .args(["build", "--quiet"])
         .status()
         .expect("Failed to build");
 

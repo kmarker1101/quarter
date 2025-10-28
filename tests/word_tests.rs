@@ -1,4 +1,5 @@
-use quarter::{Dictionary, LoopStack, Memory, ReturnStack, Stack, parse_tokens};
+use std::collections::HashSet;
+use quarter::{Dictionary, LoopStack, Memory, ReturnStack, Stack, parse_tokens, execute_line, RuntimeContext, CompilerConfig, ExecutionOptions};
 
 #[test]
 fn test_dot_word() {
@@ -886,167 +887,135 @@ fn test_cr() {
 
 #[test]
 fn test_recurse_factorial() {
-    use quarter::execute_line;
-    use std::collections::HashSet;
-
     let mut dict = Dictionary::new();
     let mut stack = Stack::new();
     let mut loop_stack = LoopStack::new();
     let mut return_stack = ReturnStack::new();
     let mut memory = Memory::new();
 
-    // Define factorial using RECURSE
-    execute_line(
-        ": FACTORIAL DUP 1 <= IF DROP 1 ELSE DUP 1 - RECURSE * THEN ;",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
-        &mut HashSet::new(),
-    )
-    .unwrap();
+    let config = CompilerConfig::new(false, false, false);
+    let options = ExecutionOptions::new(false, false);
 
-    // Test 5! = 120
-    execute_line(
-        "5 FACTORIAL",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
-        &mut HashSet::new(),
-    )
-    .unwrap();
+    {
+        let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+
+        // Define factorial using RECURSE
+        execute_line(
+            ": FACTORIAL DUP 1 <= IF DROP 1 ELSE DUP 1 - RECURSE * THEN ;",
+            &mut ctx,
+            config,
+            options,
+            &mut HashSet::new(),
+        )
+        .unwrap();
+
+        // Test 5! = 120
+        execute_line(
+            "5 FACTORIAL",
+            &mut ctx,
+            config,
+            options,
+            &mut HashSet::new(),
+        )
+        .unwrap();
+    }
     assert_eq!(stack.pop(&mut memory), Some(120));
 
-    // Test 0! = 1
-    execute_line(
-        "0 FACTORIAL",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
-        &mut HashSet::new(),
-    )
-    .unwrap();
+    {
+        let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+
+        // Test 0! = 1
+        execute_line(
+            "0 FACTORIAL",
+            &mut ctx,
+            config,
+            options,
+            &mut HashSet::new(),
+        )
+        .unwrap();
+    }
     assert_eq!(stack.pop(&mut memory), Some(1));
 
-    // Test 10! = 3628800
-    execute_line(
-        "10 FACTORIAL",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
-        &mut HashSet::new(),
-    )
-    .unwrap();
+    {
+        let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+
+        // Test 10! = 3628800
+        execute_line(
+            "10 FACTORIAL",
+            &mut ctx,
+            config,
+            options,
+            &mut HashSet::new(),
+        )
+        .unwrap();
+    }
     assert_eq!(stack.pop(&mut memory), Some(3628800));
 }
 
 #[test]
 fn test_recurse_fibonacci() {
-    use quarter::execute_line;
-    use std::collections::HashSet;
-
     let mut dict = Dictionary::new();
     let mut stack = Stack::new();
     let mut loop_stack = LoopStack::new();
     let mut return_stack = ReturnStack::new();
     let mut memory = Memory::new();
 
-    // Define fibonacci using RECURSE
-    execute_line(
-        ": FIB DUP 2 < IF ELSE DUP 1 - RECURSE SWAP 2 - RECURSE + THEN ;",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
-        &mut HashSet::new(),
-    )
-    .unwrap();
+    let config = CompilerConfig::new(false, false, false);
+    let options = ExecutionOptions::new(false, false);
 
-    // Test fib(0) = 0
-    execute_line(
-        "0 FIB",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
-        &mut HashSet::new(),
-    )
-    .unwrap();
+    {
+        let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+
+        // Define fibonacci using RECURSE
+        execute_line(
+            ": FIB DUP 2 < IF ELSE DUP 1 - RECURSE SWAP 2 - RECURSE + THEN ;",
+            &mut ctx,
+            config,
+            options,
+            &mut HashSet::new(),
+        )
+        .unwrap();
+
+        // Test fib(0) = 0
+        execute_line(
+            "0 FIB",
+            &mut ctx,
+            config,
+            options,
+            &mut HashSet::new(),
+        )
+        .unwrap();
+    }
     assert_eq!(stack.pop(&mut memory), Some(0));
 
-    // Test fib(1) = 1
-    execute_line(
-        "1 FIB",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
-        &mut HashSet::new(),
-    )
-    .unwrap();
+    {
+        let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+
+        // Test fib(1) = 1
+        execute_line(
+            "1 FIB",
+            &mut ctx,
+            config,
+            options,
+            &mut HashSet::new(),
+        )
+        .unwrap();
+    }
     assert_eq!(stack.pop(&mut memory), Some(1));
 
-    // Test fib(10) = 55
-    execute_line(
-        "10 FIB",
-        &mut stack,
-        &mut dict,
-        &mut loop_stack,
-        &mut return_stack,
-        &mut memory,
-        false,
-        false,
-        false,
-        false,
-        false,
-        &mut HashSet::new(),
-    )
-    .unwrap();
+    {
+        let mut ctx = RuntimeContext::new(&mut stack, &mut dict, &mut loop_stack, &mut return_stack, &mut memory);
+
+        // Test fib(10) = 55
+        execute_line(
+            "10 FIB",
+            &mut ctx,
+            config,
+            options,
+            &mut HashSet::new(),
+        )
+        .unwrap();
+    }
     assert_eq!(stack.pop(&mut memory), Some(55));
 }
 
