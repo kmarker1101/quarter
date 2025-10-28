@@ -7,6 +7,7 @@ use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::builder::Builder;
 use inkwell::execution_engine::ExecutionEngine;
+use inkwell::targets::{Target, TargetMachine, InitializationConfig, RelocMode, CodeModel, FileType};
 
 // Macro to create symbol array without repetitive 'as usize' casts
 // Usage: symbol_array!(func1, func2, func3, ...)
@@ -37,6 +38,7 @@ fn register_quarter_symbols() -> usize {
         crate::words::quarter_sub,
         crate::words::quarter_mul,
         crate::words::quarter_div,
+        crate::words::quarter_mod,
         crate::words::quarter_slash_mod,
         crate::words::quarter_negate,
         crate::words::quarter_abs,
@@ -61,6 +63,7 @@ fn register_quarter_symbols() -> usize {
         crate::words::quarter_fetch,
         crate::words::quarter_c_store,
         crate::words::quarter_c_fetch,
+        crate::words::quarter_base,
 
         // Bitwise operations
         crate::words::quarter_and,
@@ -72,7 +75,7 @@ fn register_quarter_symbols() -> usize {
 
         // Return stack operations
         crate::words::quarter_to_r,
-        crate::words::quarter_r_from,
+        crate::words::quarter_from_r,
         crate::words::quarter_r_fetch,
 
         // Loop operations
@@ -980,6 +983,58 @@ impl LLVMRegistry {
         self.blocks.insert(handle, block);
         Ok(handle)
     }
+
+    /// Initialize LLVM targets for AOT compilation
+    /// Should be called once before using TargetMachine
+    pub fn initialize_native_target() -> Result<(), String> {
+        Target::initialize_native(&InitializationConfig::default())
+            .map_err(|e| format!("Failed to initialize native target: {}", e))
+    }
+
+    /// Write module to object file
+    /// Returns path to generated object file
+    pub fn write_object_file(
+        &self,
+        module_handle: ModuleHandle,
+        output_path: &str,
+        opt_level: u8,
+    ) -> Result<(), String> {
+        let module = self.modules.get(&module_handle)
+            .ok_or_else(|| format!("Invalid module handle: {}", module_handle))?;
+
+        // Get native target triple
+        let target_triple = TargetMachine::get_default_triple();
+
+        // Get the target
+        let target = Target::from_triple(&target_triple)
+            .map_err(|e| format!("Failed to get target: {}", e))?;
+
+        // Convert optimization level
+        let opt = match opt_level {
+            0 => OptimizationLevel::None,
+            1 => OptimizationLevel::Less,
+            2 => OptimizationLevel::Default,
+            3 => OptimizationLevel::Aggressive,
+            _ => OptimizationLevel::Default,
+        };
+
+        // Create target machine
+        let target_machine = target
+            .create_target_machine(
+                &target_triple,
+                "generic",  // CPU
+                "",         // Features
+                opt,
+                RelocMode::PIC,  // Position Independent Code
+                CodeModel::Default,
+            )
+            .ok_or_else(|| "Failed to create target machine".to_string())?;
+
+        // Write object file
+        target_machine
+            .write_to_file(module.as_ref(), FileType::Object, output_path.as_ref())
+            .map_err(|e| format!("Failed to write object file: {}", e))
+    }
 }
 
 // Public API functions that Forth will call
@@ -1338,5 +1393,30 @@ pub fn llvm_get_insert_block(builder_handle: i64) -> Result<i64, String> {
     LLVM_REGISTRY.with(|cell| {
         let mut registry = cell.borrow_mut();
         registry.get_insert_block(builder_handle)
+    })
+}
+
+/// Initialize native LLVM target for AOT compilation
+/// Stack: ( -- )
+/// Must be called before using write_object_file
+pub fn llvm_initialize_native_target() -> Result<(), String> {
+    LLVMRegistry::initialize_native_target()
+}
+
+/// Write module to object file
+/// Stack: ( module-handle path-addr path-len opt-level -- )
+/// opt-level: 0=None, 1=Less, 2=Default, 3=Aggressive
+pub fn llvm_write_object_file(
+    module_handle: i64,
+    path: &str,
+    opt_level: i64,
+) -> Result<(), String> {
+    if !(0..=3).contains(&opt_level) {
+        return Err(format!("Invalid optimization level: {} (must be 0-3)", opt_level));
+    }
+
+    LLVM_REGISTRY.with(|cell| {
+        let registry = cell.borrow();
+        registry.write_object_file(module_handle, path, opt_level as u8)
     })
 }

@@ -1534,6 +1534,9 @@ pub fn batch_compile_all_words(
 
     // Step 1: Initialize batch compiler
     ctx.dict.execute_word("INIT-BATCH-COMPILER", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
+    if std::env::var("QUARTER_DEBUG").is_ok() {
+        eprintln!("DEBUG (lib.rs): INIT-BATCH-COMPILER completed, starting declarations");
+    }
 
     // Step 2: Declare all functions (pass 1 - forward references)
     for (name, _ast) in &words_to_compile {
@@ -1549,12 +1552,21 @@ pub fn batch_compile_all_words(
         ctx.stack.push(name_bytes.len() as i64, ctx.memory);
 
         // Call DECLARE-FUNCTION (creates function signature)
+        if std::env::var("QUARTER_DEBUG").is_ok() {
+            eprintln!("DEBUG (lib.rs): Declaring function: {}", name);
+        }
         ctx.dict.execute_word("DECLARE-FUNCTION", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)
             .map_err(|e| format!("Declaration failed for {}: {}", name, e))?;
+    }
+    if std::env::var("QUARTER_DEBUG").is_ok() {
+        eprintln!("DEBUG (lib.rs): All functions declared, starting compilation");
     }
 
     // Step 3: Compile each word body (pass 2 - now all functions exist)
     for (name, ast) in &words_to_compile {
+        if std::env::var("QUARTER_DEBUG").is_ok() {
+            eprintln!("DEBUG (lib.rs): Compiling word: {}", name);
+        }
         // Register AST node to get a handle
         let ast_handle = crate::ast_forth::ast_register_node(ast.clone());
 
@@ -1577,16 +1589,31 @@ pub fn batch_compile_all_words(
             .map_err(|e| format!("Compilation failed for {}: {}", name, e))?;
         // Pop and discard the result (0 in batch mode)
         ctx.stack.pop(ctx.memory);
+        if std::env::var("QUARTER_DEBUG").is_ok() {
+            eprintln!("DEBUG (lib.rs): Successfully compiled: {}", name);
+        }
     }
 
     // Step 4: Finalize batch compilation (create JIT)
+    if std::env::var("QUARTER_DEBUG").is_ok() {
+        eprintln!("DEBUG (lib.rs): All words compiled, calling FINALIZE-BATCH");
+    }
     ctx.dict.execute_word("FINALIZE-BATCH", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
+    if std::env::var("QUARTER_DEBUG").is_ok() {
+        eprintln!("DEBUG (lib.rs): FINALIZE-BATCH completed");
+    }
 
     // Stack now has JIT handle
     let jit_handle = ctx.stack.peek(ctx.memory).ok_or("Failed to get JIT handle")?;
 
     // Step 5: Get function pointers and update dictionary
+    if std::env::var("QUARTER_DEBUG").is_ok() {
+        eprintln!("DEBUG (lib.rs): Getting function pointers for {} words", words_to_compile.len());
+    }
     for (name, _ast) in &words_to_compile {
+        if std::env::var("QUARTER_DEBUG").is_ok() {
+            eprintln!("DEBUG (lib.rs): Getting function pointer for: {}", name);
+        }
         // Store word name in memory
         let here = ctx.memory.here() as usize;
         let name_bytes = name.as_bytes();
@@ -1628,6 +1655,108 @@ pub fn batch_compile_all_words(
 
     // Pop JIT handle from stack
     ctx.stack.pop(ctx.memory);
+
+    Ok(())
+}
+
+/// Compile all words to an object file for AOT compilation
+/// Similar to batch_compile_all_words but writes object file instead of creating JIT
+pub fn compile_to_object_file(
+    ctx: &mut RuntimeContext,
+    output_path: &str,
+    opt_level: u8,
+    config: CompilerConfig,
+    included_files: &mut std::collections::HashSet<String>,
+) -> Result<(), String> {
+    // Get list of words to compile BEFORE loading the compiler
+    let all_words = ctx.dict.get_all_words();
+    let mut words_to_compile: Vec<(String, AstNode)> = Vec::new();
+
+    for (name, word) in all_words {
+        if let crate::dictionary::Word::Compiled(ast) = word {
+            words_to_compile.push((name, ast.clone()));
+        }
+    }
+
+    if words_to_compile.is_empty() {
+        return Err("No words to compile".to_string());
+    }
+
+    // Load the Forth compiler if not already loaded
+    if !FORTH_COMPILER_LOADED.load(Ordering::Relaxed) {
+        let compiler_options = ExecutionOptions::new(false, false);
+        if let Err(e) = load_file("stdlib/compiler.fth", ctx, config, compiler_options, included_files) {
+            return Err(format!("Failed to load Forth compiler: {}", e));
+        }
+        FORTH_COMPILER_LOADED.store(true, Ordering::Relaxed);
+    }
+
+    // Step 1: Initialize batch compiler (sets up CURRENT-MODULE variable)
+    ctx.dict.execute_word("INIT-BATCH-COMPILER", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
+
+    // Step 2: Get module handle from CURRENT-MODULE variable
+    ctx.dict.execute_word("CURRENT-MODULE", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
+    ctx.dict.execute_word("@", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
+    let module_handle = ctx.stack.pop(ctx.memory)
+        .ok_or("Failed to get module handle from CURRENT-MODULE")?;
+
+    // Step 3: Declare all functions (pass 1)
+    for (name, _ast) in &words_to_compile {
+        let here = ctx.memory.here() as usize;
+        let name_bytes = name.as_bytes();
+        for (i, &byte) in name_bytes.iter().enumerate() {
+            ctx.memory.store_byte(here + i, byte as i64)?;
+        }
+
+        ctx.stack.push(here as i64, ctx.memory);
+        ctx.stack.push(name_bytes.len() as i64, ctx.memory);
+
+        ctx.dict.execute_word("DECLARE-FUNCTION", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)
+            .map_err(|e| format!("Declaration failed for {}: {}", name, e))?;
+    }
+
+    // Step 4: Compile each word body (pass 2)
+    for (name, ast) in &words_to_compile {
+        if std::env::var("QUARTER_DEBUG").is_ok() {
+            eprintln!("DEBUG: Compiling word: {}", name);
+        }
+
+        let ast_handle = crate::ast_forth::ast_register_node(ast.clone());
+
+        let here = ctx.memory.here() as usize;
+        let name_bytes = name.as_bytes();
+        for (i, &byte) in name_bytes.iter().enumerate() {
+            ctx.memory.store_byte(here + i, byte as i64)?;
+        }
+
+        ctx.stack.push(ast_handle as i64, ctx.memory);
+        ctx.stack.push(here as i64, ctx.memory);
+        ctx.stack.push(name_bytes.len() as i64, ctx.memory);
+
+        ctx.dict.execute_word("COMPILE-WORD", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)
+            .map_err(|e| format!("Compilation failed for {}: {}", name, e))?;
+
+        // Pop and discard the result (0 in batch mode)
+        ctx.stack.pop(ctx.memory);
+    }
+
+    // Step 5: Initialize native target
+    ctx.dict.execute_word("LLVM-INITIALIZE-NATIVE-TARGET", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
+
+    // Step 6: Write object file
+    // Stack: ( module-handle path-addr path-len opt-level -- )
+    let here = ctx.memory.here() as usize;
+    let path_bytes = output_path.as_bytes();
+    for (i, &byte) in path_bytes.iter().enumerate() {
+        ctx.memory.store_byte(here + i, byte as i64)?;
+    }
+
+    ctx.stack.push(module_handle, ctx.memory);
+    ctx.stack.push(here as i64, ctx.memory);
+    ctx.stack.push(path_bytes.len() as i64, ctx.memory);
+    ctx.stack.push(opt_level as i64, ctx.memory);
+
+    ctx.dict.execute_word("LLVM-WRITE-OBJECT-FILE", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
 
     Ok(())
 }

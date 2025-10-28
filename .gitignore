@@ -31,3 +31,8 @@ Thumbs.db
 # *.fth
 # *.forth
 # *.quarter
+
+# AOT compilation artifacts
+*_main.c
+*_main.o
+*_forth.o

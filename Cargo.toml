@@ -3,13 +3,19 @@ name = "quarter"
 version = "0.2.0"
 edition = "2024"
 
+[lib]
+name = "quarter"
+path = "src/lib.rs"
+crate-type = ["lib", "staticlib"]
+
 [dependencies]
 rustyline = "14.0"
 inkwell = { version = "0.6.0", features = ["llvm18-1"] }
 lazy_static = "1.5"
 
 [profile.release]
-lto = "thin"         # Thin LTO - faster compilation, less memory than full LTO
+# LTO disabled due to runtime.a linking
+lto = false
 codegen-units = 1    # Better optimization with single codegen unit
 opt-level = 3        # Maximum optimization
 

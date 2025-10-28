@@ -2,6 +2,9 @@ use quarter::{Dictionary, LoopStack, Stack, load_file, load_stdlib, CompilerConf
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+/// Version number from Cargo.toml
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 /// Track whether the Forth compiler has been loaded
 #[allow(dead_code)]
 static FORTH_COMPILER_LOADED: AtomicBool = AtomicBool::new(false);
@@ -102,6 +105,409 @@ fn try_forth_compile(
     false
 }
 
+/// Generate a main() wrapper C file that initializes runtime and calls Forth code
+fn generate_main_wrapper(main_word: &str, output_path: &str) -> Result<(), String> {
+    let main_c_content = format!(r#"/**
+ * Generated main() wrapper for Quarter Forth executable
+ * This file is auto-generated during compilation
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+
+// Runtime library functions
+extern void quarter_runtime_init(void);
+extern void quarter_runtime_cleanup(void);
+extern void quarter_runtime_get_state(uint8_t** memory, size_t** sp, size_t** rp);
+
+// Forward declaration of compiled Forth word
+extern void _fn_{}(uint8_t* memory, size_t* sp, size_t* rp);
+
+int main(void) {{
+    // Initialize runtime
+    quarter_runtime_init();
+
+    // Get runtime state
+    uint8_t* memory;
+    size_t* sp;
+    size_t* rp;
+    quarter_runtime_get_state(&memory, &sp, &rp);
+
+    // Call main Forth word
+    _fn_{}(memory, sp, rp);
+
+    // Cleanup
+    quarter_runtime_cleanup();
+
+    return 0;
+}}
+"#, main_word, main_word);
+
+    std::fs::write(output_path, main_c_content)
+        .map_err(|e| format!("Failed to write main wrapper: {}", e))
+}
+
+/// Compile a Forth source file to a standalone executable
+///
+/// Implementation roadmap:
+/// 1. Load standard library and source file (parse to AST)
+/// 2. Use batch_compile_all_words() to compile to LLVM IR
+/// 3. Instead of FINALIZE-BATCH (creates JIT), create FINALIZE-AOT that:
+///    - Initializes LLVM target (InitializeAllTargets, InitializeAllTargetMCs, etc.)
+///    - Creates TargetMachine for native target
+///    - Runs optimization passes (based on opt_level)
+///    - Generates object file using write_to_file()
+/// 4. Create a minimal runtime library (runtime.c):
+///    - Stack management functions
+///    - I/O primitives (., EMIT, KEY, etc.)
+///    - Memory allocation
+///    - Error handling
+/// 5. Compile runtime.c to runtime.o
+/// 6. Create a main() wrapper that:
+///    - Initializes stacks and memory
+///    - Calls the top-level Forth words
+///    - Handles exit codes
+/// 7. Link object files:
+///    - main.o (generated wrapper)
+///    - forth_code.o (compiled Forth words)
+///    - runtime.o (runtime library)
+///    - Using system linker (cc or ld)
+/// 8. Set executable permissions
+///
+/// Dependencies:
+/// - inkwell TargetMachine API
+/// - LLVM target initialization
+/// - System linker (cc/clang/gcc)
+/// - Runtime library implementation
+fn compile_to_executable(
+    source_file: &str,
+    output_file: &str,
+    opt_level: u8,
+    debug_symbols: bool,
+    verbose: bool,
+    keep_temps: bool,
+) {
+    use std::fs;
+
+    if verbose {
+        println!("Compiling {} to {}...", source_file, output_file);
+        println!("  Optimization level: {}", opt_level);
+        println!("  Debug symbols: {}", if debug_symbols { "yes" } else { "no" });
+    }
+
+    // Create temp directory for build artifacts
+    let temp_dir = std::env::temp_dir().join(format!("quarter_build_{}", std::process::id()));
+    if let Err(e) = fs::create_dir_all(&temp_dir) {
+        eprintln!("Failed to create temp directory: {}", e);
+        std::process::exit(1);
+    }
+
+    if verbose {
+        println!("Build directory: {}", temp_dir.display());
+    }
+
+    // Step 1: Build minimal runtime library (compile runtime.rs to object file)
+    if verbose {
+        println!("Step 1: Building minimal runtime library...");
+    }
+
+    let runtime_obj_path = temp_dir.join("runtime.o");
+    let runtime_obj_str = runtime_obj_path.to_string_lossy();
+    let runtime_result = std::process::Command::new("rustc")
+        .args([
+            "--crate-type=lib",
+            "--emit=obj",
+            "--edition", "2021",
+            "-C", "opt-level=3",
+            "-C", "lto=fat",
+            "src/runtime.rs",
+            "-o", &runtime_obj_str
+        ])
+        .output()
+        .map_err(|e| format!("Failed to run rustc: {}", e));
+
+    match runtime_result {
+        Ok(output) => {
+            if !output.status.success() {
+                eprintln!("Failed to build runtime library:");
+                eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+                std::process::exit(1);
+            }
+        }
+        Err(e) => {
+            eprintln!("Error building runtime: {}", e);
+            std::process::exit(1);
+        }
+    }
+
+    // Step 2: Compile Forth source to object file
+    if verbose {
+        println!("Step 2: Compiling Forth source to object file...");
+    }
+
+    let forth_obj_path = temp_dir.join("forth.o");
+    let forth_obj_str = forth_obj_path.to_string_lossy();
+
+    // Initialize Quarter execution context
+    quarter::init_execution_context(
+        quarter::Stack::new(),
+        quarter::Dictionary::new(),
+        quarter::LoopStack::new(),
+        quarter::ReturnStack::new(),
+        quarter::Memory::new(),
+        std::collections::HashSet::new(),
+        quarter::CompilerConfig::new(false, false, false),
+    );
+
+    // Load source file and compile to object
+    let compile_result = quarter::with_execution_context(|exec_ctx| {
+        // Load stdlib
+        let load_options = quarter::ExecutionOptions::new(false, false);
+        let mut ctx = quarter::RuntimeContext::new(
+            &mut exec_ctx.stack,
+            &mut exec_ctx.dict,
+            &mut exec_ctx.loop_stack,
+            &mut exec_ctx.return_stack,
+            &mut exec_ctx.memory
+        );
+
+        if let Err(e) = quarter::load_stdlib(&mut ctx, exec_ctx.config, load_options, &mut exec_ctx.included_files) {
+            return Err(format!("Failed to load stdlib: {}", e));
+        }
+
+        // Load source file
+        if let Err(e) = quarter::load_file(source_file, &mut ctx, exec_ctx.config, load_options, &mut exec_ctx.included_files) {
+            return Err(format!("Failed to load source file: {}", e));
+        }
+
+        // Compile to object file
+        quarter::compile_to_object_file(&mut ctx, &forth_obj_str, opt_level, exec_ctx.config, &mut exec_ctx.included_files)
+    });
+
+    match compile_result {
+        Some(Ok(())) => {
+            if verbose {
+                println!("  Successfully compiled to {}", forth_obj_str);
+            }
+        }
+        Some(Err(e)) => {
+            eprintln!("Failed to compile Forth source:");
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+        None => {
+            eprintln!("No execution context available");
+            std::process::exit(1);
+        }
+    }
+
+    // Step 3: Generate main wrapper
+    if verbose {
+        println!("Step 3: Generating main() wrapper...");
+    }
+
+    // TODO: Determine main word (could be "MAIN" or first defined word)
+    let main_word = "MAIN";
+    let main_c_path = temp_dir.join("main.c");
+    let main_c_str = main_c_path.to_string_lossy();
+
+    if let Err(e) = generate_main_wrapper(main_word, &main_c_str) {
+        eprintln!("Failed to generate main wrapper: {}", e);
+        std::process::exit(1);
+    }
+
+    // Step 4: Compile main wrapper
+    if verbose {
+        println!("Step 4: Compiling main wrapper...");
+    }
+
+    let main_o_path = temp_dir.join("main.o");
+    let main_o_str = main_o_path.to_string_lossy();
+    let cc_result = std::process::Command::new("cc")
+        .args(["-c", "-O2", &main_c_str, "-o", &main_o_str])
+        .output();
+
+    match cc_result {
+        Ok(output) => {
+            if !output.status.success() {
+                eprintln!("Failed to compile main wrapper:");
+                eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+                std::process::exit(1);
+            }
+        }
+        Err(e) => {
+            eprintln!("Error compiling main wrapper: {}", e);
+            std::process::exit(1);
+        }
+    }
+
+    // Step 5: Link everything together
+    if verbose {
+        println!("Step 5: Linking...");
+    }
+
+    // Build portable linker command
+    let mut link_cmd = std::process::Command::new("cc");
+    link_cmd.args([
+        main_o_str.as_ref(),
+        forth_obj_str.as_ref(),
+        runtime_obj_str.as_ref(),  // Use minimal runtime instead of full libquarter.a
+        "-o",
+        output_file,
+    ]);
+
+    // Platform-specific linker flags
+    #[cfg(target_os = "macos")]
+    {
+        // Add Homebrew library paths if they exist (both ARM and Intel)
+        let homebrew_paths = [
+            "/opt/homebrew/lib",      // Apple Silicon (M1/M2/M3)
+            "/usr/local/lib",          // Intel Mac
+            "/opt/homebrew/opt/libffi/lib",  // libffi specific path
+            "/opt/homebrew/opt/zlib/lib",    // zlib specific path
+        ];
+
+        for path in &homebrew_paths {
+            if std::path::Path::new(path).exists() {
+                link_cmd.arg(format!("-L{}", path));
+            }
+        }
+
+        link_cmd.args([
+            "-Wl,-dead_strip",  // Remove unused code
+            "-Wl,-x",           // Strip local symbols
+        ]);
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // Add common Linux library paths if they exist
+        let linux_paths = [
+            "/usr/lib",
+            "/usr/local/lib",
+            "/usr/lib/x86_64-linux-gnu",    // Debian/Ubuntu x64
+            "/usr/lib/aarch64-linux-gnu",   // Debian/Ubuntu ARM64
+        ];
+
+        for path in &linux_paths {
+            if std::path::Path::new(path).exists() {
+                link_cmd.arg(format!("-L{}", path));
+            }
+        }
+
+        link_cmd.args([
+            "-lm",      // Math library (for abs, etc.)
+            "-Wl,--gc-sections",  // Remove unused sections
+            "-s",                  // Strip all symbols
+        ]);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        link_cmd.args([
+            // Windows uses different library names and linking
+            "msvcrt.lib",
+            "zstd.lib",
+            "ffi.lib",
+            "zlib.lib",
+        ]);
+    }
+
+    let link_result = link_cmd.output();
+
+    match link_result {
+        Ok(output) => {
+            if !output.status.success() {
+                eprintln!("Failed to link executable:");
+                eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+                std::process::exit(1);
+            }
+        }
+        Err(e) => {
+            eprintln!("Error running linker: {}", e);
+            std::process::exit(1);
+        }
+    }
+
+    // Strip the binary to further reduce size
+    #[cfg(target_os = "macos")]
+    {
+        if verbose {
+            println!("Stripping debug symbols...");
+        }
+        let _ = std::process::Command::new("strip")
+            .arg(output_file)
+            .output();
+    }
+
+    // Success!
+    if verbose {
+        println!();
+        println!("===========================================");
+        println!("✓ Successfully created executable: {}", output_file);
+        println!("===========================================");
+        println!();
+        if keep_temps {
+            println!("Build artifacts kept in: {}", temp_dir.display());
+            println!("  - {} (main wrapper - C source)", main_c_str);
+            println!("  - {} (main wrapper - object)", main_o_str);
+            println!("  - {} (Forth code - object)", forth_obj_str);
+            println!("  - {} (minimal runtime - object)", runtime_obj_str);
+            println!("  - {} (final executable)", output_file);
+        }
+        println!();
+        println!("Run with: ./{}", output_file);
+    } else {
+        println!("Successfully created: {}", output_file);
+    }
+
+    // Clean up temporary files unless --keep-temps is set
+    if !keep_temps {
+        if verbose {
+            println!("Cleaning up build artifacts...");
+        }
+        if verbose {
+            if let Err(e) = fs::remove_dir_all(&temp_dir) {
+                eprintln!("Warning: Failed to remove temp directory: {}", e);
+            }
+        } else {
+            let _ = fs::remove_dir_all(&temp_dir);
+        }
+    }
+}
+
+fn print_help() {
+    println!("Quarter - Forth Interpreter and Compiler v{}", VERSION);
+    println!();
+    println!("USAGE:");
+    println!("  quarter [OPTIONS] [FILE]");
+    println!();
+    println!("OPTIONS:");
+    println!("  --compile, -c          Compile source file to native executable");
+    println!("  -o <output>            Output filename (default: a.out)");
+    println!("  --optimize, -O<level>  Optimization level: 0, 1, 2, 3 (default: 2)");
+    println!("  --debug, -g            Include debug symbols");
+    println!("  --verbose, -v          Show compilation progress");
+    println!("  --keep-temps           Keep intermediate build files (for debugging)");
+    println!("  --jit                  Enable JIT compilation mode");
+    println!("  --no-jit               Disable JIT compilation");
+    println!("  --dump-ir              Dump LLVM IR to stdout");
+    println!("  --verify-ir            Verify LLVM IR");
+    println!("  --compile-stdlib       Compile standard library");
+    println!("  --help, -h             Show this help message");
+    println!("  --version              Show version");
+    println!();
+    println!("EXAMPLES:");
+    println!("  quarter                           # Start interactive REPL");
+    println!("  quarter myapp.fth                 # Run source file (interpreted)");
+    println!("  quarter --jit myapp.fth           # Run with JIT compilation");
+    println!("  quarter --compile myapp.fth       # Compile to a.out");
+    println!("  quarter -c myapp.fth -o myapp     # Compile to 'myapp'");
+    println!("  quarter -c -O3 myapp.fth          # Compile with max optimization");
+    println!();
+}
+
 fn main() {
     let mut stack = Stack::new();
     let mut dict = Dictionary::new();
@@ -117,9 +523,18 @@ fn main() {
     let mut verify_ir = false;
     let mut compile_stdlib = false;
     let mut jit_mode = false;
+    let mut compile_mode = false;
+    let mut output_file: Option<String> = None;
+    let mut opt_level: u8 = 2;  // Default optimization level
+    let mut debug_symbols = false;
+    let mut verbose = false;
+    let mut keep_temps = false;
     let mut filename: Option<String> = None;
 
-    for arg in args.iter().skip(1) {
+    let mut i = 1;
+    while i < args.len() {
+        let arg = &args[i];
+
         if arg == "--no-jit" {
             no_jit = true;
         } else if arg == "--dump-ir" {
@@ -131,8 +546,74 @@ fn main() {
         } else if arg == "--jit" {
             jit_mode = true;
             compile_stdlib = true;  // JIT mode implies compile stdlib
-        } else if !arg.starts_with("--") {
+        } else if arg == "--compile" || arg == "-c" {
+            compile_mode = true;
+        } else if arg == "-o" {
+            // Get output filename from next argument
+            i += 1;
+            if i < args.len() {
+                output_file = Some(args[i].clone());
+            } else {
+                eprintln!("Error: -o requires an output filename");
+                std::process::exit(1);
+            }
+        } else if arg == "--optimize" {
+            // Get optimization level from next argument
+            i += 1;
+            if i < args.len() {
+                opt_level = args[i].parse().unwrap_or_else(|_| {
+                    eprintln!("Error: --optimize requires a number 0-3");
+                    std::process::exit(1);
+                });
+                if opt_level > 3 {
+                    eprintln!("Error: optimization level must be 0-3");
+                    std::process::exit(1);
+                }
+            } else {
+                eprintln!("Error: --optimize requires a level (0-3)");
+                std::process::exit(1);
+            }
+        } else if let Some(opt_str) = arg.strip_prefix("-O") {
+            // Handle -O0, -O1, -O2, -O3
+            opt_level = opt_str.parse().unwrap_or_else(|_| {
+                eprintln!("Error: -O requires a number 0-3");
+                std::process::exit(1);
+            });
+            if opt_level > 3 {
+                eprintln!("Error: optimization level must be 0-3");
+                std::process::exit(1);
+            }
+        } else if arg == "--debug" || arg == "-g" {
+            debug_symbols = true;
+        } else if arg == "--verbose" || arg == "-v" {
+            verbose = true;
+        } else if arg == "--keep-temps" {
+            keep_temps = true;
+        } else if arg == "--help" || arg == "-h" {
+            print_help();
+            std::process::exit(0);
+        } else if arg == "--version" {
+            println!("Quarter Forth Interpreter v{}", VERSION);
+            std::process::exit(0);
+        } else if !arg.starts_with("-") {
             filename = Some(arg.clone());
+        } else {
+            eprintln!("Unknown option: {}", arg);
+            std::process::exit(1);
+        }
+
+        i += 1;
+    }
+
+    // Validate compile mode
+    if compile_mode {
+        if filename.is_none() {
+            eprintln!("Error: --compile requires a source file");
+            std::process::exit(1);
+        }
+        // Set default output file if not specified
+        if output_file.is_none() {
+            output_file = Some("a.out".to_string());
         }
     }
 
@@ -168,7 +649,10 @@ fn main() {
         }
     }
 
-    println!("Forth Interpreter v0.2");
+    // Only print banner in interpreter mode (not when compiling)
+    if !compile_mode {
+        println!("Forth Interpreter v{}", VERSION);
+    }
 
     // Initialize global execution context for EVALUATE, CATCH/THROW, and Forth REPL
     quarter::init_execution_context(
@@ -184,6 +668,25 @@ fn main() {
     // Check for file argument
     // Supported extensions: .qtr, .fth, .forth, .quarter
     if let Some(file) = filename {
+        // Compile mode: generate standalone executable
+        if compile_mode {
+            if verbose {
+                println!("Compiling {} to {}...", file, output_file.as_ref().unwrap());
+            }
+
+            // Use the compilation function (to be implemented)
+            compile_to_executable(
+                &file,
+                output_file.as_ref().unwrap(),
+                opt_level,
+                debug_symbols,
+                verbose,
+                keep_temps,
+            );
+
+            return;
+        }
+
         println!("Loading {}", file);
 
         // Load file - in JIT mode, only load definitions without executing

@@ -10,6 +10,45 @@ Quarter is a Forth interpreter written in Rust with a **self-hosting JIT compile
 
 Quarter has achieved **true self-compilation**: The Forth compiler is written in Forth and successfully compiles itself to native code. This represents a complete bootstrap cycle where the compiler can compile its own source code.
 
+## Installation
+
+Quarter requires LLVM 18.x for JIT compilation and AOT compilation features.
+
+### macOS
+
+```bash
+# Install dependencies
+brew install llvm zstd libffi
+
+# Clone and build
+git clone https://github.com/kmarker1101/quarter.git
+cd quarter
+cargo build --release
+```
+
+### Ubuntu/Debian
+
+```bash
+# Install dependencies
+sudo apt install llvm-18 libzstd-dev libffi-dev
+
+# Clone and build
+git clone https://github.com/kmarker1101/quarter.git
+cd quarter
+cargo build --release
+```
+
+### From Source (All Platforms)
+
+```bash
+# Ensure LLVM 18.x is installed
+# Then build with cargo
+cargo build --release
+
+# Optional: Install to ~/.cargo/bin
+cargo install --path .
+```
+
 ## Quick Start
 
 ```bash
@@ -34,7 +73,7 @@ cargo test
 ### ✨ Highlights
 
 - **Self-hosting compiler** written entirely in Forth
-- **Two execution modes**: Interpreted (AST evaluation) and JIT (native code via LLVM)
+- **Three execution modes**: Interpreted (AST evaluation), JIT (runtime native code), and AOT (standalone executables)
 - **Full recursion support**: Both `RECURSE` word and direct recursion
 - **Comprehensive test suite**: 153 tests across unit and integration testing
 - **Interactive REPL** with history and line editing
@@ -58,6 +97,32 @@ Uses the self-hosting Forth compiler to generate LLVM IR.
 cargo run myprogram.fth --jit       # JIT compile and run
 ```
 
+#### 3. AOT Mode (Ahead-of-Time Compilation)
+Compiles Forth programs to standalone native executables via LLVM.
+Produces optimized binaries (~50KB) that can run without the Quarter interpreter.
+
+```bash
+# Compile to standalone executable (default: a.out)
+cargo run -- --compile myprogram.fth
+
+# Produces: a.out (native executable)
+./a.out                             # Run without Quarter
+
+# Specify output name with -o
+cargo run -- --compile myprogram.fth -o mybinary
+./mybinary
+
+# Compile with optimization level
+cargo run -- -c myprogram.fth -o myapp -O3
+```
+
+**See [docs/aot-compilation.md](docs/aot-compilation.md) for comprehensive AOT documentation including:**
+- Compilation process details
+- Optimization levels and performance
+- Build artifacts and cleanup
+- Debug symbols and troubleshooting
+- Technical implementation details
+
 ## Command Line Arguments
 
 ```bash
@@ -67,18 +132,30 @@ Arguments:
   [FILE]              Forth source file to execute (.fth, .forth, .qtr, .quarter)
 
 Options:
+  --compile, -c       AOT compile to standalone executable (default: a.out)
+  -o <output>         Output filename (requires --compile)
+  --optimize, -O<n>   Optimization level: 0, 1, 2, 3 (default: 2)
+  --debug, -g         Include debug symbols
+  --verbose, -v       Show compilation progress
+  --keep-temps        Keep temporary build files (in /tmp/quarter_build_<pid>/)
   --jit               Enable JIT compilation (batch compiles all words to native code)
-  --compile-stdlib    Compile standard library to native code
   --no-jit            Disable JIT compilation (keep interpreted)
+  --compile-stdlib    Compile standard library to native code
   --dump-ir           Dump LLVM IR for debugging
   --verify-ir         Verify LLVM IR correctness
+  --help, -h          Show help message
+  --version           Show version
 
 Examples:
   quarter                                  # Interactive REPL (interpreted)
   quarter script.fth                       # Run script (interpreted)
   quarter script.fth --jit                 # Run script (JIT compiled)
+  quarter --compile script.fth             # Compile to a.out
+  quarter -c script.fth -o myapp           # Compile to 'myapp'
+  quarter -c -O3 script.fth -o myapp       # Compile with max optimization
   cargo run                                # REPL (interpreted)
   cargo run script.fth --jit               # JIT mode
+  cargo run -- --compile script.fth        # AOT compile
   cargo run tests/recurse_tests.fth --jit  # Run tests in JIT mode
 ```
 
@@ -407,6 +484,14 @@ Loading hello.fth
 - ~10-50 ns per word call (native code)
 - **100-500x speedup** for compute-intensive code
 - ~1-5 ms compilation time per word
+- Runtime compilation and execution
+
+**AOT Mode:**
+- ~10-50 ns per word call (same as JIT, native code)
+- **100-500x speedup** for compute-intensive code
+- Standalone executables, no Quarter runtime needed
+- One-time compilation cost
+- LLVM optimizations applied
 
 **Example: Factorial Benchmark**
 
@@ -420,6 +505,12 @@ $ cargo run benchmarks/perf_factorial.fth
 $ cargo run benchmarks/perf_factorial.fth --jit
 479001600
 # ~50µs total execution (100x faster)
+
+# AOT compiled (12!)
+$ cargo run -- --compile benchmarks/perf_factorial.fth -o perf_factorial
+$ ./perf_factorial
+479001600
+# ~50µs total execution (100x faster, no interpreter overhead)
 ```
 
 ## Testing
@@ -458,10 +549,24 @@ cargo test test_tco           # Tail call optimization
 
 ## Dependencies
 
+### Rust Crates
+
 - **inkwell** (0.4) - Safe LLVM bindings for Rust
 - **rustyline** (14.0) - REPL with history and line editing
 
-Requires LLVM 18.x installed on your system.
+### System Requirements
+
+Quarter requires LLVM 18.x and supporting libraries for JIT and AOT compilation features:
+
+- **LLVM 18.x** - Core compiler infrastructure
+- **libzstd** - Compression library (used by LLVM)
+- **libffi** - Foreign Function Interface library
+- **libc++** (macOS) or **libstdc++** (Linux) - C++ standard library
+- **libz** - Compression library
+
+These dependencies are automatically detected and linked on macOS (via Homebrew) and Linux (via system package manager). See the [Installation](#installation) section for platform-specific setup instructions.
+
+**Note:** Interpreted mode works without LLVM, but JIT and AOT modes require these libraries.
 
 ## Project History
 
