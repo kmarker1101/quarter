@@ -102,6 +102,49 @@ fn try_forth_compile(
     false
 }
 
+/// Generate a main() wrapper C file that initializes runtime and calls Forth code
+fn generate_main_wrapper(main_word: &str, output_path: &str) -> Result<(), String> {
+    let main_c_content = format!(r#"/**
+ * Generated main() wrapper for Quarter Forth executable
+ * This file is auto-generated during compilation
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+
+// Runtime library functions
+extern void quarter_runtime_init(void);
+extern void quarter_runtime_cleanup(void);
+extern void quarter_runtime_get_state(uint8_t** memory, size_t** sp, size_t** rp);
+
+// Forward declaration of compiled Forth word
+extern void _fn_{}(uint8_t* memory, size_t* sp, size_t* rp);
+
+int main(void) {{
+    // Initialize runtime
+    quarter_runtime_init();
+
+    // Get runtime state
+    uint8_t* memory;
+    size_t* sp;
+    size_t* rp;
+    quarter_runtime_get_state(&memory, &sp, &rp);
+
+    // Call main Forth word
+    _fn_{}(memory, sp, rp);
+
+    // Cleanup
+    quarter_runtime_cleanup();
+
+    return 0;
+}}
+"#, main_word, main_word);
+
+    std::fs::write(output_path, main_c_content)
+        .map_err(|e| format!("Failed to write main wrapper: {}", e))
+}
+
 /// Compile a Forth source file to a standalone executable
 ///
 /// Implementation roadmap:
@@ -135,47 +178,122 @@ fn try_forth_compile(
 /// - System linker (cc/clang/gcc)
 /// - Runtime library implementation
 fn compile_to_executable(
-    _source_file: &str,
-    _output_file: &str,
-    _opt_level: u8,
-    _debug_symbols: bool,
+    source_file: &str,
+    output_file: &str,
+    opt_level: u8,
+    debug_symbols: bool,
     verbose: bool,
 ) {
     if verbose {
-        eprintln!("AOT compilation partially implemented.");
-        eprintln!();
-        eprintln!("Completed infrastructure:");
-        eprintln!("  ✓ Command-line argument parsing (--compile, -o, -O, etc.)");
-        eprintln!("  ✓ LLVM TargetMachine API integration");
-        eprintln!("  ✓ Object file generation (LLVM-WRITE-OBJECT-FILE)");
-        eprintln!("  ✓ Native target initialization (LLVM-INITIALIZE-NATIVE-TARGET)");
-        eprintln!();
-        eprintln!("Remaining work:");
-        eprintln!("  ✗ Runtime library (C) for standalone executables");
-        eprintln!("    - Stack management, I/O primitives, memory allocation");
-        eprintln!("  ✗ Main wrapper generation");
-        eprintln!("    - Initialize stacks/memory, call Forth words");
-        eprintln!("  ✗ Linking infrastructure");
-        eprintln!("    - Link Forth object + runtime + wrapper → executable");
-        eprintln!("  ✗ FINALIZE-AOT in stdlib/compiler.fth");
-        eprintln!("    - Alternative to FINALIZE-BATCH that writes object files");
-        eprintln!();
-        eprintln!("Current workaround: Use --jit flag for JIT compilation");
-        eprintln!();
-        eprintln!("The LLVM words are ready and can generate .o files:");
-        eprintln!("  LLVM-INITIALIZE-NATIVE-TARGET");
-        eprintln!("  LLVM-WRITE-OBJECT-FILE ( module path-addr path-len opt-level -- )");
-        eprintln!();
-        eprintln!("See issue #33 for full AOT compilation roadmap.");
-    } else {
-        eprintln!("Error: AOT compilation infrastructure incomplete");
-        eprintln!();
-        eprintln!("Command-line parsing and LLVM object generation are ready,");
-        eprintln!("but runtime library and linking are not yet implemented.");
-        eprintln!();
-        eprintln!("Use --verbose flag for detailed status.");
-        eprintln!("Use --jit flag for JIT compilation (fully functional).");
+        println!("Compiling {} to {}...", source_file, output_file);
+        println!("  Optimization level: {}", opt_level);
+        println!("  Debug symbols: {}", if debug_symbols { "yes" } else { "no" });
     }
+
+    // Step 1: Ensure runtime library is built
+    if verbose {
+        println!("Step 1: Building runtime library...");
+    }
+    let runtime_result = std::process::Command::new("make")
+        .current_dir("runtime")
+        .output()
+        .map_err(|e| format!("Failed to run make: {}", e));
+
+    match runtime_result {
+        Ok(output) => {
+            if !output.status.success() {
+                eprintln!("Failed to build runtime library:");
+                eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+                std::process::exit(1);
+            }
+        }
+        Err(e) => {
+            eprintln!("Error building runtime: {}", e);
+            std::process::exit(1);
+        }
+    }
+
+    // Step 2: TODO - Compile Forth source to object file
+    // This requires:
+    // - Loading source file and stdlib
+    // - Compiling to LLVM IR using batch_compile_all_words()
+    // - Writing object file with LLVM-WRITE-OBJECT-FILE
+    // For now, we'll show what's needed
+
+    if verbose {
+        eprintln!();
+        eprintln!("Step 2: NOT YET IMPLEMENTED - Compile Forth to object file");
+        eprintln!("  This requires creating a Forth word that:");
+        eprintln!("  1. Loads source file");
+        eprintln!("  2. Runs INIT-BATCH-COMPILER");
+        eprintln!("  3. Declares all functions");
+        eprintln!("  4. Compiles all function bodies");
+        eprintln!("  5. Calls LLVM-INITIALIZE-NATIVE-TARGET");
+        eprintln!("  6. Calls LLVM-WRITE-OBJECT-FILE instead of FINALIZE-BATCH");
+        eprintln!();
+    }
+
+    // Step 3: Generate main wrapper
+    if verbose {
+        println!("Step 3: Generating main() wrapper...");
+    }
+
+    // TODO: Determine main word (could be "MAIN" or first defined word)
+    let main_word = "MAIN";
+    let main_c_path = format!("{}_main.c", output_file);
+
+    if let Err(e) = generate_main_wrapper(main_word, &main_c_path) {
+        eprintln!("Failed to generate main wrapper: {}", e);
+        std::process::exit(1);
+    }
+
+    // Step 4: Compile main wrapper
+    if verbose {
+        println!("Step 4: Compiling main wrapper...");
+    }
+
+    let main_o_path = format!("{}_main.o", output_file);
+    let cc_result = std::process::Command::new("cc")
+        .args(&["-c", "-O2", &main_c_path, "-o", &main_o_path])
+        .output();
+
+    match cc_result {
+        Ok(output) => {
+            if !output.status.success() {
+                eprintln!("Failed to compile main wrapper:");
+                eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+                std::process::exit(1);
+            }
+        }
+        Err(e) => {
+            eprintln!("Error compiling main wrapper: {}", e);
+            std::process::exit(1);
+        }
+    }
+
+    // Step 5: Link everything together
+    if verbose {
+        println!("Step 5: Linking...");
+    }
+
+    // TODO: Link forth_code.o + main.o + runtime.o → executable
+    // For now, just show what's needed
+
+    eprintln!();
+    eprintln!("Partial success:");
+    eprintln!("  ✓ Runtime library built (runtime/runtime.o)");
+    eprintln!("  ✓ Main wrapper generated ({})", main_c_path);
+    eprintln!("  ✓ Main wrapper compiled ({})", main_o_path);
+    eprintln!();
+    eprintln!("Still needed:");
+    eprintln!("  ✗ Compile Forth source to forth_code.o");
+    eprintln!("  ✗ Link: cc {} forth_code.o runtime/runtime.o -o {}", main_o_path, output_file);
+    eprintln!();
+    eprintln!("Next steps:");
+    eprintln!("  1. Create FINALIZE-AOT word in stdlib/compiler.fth");
+    eprintln!("  2. Create compile_forth_to_object() function in src/lib.rs");
+    eprintln!("  3. Wire up linking in this function");
+
     std::process::exit(1);
 }
 
