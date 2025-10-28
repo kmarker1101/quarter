@@ -1691,6 +1691,10 @@ pub fn compile_to_object_file(
 
     // Step 4: Compile each word body (pass 2)
     for (name, ast) in &words_to_compile {
+        if std::env::var("QUARTER_DEBUG").is_ok() {
+            eprintln!("DEBUG: Compiling word: {}", name);
+        }
+
         let ast_handle = crate::ast_forth::ast_register_node(ast.clone());
 
         let here = ctx.memory.here() as usize;

@@ -1046,6 +1046,22 @@ pub fn base(
     stack.push(memory.base(), memory);
 }
 
+/// BASE primitive for compiled code
+/// Stack: ( -- addr )
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn quarter_base(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        // Get base address (0x01FFF0)
+        const BASE_ADDR: i64 = 0x01FFF0;
+
+        // Push base address onto stack
+        let sp_val = *sp;
+        let dest = memory.add(sp_val) as *mut i64;
+        dest.write_unaligned(BASE_ADDR);
+        *sp = sp_val + 8;
+    }
+}
+
 /// >NUMBER: ( ud1-lo ud1-hi c-addr u -- ud2-lo ud2-hi c-addr u )
 ///
 /// Convert string to number with accumulation using double-cell unsigned arithmetic.
@@ -3042,7 +3058,14 @@ pub fn llvm_build_call_word(
         stack.pop(memory),
     ) {
         if let Err(e) = crate::llvm_forth::llvm_build_call(builder_handle, fn_handle, arg1, arg2, arg3, nargs, is_tail_call) {
-            eprintln!("LLVM-BUILD-CALL error: {}", e);
+            // Debug: Show more details when QUARTER_DEBUG is set
+            if std::env::var("QUARTER_DEBUG").is_ok() {
+                eprintln!("LLVM-BUILD-CALL error: {}", e);
+                eprintln!("  builder={}, fn={}, args=[{}, {}, {}], nargs={}, tail={}",
+                    builder_handle, fn_handle, arg1, arg2, arg3, nargs, is_tail_call);
+            } else {
+                eprintln!("LLVM-BUILD-CALL error: {}", e);
+            }
         }
     } else {
         eprintln!("LLVM-BUILD-CALL: Stack underflow");
