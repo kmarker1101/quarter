@@ -103,29 +103,67 @@ fn try_forth_compile(
 }
 
 /// Compile a Forth source file to a standalone executable
+///
+/// Implementation roadmap:
+/// 1. Load standard library and source file (parse to AST)
+/// 2. Use batch_compile_all_words() to compile to LLVM IR
+/// 3. Instead of FINALIZE-BATCH (creates JIT), create FINALIZE-AOT that:
+///    - Initializes LLVM target (InitializeAllTargets, InitializeAllTargetMCs, etc.)
+///    - Creates TargetMachine for native target
+///    - Runs optimization passes (based on opt_level)
+///    - Generates object file using write_to_file()
+/// 4. Create a minimal runtime library (runtime.c):
+///    - Stack management functions
+///    - I/O primitives (., EMIT, KEY, etc.)
+///    - Memory allocation
+///    - Error handling
+/// 5. Compile runtime.c to runtime.o
+/// 6. Create a main() wrapper that:
+///    - Initializes stacks and memory
+///    - Calls the top-level Forth words
+///    - Handles exit codes
+/// 7. Link object files:
+///    - main.o (generated wrapper)
+///    - forth_code.o (compiled Forth words)
+///    - runtime.o (runtime library)
+///    - Using system linker (cc or ld)
+/// 8. Set executable permissions
+///
+/// Dependencies:
+/// - inkwell TargetMachine API
+/// - LLVM target initialization
+/// - System linker (cc/clang/gcc)
+/// - Runtime library implementation
 fn compile_to_executable(
-    source_file: &str,
-    output_file: &str,
-    opt_level: u8,
-    debug_symbols: bool,
+    _source_file: &str,
+    _output_file: &str,
+    _opt_level: u8,
+    _debug_symbols: bool,
     verbose: bool,
 ) {
     if verbose {
-        println!("  Parsing {}...", source_file);
+        eprintln!("AOT compilation not yet implemented.");
+        eprintln!();
+        eprintln!("This feature requires substantial infrastructure:");
+        eprintln!("  1. LLVM TargetMachine API integration (inkwell)");
+        eprintln!("  2. Object file generation from LLVM IR");
+        eprintln!("  3. Runtime library (C) for stack/memory/IO");
+        eprintln!("  4. Main wrapper generation");
+        eprintln!("  5. System linker integration");
+        eprintln!();
+        eprintln!("Current status: JIT compilation works (--jit flag)");
+        eprintln!("The batch compilation infrastructure exists but only");
+        eprintln!("generates in-memory code via ExecutionEngine.");
+        eprintln!();
+        eprintln!("To implement AOT:");
+        eprintln!("  - Modify FINALIZE-BATCH in stdlib/compiler.fth");
+        eprintln!("  - Add TargetMachine support in src/llvm_forth.rs");
+        eprintln!("  - Create runtime library (runtime/runtime.c)");
+        eprintln!("  - Add linking logic in this function");
+    } else {
+        eprintln!("Error: AOT compilation not yet implemented");
+        eprintln!("Use --verbose flag for implementation details");
     }
-
-    // TODO: Implement AOT compilation
-    // 1. Load and parse source file
-    // 2. Compile all words to LLVM IR
-    // 3. Generate object file
-    // 4. Link to executable
-
-    eprintln!("Error: AOT compilation not yet implemented");
-    eprintln!("This feature requires:");
-    eprintln!("  - TargetMachine infrastructure");
-    eprintln!("  - Object file generation");
-    eprintln!("  - Runtime library");
-    eprintln!("  - Linking infrastructure");
     std::process::exit(1);
 }
 
