@@ -172,6 +172,10 @@ See `docs/` for comprehensive guides:
 - **[Control Flow](docs/control-flow.md)**, **[Memory](docs/memory.md)**, **[Metaprogramming](docs/metaprogramming.md)**
 - **[I/O](docs/io.md)**, **[Strings](docs/strings.md)**, **[Stacks](docs/stacks.md)**, **[Error Handling](docs/error-handling.md)**, **[Arithmetic](docs/arithmetic.md)**
 
+**Developer Documentation:**
+- **[Adding LLVM Primitives](docs/adding-llvm-primitives.md)** - Step-by-step implementation guide
+- **[LLVM Global Strings](docs/llvm-global-strings-notes.md)** - Dual-strategy string implementation
+
 See **[README.md](README.md)** for installation, examples, and feature overview.
 
 ## Dependencies
@@ -193,3 +197,4 @@ See **[README.md](README.md)** for installation, examples, and feature overview.
 - **Dual primitives**: `runtime.rs` = single source, `words.rs` = wrappers, `build.rs` = separate compilation
 - **Clean builds**: Auto-cleanup of temp files after AOT compilation
 - **Self-hosting**: Forth compiler written in Forth (stdlib/compiler.fth)
+- **Dual-strategy strings**: JIT mode uses HERE-based allocation, AOT mode uses LLVM global constants (see [docs/llvm-global-strings-notes.md](docs/llvm-global-strings-notes.md))

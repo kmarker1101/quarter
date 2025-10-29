@@ -48,6 +48,12 @@ VARIABLE BATCH-MODE                \ Flag: 0 = single word, -1 = batch mode
 VARIABLE BATCH-JIT                 \ JIT engine handle for batch mode
 VARIABLE CURRENT-AST-HANDLE        \ Temporary storage for AST handle during compilation
 
+\ Compilation mode: 0 = JIT mode, -1 = AOT mode
+VARIABLE COMPILING-AOT?
+
+\ String name generation for global strings
+VARIABLE STRING-COUNTER
+
 \ DO/LOOP compilation temporaries
 VARIABLE LOOP-BODY-HANDLE          \ AST handle for loop body
 VARIABLE LOOP-INCREMENT            \ Loop increment value
@@ -91,6 +97,33 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
         THEN
     LOOP
     DROP DROP TRUE ;
+
+\ Generate unique string name for global strings
+\ Stores result at WORD-NAME-BUFFER, returns addr and len
+\ Format: ".str.N" where N is incrementing counter
+\ ( -- name-addr name-len )
+: NEXT-STRING-NAME
+    \ Write ".str." prefix (5 chars)
+    46 WORD-NAME-BUFFER C!      \ '.'
+    115 WORD-NAME-BUFFER 1 + C! \ 's'
+    116 WORD-NAME-BUFFER 2 + C! \ 't'
+    114 WORD-NAME-BUFFER 3 + C! \ 'r'
+    46 WORD-NAME-BUFFER 4 + C!  \ '.'
+
+    \ Get and increment counter
+    STRING-COUNTER @ DUP 1 + STRING-COUNTER !
+
+    \ Convert number to ASCII digits at offset 5
+    \ Simple approach: support 0-99
+    DUP 10 / DUP 0> IF
+        48 + WORD-NAME-BUFFER 5 + C!  \ tens digit
+        SWAP 10 MOD 48 + WORD-NAME-BUFFER 6 + C!  \ ones digit
+        WORD-NAME-BUFFER 7 EXIT
+    ELSE
+        DROP 48 + WORD-NAME-BUFFER 5 + C!  \ single digit
+        WORD-NAME-BUFFER 6 EXIT
+    THEN
+;
 
 \ =============================================================================
 \ WORD NAME MAPPING
@@ -2622,34 +2655,73 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
         COMPILER-SCRATCH AST-GET-STRING
         \ Stack: ( string-len )
 
-        \ Save current HERE - this will be the string address
-        HERE
-        \ Stack: ( string-len here-addr )
+        \ Check compilation mode
+        COMPILING-AOT? @ IF
+            \ AOT mode: Use LLVM global strings
+            \ Stack: ( string-len )
 
-        \ Copy string bytes from COMPILER-SCRATCH to saved address
-        OVER 0 DO
-            COMPILER-SCRATCH I + C@
-            OVER I + C!
-        LOOP
+            \ Generate unique string name
+            NEXT-STRING-NAME
+            \ Stack: ( string-len name-addr name-len )
 
-        \ Advance HERE by string length
-        OVER ALLOT
+            \ Create global string constant
+            CURRENT-MODULE @ CURRENT-CTX @ COMPILER-SCRATCH 4 PICK 2OVER
+            \ Stack: ( string-len name-addr name-len module ctx string-addr string-len name-addr name-len )
+            LLVM-CREATE-GLOBAL-STRING
+            \ Stack: ( string-len name-addr name-len ptr-handle )
 
-        \ Stack: ( string-len here-addr )
-        \ Generate IR to push address constant
-        SWAP
-        \ Stack: ( here-addr string-len )
-        OVER
-        \ Stack: ( here-addr string-len here-addr )
-        CURRENT-CTX @ SWAP 64 LLVM-BUILD-CONST-INT
-        COMPILE-PUSH
+            \ Convert pointer to integer
+            CURRENT-BUILDER @ CURRENT-CTX @ 2 PICK
+            \ Stack: ( string-len name-addr name-len ptr-handle builder ctx ptr-handle )
+            LLVM-BUILD-PTRTOINT
+            \ Stack: ( string-len name-addr name-len ptr-handle int-handle )
 
-        \ Generate IR to push length constant
-        \ Stack: ( here-addr string-len )
-        CURRENT-CTX @ SWAP 64 LLVM-BUILD-CONST-INT
-        COMPILE-PUSH
+            \ Clean up stack, keeping string-len and int-handle
+            NIP NIP NIP
+            \ Stack: ( string-len int-handle )
 
-        \ Now call TYPE primitive to print the string
+            \ Push address to stack
+            COMPILE-PUSH
+
+            \ Push length to stack
+            CURRENT-CTX @ SWAP 64 LLVM-BUILD-CONST-INT
+            COMPILE-PUSH
+        ELSE
+            \ JIT mode: Use HERE-based allocation
+            \ Stack: ( string-len )
+
+            \ Save current HERE - this will be the string address
+            HERE
+            \ Stack: ( string-len here-addr )
+
+            \ Copy string bytes from COMPILER-SCRATCH to saved address
+            OVER 0 DO
+                COMPILER-SCRATCH I + C@
+                OVER I + C!
+            LOOP
+
+            \ Advance HERE by string length
+            OVER ALLOT
+
+            \ Stack: ( string-len here-addr )
+            \ Generate IR to push address constant
+            SWAP
+            \ Stack: ( here-addr string-len )
+            OVER
+            \ Stack: ( here-addr string-len here-addr )
+            CURRENT-CTX @ SWAP 64 LLVM-BUILD-CONST-INT
+            COMPILE-PUSH
+
+            \ Generate IR to push length constant
+            \ Stack: ( here-addr string-len )
+            CURRENT-CTX @ SWAP 64 LLVM-BUILD-CONST-INT
+            COMPILE-PUSH
+
+            \ Clean up here-addr
+            DROP
+        THEN
+
+        \ Now call TYPE primitive to print the string (both modes)
         \ Look up quarter_type function
         \ Build "TYPE" in WORD-NAME-BUFFER
         84 WORD-NAME-BUFFER C!     \ T
@@ -2657,8 +2729,6 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
         80 WORD-NAME-BUFFER 2 + C! \ P
         69 WORD-NAME-BUFFER 3 + C! \ E
         WORD-NAME-BUFFER 4 MAP-WORD-NAME
-        \ Stack: ( mapped-name-addr mapped-name-len here-addr )
-        ROT DROP \ Drop here-addr, we don't need it anymore
         \ Stack: ( mapped-name-addr mapped-name-len )
 
         \ Look up the function
@@ -2683,37 +2753,74 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
         COMPILER-SCRATCH AST-GET-STRING
         \ Stack: ( string-len )
 
-        \ Save current HERE - this will be the string address
-        HERE
-        \ Stack: ( string-len here-addr )
+        \ Check compilation mode
+        COMPILING-AOT? @ IF
+            \ AOT mode: Use LLVM global strings
+            \ Stack: ( string-len )
 
-        \ Copy string bytes from COMPILER-SCRATCH to saved address
-        \ Stack: ( string-len here-addr )
-        OVER 0 DO
-            COMPILER-SCRATCH I + C@
-            OVER I + C!
-        LOOP
+            \ Generate unique string name
+            NEXT-STRING-NAME
+            \ Stack: ( string-len name-addr name-len )
 
-        \ Advance HERE by string length
-        OVER ALLOT
+            \ Create global string constant
+            CURRENT-MODULE @ CURRENT-CTX @ COMPILER-SCRATCH 4 PICK 2OVER
+            \ Stack: ( string-len name-addr name-len module ctx string-addr string-len name-addr name-len )
+            LLVM-CREATE-GLOBAL-STRING
+            \ Stack: ( string-len name-addr name-len ptr-handle )
 
-        \ Stack: ( string-len here-addr )
-        \ Generate IR to push address constant
-        SWAP
-        \ Stack: ( here-addr string-len )
-        OVER
-        \ Stack: ( here-addr string-len here-addr )
-        CURRENT-CTX @ SWAP 64 LLVM-BUILD-CONST-INT
-        COMPILE-PUSH
+            \ Convert pointer to integer
+            CURRENT-BUILDER @ CURRENT-CTX @ 2 PICK
+            \ Stack: ( string-len name-addr name-len ptr-handle builder ctx ptr-handle )
+            LLVM-BUILD-PTRTOINT
+            \ Stack: ( string-len name-addr name-len ptr-handle int-handle )
 
-        \ Generate IR to push length constant
-        \ Stack: ( here-addr string-len )
-        CURRENT-CTX @ SWAP 64 LLVM-BUILD-CONST-INT
-        COMPILE-PUSH
+            \ Clean up stack, keeping string-len and int-handle
+            NIP NIP NIP
+            \ Stack: ( string-len int-handle )
 
-        \ Clean up
-        DROP
-        EXIT
+            \ Push address to stack
+            COMPILE-PUSH
+
+            \ Push length to stack
+            CURRENT-CTX @ SWAP 64 LLVM-BUILD-CONST-INT
+            COMPILE-PUSH
+
+            EXIT
+        ELSE
+            \ JIT mode: Use HERE-based allocation
+            \ Stack: ( string-len )
+
+            \ Save current HERE - this will be the string address
+            HERE
+            \ Stack: ( string-len here-addr )
+
+            \ Copy string bytes from COMPILER-SCRATCH to saved address
+            OVER 0 DO
+                COMPILER-SCRATCH I + C@
+                OVER I + C!
+            LOOP
+
+            \ Advance HERE by string length
+            OVER ALLOT
+
+            \ Stack: ( string-len here-addr )
+            \ Generate IR to push address constant
+            SWAP
+            \ Stack: ( here-addr string-len )
+            OVER
+            \ Stack: ( here-addr string-len here-addr )
+            CURRENT-CTX @ SWAP 64 LLVM-BUILD-CONST-INT
+            COMPILE-PUSH
+
+            \ Generate IR to push length constant
+            \ Stack: ( here-addr string-len )
+            CURRENT-CTX @ SWAP 64 LLVM-BUILD-CONST-INT
+            COMPILE-PUSH
+
+            \ Clean up
+            DROP
+            EXIT
+        THEN
     THEN
 
     \ AST-EXIT (type 11) - early return

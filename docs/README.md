@@ -19,6 +19,7 @@ Detailed documentation for Quarter Forth features and implementation.
 ### Developer Documentation
 
 - **[Adding LLVM Primitives](adding-llvm-primitives.md)** - Step-by-step guide for implementing new primitives
+- **[LLVM Global String Implementation](llvm-global-strings-notes.md)** - Dual-strategy string handling for JIT and AOT modes
 
 ## Quick Start
 

@@ -1581,6 +1581,12 @@ pub fn batch_compile_all_words(
 
     // Step 1: Initialize batch compiler
     ctx.dict.execute_word("INIT-BATCH-COMPILER", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
+
+    // Set COMPILING-AOT? to 0 (false) for JIT mode
+    ctx.stack.push(0, ctx.memory); // false
+    ctx.dict.execute_word("COMPILING-AOT?", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
+    ctx.dict.execute_word("!", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
+
     if std::env::var("QUARTER_DEBUG").is_ok() {
         eprintln!("DEBUG (lib.rs): INIT-BATCH-COMPILER completed, starting declarations");
     }
@@ -1740,6 +1746,11 @@ pub fn compile_to_object_file(
 
     // Step 1: Initialize batch compiler (sets up CURRENT-MODULE variable)
     ctx.dict.execute_word("INIT-BATCH-COMPILER", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
+
+    // Set COMPILING-AOT? to -1 (true) for AOT mode
+    ctx.stack.push(-1, ctx.memory); // true
+    ctx.dict.execute_word("COMPILING-AOT?", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
+    ctx.dict.execute_word("!", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
 
     // Step 2: Get module handle from CURRENT-MODULE variable
     ctx.dict.execute_word("CURRENT-MODULE", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;

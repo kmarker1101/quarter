@@ -450,10 +450,23 @@ pub unsafe extern "C" fn quarter_type(memory: *mut u8, sp: *mut usize, _rp: *mut
 
         let len = len as usize;
         // Print each character from memory
-        for i in 0..len {
-            if addr + i < 8 * 1024 * 1024 {
-                let byte_ptr = memory.add(addr + i);
-                let byte = *byte_ptr;
+        // Handle both memory offsets (<8MB) and absolute pointers (>=8MB for global strings)
+        if addr < 8 * 1024 * 1024 {
+            // Memory offset: read from memory buffer (JIT mode)
+            for i in 0..len {
+                if addr + i < 8 * 1024 * 1024 {
+                    let byte_ptr = memory.add(addr + i);
+                    let byte = *byte_ptr;
+                    if let Some(ch) = char::from_u32(byte as u32) {
+                        putchar(ch as i32);
+                    }
+                }
+            }
+        } else {
+            // Absolute pointer: direct access (AOT mode with global strings)
+            let string_ptr = addr as *const u8;
+            for i in 0..len {
+                let byte = *string_ptr.add(i);
                 if let Some(ch) = char::from_u32(byte as u32) {
                     putchar(ch as i32);
                 }

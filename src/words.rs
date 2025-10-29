@@ -2731,6 +2731,113 @@ pub fn llvm_build_trunc_word(
     }
 }
 
+/// LLVM-BUILD-PTRTOINT: Convert pointer to integer
+/// Stack: ( builder-handle ctx-handle ptr-handle -- value-handle )
+pub fn llvm_build_ptrtoint_word(
+    stack: &mut crate::Stack,
+    _loop_stack: &crate::LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(ptr_handle), Some(ctx_handle), Some(builder_handle)) = (
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+    ) {
+        match crate::llvm_forth::llvm_build_ptrtoint(builder_handle, ctx_handle, ptr_handle) {
+            Ok(handle) => stack.push(handle, memory),
+            Err(e) => eprintln!("LLVM-BUILD-PTRTOINT error: {}", e),
+        }
+    } else {
+        eprintln!("LLVM-BUILD-PTRTOINT: Stack underflow");
+    }
+}
+
+/// LLVM-CREATE-GLOBAL-STRING: Create a global string constant in the module
+/// Stack: ( module-handle ctx-handle string-addr string-len name-addr name-len -- value-handle )
+/// Returns a pointer to the string data (i8*) that can be used in IR
+pub fn llvm_create_global_string_word(
+    stack: &mut crate::Stack,
+    _loop_stack: &crate::LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    let name_len = match stack.pop(memory) {
+        Some(n) => n as usize,
+        None => {
+            eprintln!("LLVM-CREATE-GLOBAL-STRING: Stack underflow (name_len)");
+            return;
+        }
+    };
+
+    let name_addr = match stack.pop(memory) {
+        Some(n) => n as usize,
+        None => {
+            eprintln!("LLVM-CREATE-GLOBAL-STRING: Stack underflow (name_addr)");
+            return;
+        }
+    };
+
+    let string_len = match stack.pop(memory) {
+        Some(n) => n as usize,
+        None => {
+            eprintln!("LLVM-CREATE-GLOBAL-STRING: Stack underflow (string_len)");
+            return;
+        }
+    };
+
+    let string_addr = match stack.pop(memory) {
+        Some(n) => n as usize,
+        None => {
+            eprintln!("LLVM-CREATE-GLOBAL-STRING: Stack underflow (string_addr)");
+            return;
+        }
+    };
+
+    let ctx_handle = match stack.pop(memory) {
+        Some(n) => n,
+        None => {
+            eprintln!("LLVM-CREATE-GLOBAL-STRING: Stack underflow (ctx_handle)");
+            return;
+        }
+    };
+
+    let module_handle = match stack.pop(memory) {
+        Some(n) => n,
+        None => {
+            eprintln!("LLVM-CREATE-GLOBAL-STRING: Stack underflow (module_handle)");
+            return;
+        }
+    };
+
+    // Read string bytes from memory
+    let string_bytes = (0..string_len)
+        .map(|i| {
+            memory.fetch_byte(string_addr + i).unwrap_or(0) as u8
+        })
+        .collect::<Vec<u8>>();
+
+    // Read name bytes from memory
+    let name_bytes = (0..name_len)
+        .map(|i| {
+            memory.fetch_byte(name_addr + i).unwrap_or(0) as u8
+        })
+        .collect::<Vec<u8>>();
+
+    let name = match std::str::from_utf8(&name_bytes) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("LLVM-CREATE-GLOBAL-STRING: Invalid UTF-8 in name: {}", e);
+            return;
+        }
+    };
+
+    match crate::llvm_forth::llvm_create_global_string(module_handle, ctx_handle, &string_bytes, name) {
+        Ok(handle) => stack.push(handle, memory),
+        Err(e) => eprintln!("LLVM-CREATE-GLOBAL-STRING error: {}", e),
+    }
+}
+
 /// LLVM-BUILD-CALL: Call function
 /// Stack: ( builder-handle fn-handle arg1 arg2 arg3 nargs is-tail-call -- )
 pub fn llvm_build_call_word(

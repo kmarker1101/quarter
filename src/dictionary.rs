@@ -182,6 +182,8 @@ impl Dictionary {
             "LLVM-GET-INSERT-BLOCK" => words::llvm_get_insert_block_word,
             "LLVM-INITIALIZE-NATIVE-TARGET" => words::llvm_initialize_native_target_word,
             "LLVM-WRITE-OBJECT-FILE" => words::llvm_write_object_file_word,
+            "LLVM-BUILD-PTRTOINT" => words::llvm_build_ptrtoint_word,
+            "LLVM-CREATE-GLOBAL-STRING" => words::llvm_create_global_string_word,
 
             // AST inspection operations
             "AST-TYPE" => words::ast_get_type_word,
