@@ -426,6 +426,43 @@ pub unsafe extern "C" fn quarter_cr(_memory: *mut u8, _sp: *mut usize, _rp: *mut
     }
 }
 
+/// TYPE ( c-addr u -- )
+/// Print u characters from address c-addr
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn quarter_type(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe extern "C" {
+        fn putchar(c: i32) -> i32;
+    }
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 16) {
+            return;
+        }
+        let addr_ptr = memory.add(sp_val - 16) as *const i64;
+        let len_ptr = memory.add(sp_val - 8) as *const i64;
+        let addr = addr_ptr.read_unaligned() as usize;
+        let len = len_ptr.read_unaligned();
+
+        if len < 0 {
+            *sp = sp_val - 16;
+            return;
+        }
+
+        let len = len as usize;
+        // Print each character from memory
+        for i in 0..len {
+            if addr + i < 8 * 1024 * 1024 {
+                let byte_ptr = memory.add(addr + i);
+                let byte = *byte_ptr;
+                if let Some(ch) = char::from_u32(byte as u32) {
+                    putchar(ch as i32);
+                }
+            }
+        }
+        *sp = sp_val - 16;
+    }
+}
+
 // ============================================================================
 // STRING OPERATIONS
 // ============================================================================

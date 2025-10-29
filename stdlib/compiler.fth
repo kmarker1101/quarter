@@ -2615,6 +2615,66 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
         EXIT
     THEN
 
+    \ AST-PRINT-STRING (type 8) - ." string literal
+    DUP 8 = IF
+        DROP
+        \ Get the string from AST into COMPILER-SCRATCH
+        COMPILER-SCRATCH AST-GET-STRING
+        \ Stack: ( string-len )
+
+        \ Save current HERE - this will be the string address
+        HERE
+        \ Stack: ( string-len here-addr )
+
+        \ Copy string bytes from COMPILER-SCRATCH to saved address
+        OVER 0 DO
+            COMPILER-SCRATCH I + C@
+            OVER I + C!
+        LOOP
+
+        \ Advance HERE by string length
+        OVER ALLOT
+
+        \ Stack: ( string-len here-addr )
+        \ Generate IR to push address constant
+        SWAP
+        \ Stack: ( here-addr string-len )
+        OVER
+        \ Stack: ( here-addr string-len here-addr )
+        CURRENT-CTX @ SWAP 64 LLVM-BUILD-CONST-INT
+        COMPILE-PUSH
+
+        \ Generate IR to push length constant
+        \ Stack: ( here-addr string-len )
+        CURRENT-CTX @ SWAP 64 LLVM-BUILD-CONST-INT
+        COMPILE-PUSH
+
+        \ Now call TYPE primitive to print the string
+        \ Look up quarter_type function
+        \ Build "TYPE" in WORD-NAME-BUFFER
+        84 WORD-NAME-BUFFER C!     \ T
+        89 WORD-NAME-BUFFER 1 + C! \ Y
+        80 WORD-NAME-BUFFER 2 + C! \ P
+        69 WORD-NAME-BUFFER 3 + C! \ E
+        WORD-NAME-BUFFER 4 MAP-WORD-NAME
+        \ Stack: ( mapped-name-addr mapped-name-len here-addr )
+        ROT DROP \ Drop here-addr, we don't need it anymore
+        \ Stack: ( mapped-name-addr mapped-name-len )
+
+        \ Look up the function
+        CURRENT-MODULE @ -ROT
+        LLVM-MODULE-GET-FUNCTION
+        \ Stack: ( fn-handle )
+
+        \ Call TYPE with (memory, sp, rp) parameters
+        CURRENT-BUILDER @ SWAP
+        PARAM-MEMORY @ PARAM-SP @ PARAM-RP @ 3
+        0  \ Not a tail call
+        LLVM-BUILD-CALL
+
+        EXIT
+    THEN
+
     \ AST-STACK-STRING (type 9) - S" string literal
     DUP 9 = IF
         DROP

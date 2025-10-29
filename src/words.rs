@@ -67,7 +67,8 @@ unsafe extern "C" {
     pub fn quarter_from_r(memory: *mut u8, sp: *mut usize, rp: *mut usize);
     pub fn quarter_r_fetch(memory: *mut u8, sp: *mut usize, rp: *mut usize);
 
-    // I/O (emit, cr, dot, space are defined in this module)
+    // I/O operations
+    pub fn quarter_type(memory: *mut u8, sp: *mut usize, rp: *mut usize);
 
     // String operations
     pub fn quarter_compare(memory: *mut u8, sp: *mut usize, rp: *mut usize);
@@ -1838,48 +1839,6 @@ pub unsafe extern "C" fn quarter_u_dot_r(memory: *mut u8, sp: *mut usize, _rp: *
         }
         let new_sp = sp_val - 16;
         debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after U.R");
-        *sp = new_sp;
-    }
-}
-
-/// JIT-callable type: ( addr len -- )
-/// Prints string from memory
-/// # Safety
-/// The caller must ensure:
-/// - `memory` points to a valid memory buffer of at least 8MB
-/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
-/// - The data stack contains at least 2 values (16 bytes)
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_type(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 16) {
-            return;
-        }
-        let addr_ptr = memory.add(sp_val - 16) as *const i64;
-        let len_ptr = memory.add(sp_val - 8) as *const i64;
-        let addr = addr_ptr.read_unaligned() as usize;
-        let len = len_ptr.read_unaligned();
-
-        if len < 0 {
-            eprintln!("TYPE: negative length");
-            *sp = sp_val - 16;
-            return;
-        }
-
-        let len = len as usize;
-        // Print each character from memory
-        for i in 0..len {
-            if addr + i < 8 * 1024 * 1024 {
-                let byte_ptr = memory.add(addr + i);
-                let byte = *byte_ptr;
-                if let Some(ch) = char::from_u32(byte as u32) {
-                    print!("{}", ch);
-                }
-            }
-        }
-        let new_sp = sp_val - 16;
-        debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after TYPE");
         *sp = new_sp;
     }
 }
