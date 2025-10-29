@@ -30,6 +30,8 @@ pub struct Dictionary {
     frozen_words: HashSet<String>,
     immediate_words: HashSet<String>,
     last_defined_word: Option<String>,
+    has_redefinitions: bool,
+    current_file_words: HashSet<String>,  // Words defined in current file
 }
 
 impl Default for Dictionary {
@@ -45,6 +47,8 @@ impl Dictionary {
             frozen_words: HashSet::new(),
             immediate_words: HashSet::new(),
             last_defined_word: None,
+            has_redefinitions: false,
+            current_file_words: HashSet::new(),
         };
 
         // Register all built-in primitive words using macro
@@ -264,6 +268,37 @@ impl Dictionary {
     /// Check if a word is frozen (cannot be re-defined)
     pub fn is_frozen(&self, name: &str) -> bool {
         self.frozen_words.contains(&name.to_uppercase())
+    }
+
+    /// Start tracking words for a new file (call at start of file load in define_only mode)
+    pub fn start_file_tracking(&mut self) {
+        self.current_file_words.clear();
+        self.has_redefinitions = false;
+    }
+
+    /// Track that a word was defined in the current file
+    /// Returns true if this is a redefinition within the same file
+    pub fn track_word_definition(&mut self, name: &str) -> bool {
+        let word_name = name.to_uppercase();
+        let was_already_defined = self.current_file_words.contains(&word_name);
+
+        if was_already_defined {
+            self.has_redefinitions = true;
+        }
+
+        self.current_file_words.insert(word_name);
+        was_already_defined
+    }
+
+    /// Check if any redefinitions have occurred in current file
+    pub fn has_redefinitions(&self) -> bool {
+        self.has_redefinitions
+    }
+
+    /// Clear redefinition tracking (call between files)
+    pub fn clear_redefinition_flag(&mut self) {
+        self.has_redefinitions = false;
+        self.current_file_words.clear();
     }
 
     /// Mark the most recently defined word as immediate

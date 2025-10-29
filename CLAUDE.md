@@ -51,65 +51,21 @@ docs/                  # Detailed documentation (see below)
 
 ## Adding New Primitive Words
 
-**CRITICAL:** We use dual-implementation architecture for interpreter + JIT + AOT support.
+**CRITICAL:** Dual-implementation architecture - `runtime.rs` is single source of truth for all modes.
 
-**See [docs/adding-llvm-primitives.md](docs/adding-llvm-primitives.md) for complete step-by-step guide.**
+**See [docs/adding-llvm-primitives.md](docs/adding-llvm-primitives.md) for complete guide with examples.**
 
-### Quick Summary (6 steps required)
+**6 Steps Required:**
+1. `src/runtime.rs` - Implement `quarter_*` function
+2. `src/words.rs` - Add extern declaration + wrapper
+3. `src/dictionary.rs` - Register in `register_primitives!` macro
+4. `src/llvm_forth.rs` - Add to `register_quarter_symbols()`
+5. `stdlib/compiler.fth` - Add to `DECLARE-ALL-PRIMITIVES`
+6. `stdlib/compiler.fth` - (Optional) Add name mapping in `MAP-WORD-NAME`
 
-1. **`src/runtime.rs`** - Implement `quarter_*` function (single source of truth)
-2. **`src/words.rs`** - Add extern declaration + wrapper for interpreted mode
-3. **`src/dictionary.rs`** - Register in `register_primitives!` macro
-4. **`src/llvm_forth.rs`** - Add to `register_quarter_symbols()` for AOT linking
-5. **`stdlib/compiler.fth`** - Add to `DECLARE-ALL-PRIMITIVES` (byte-by-byte ASCII)
-6. **`stdlib/compiler.fth`** - (Optional) Add name mapping in `MAP-WORD-NAME` for special characters
+**Test in all 3 modes** (interpreted, `--jit`, `--compile`) before committing.
 
-### Example: Simple primitive
-
-```rust
-// Step 1: src/runtime.rs
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_word_name(
-    memory: *mut u8, sp: *mut usize, rp: *mut usize
-) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 8) { return; }
-        let val = (memory.add(sp_val - 8) as *const i64).read_unaligned();
-        // ... implement logic ...
-        let result_addr = memory.add(sp_val - 8) as *mut i64;
-        *result_addr = result;
-    }
-}
-
-// Step 2: src/words.rs - extern + wrapper
-unsafe extern "C" {
-    pub fn quarter_word_name(memory: *mut u8, sp: *mut usize, rp: *mut usize);
-}
-pub fn word_name(stack: &mut Stack, ...) { /* wrapper impl */ }
-
-// Step 3: src/dictionary.rs
-"WORD-NAME" => words::word_name,
-
-// Step 4: src/llvm_forth.rs
-crate::words::quarter_word_name,
-
-// Step 5: stdlib/compiler.fth (DECLARE-ALL-PRIMITIVES)
-\ ASCII bytes for "quarter_word_name" then DECLARE-PRIMITIVE
-
-// Step 6: stdlib/compiler.fth (MAP-WORD-NAME) - only if needed
-\ Custom mapping for special characters like "-TRAILING"
-```
-
-**Why?** This architecture eliminates duplication - same code works for interpreter, JIT, and AOT modes.
-
-**Testing:** Test in all three modes (interpreted, `--jit`, `--compile`) before committing.
-
-## Adding Other Word Types
-
-**Compile-Only Words** (IF/THEN/ELSE, LEAVE, etc.): Add to `src/ast.rs` as `AstNode` variants
-
-**Forth Words**: Add to `stdlib/core.fth` using existing primitives
+**Other word types:** Compile-only words → `src/ast.rs`, Forth words → `stdlib/core.fth`
 
 ## Testing
 
@@ -134,43 +90,24 @@ crate::words::quarter_word_name,
 
 ## Architecture
 
-### Execution Modes
+**Execution Modes:**
 - **Interpreted**: AST evaluation (baseline speed)
-- **JIT**: Runtime compilation to native code (100-500x faster)
-- **AOT**: Compile-time to standalone executable (100-500x faster, ~50KB binaries)
+- **JIT**: Runtime compilation via LLVM (100-500x faster). See [docs/jit-compilation.md](docs/jit-compilation.md)
+- **AOT**: Compile to standalone binary (100-500x faster, ~50KB). See [docs/aot-compilation.md](docs/aot-compilation.md)
 
-### AOT Compilation Pipeline
-```
-Forth Source → Parse → AST → LLVM IR → Object File
-                                          ↓
-                      runtime.a + main.o ← Link
-                                          ↓
-                                   Standalone Binary
-```
+**Version:** Centralized in `Cargo.toml`, accessed via `const VERSION: &str = env!("CARGO_PKG_VERSION");`
 
-**Build artifacts:** Temp files in `/tmp/quarter_build_<PID>/` (auto-cleaned unless `--keep-temps`)
+## Implemented Words
 
-### Version Management
-Centralized in `Cargo.toml`, accessed via `const VERSION: &str = env!("CARGO_PKG_VERSION");`
-
-## Implemented Words (Quick Reference)
-
-**Core:** `+`, `-`, `*`, `/`, `MOD`, `DUP`, `DROP`, `SWAP`, `OVER`, `ROT`, `!`, `@`, `C!`, `C@`
-**Comparison:** `<`, `>`, `=`, `0=`, `0<`, `0>`
-**Control Flow:** `IF/THEN/ELSE`, `BEGIN/UNTIL`, `BEGIN/WHILE/REPEAT`, `DO/LOOP`, `+LOOP`, `LEAVE`, `EXIT`, `RECURSE`
-**I/O:** `.`, `.S`, `CR`, `EMIT`, `KEY`, `TYPE`, `."`, `S"`, `C"`
-**Strings:** `COMPARE`, `-TRAILING`, `SEARCH`, `/STRING`, `ERASE`
-**Memory:** `HERE`, `ALLOT`, `,`, `VARIABLE`, `CONSTANT`, `CREATE`, `ALIGNED`, `ALIGN`, `FILL`
-**Metaprogramming:** `EXECUTE`, `'`, `[']`, `FIND`, `IMMEDIATE`, `CHAR`, `[CHAR]`
-**Error Handling:** `ABORT`, `ABORT"`
-**File Loading:** `INCLUDE`, `INCLUDED`
+Full ANS Forth core words. See [docs/word-reference.md](docs/word-reference.md) for complete reference.
 
 ## Detailed Documentation
 
 See `docs/` for comprehensive guides:
-- **[AOT Compilation](docs/aot-compilation.md)** - Standalone executables, optimization levels, troubleshooting
-- **[Control Flow](docs/control-flow.md)**, **[Memory](docs/memory.md)**, **[Metaprogramming](docs/metaprogramming.md)**
-- **[I/O](docs/io.md)**, **[Strings](docs/strings.md)**, **[Stacks](docs/stacks.md)**, **[Error Handling](docs/error-handling.md)**, **[Arithmetic](docs/arithmetic.md)**
+- **[Word Reference](docs/word-reference.md)** - Complete word list
+- **[JIT Compilation](docs/jit-compilation.md)** - Just-in-time compilation
+- **[AOT Compilation](docs/aot-compilation.md)** - Standalone executables
+- Feature docs: **[Control Flow](docs/control-flow.md)**, **[Memory](docs/memory.md)**, **[Metaprogramming](docs/metaprogramming.md)**, **[I/O](docs/io.md)**, **[Strings](docs/strings.md)**, **[Stacks](docs/stacks.md)**, **[Error Handling](docs/error-handling.md)**, **[Arithmetic](docs/arithmetic.md)**
 
 **Developer Documentation:**
 - **[Adding LLVM Primitives](docs/adding-llvm-primitives.md)** - Step-by-step implementation guide
@@ -191,10 +128,8 @@ See **[README.md](README.md)** for installation, examples, and feature overview.
 
 ## Key Implementation Notes
 
-- **Case-insensitive**: All words converted to uppercase
-- **Compile-time validation**: All referenced words must exist
-- **TCO**: Tail-call optimization (verified to 500,000 calls)
-- **Dual primitives**: `runtime.rs` = single source, `words.rs` = wrappers, `build.rs` = separate compilation
-- **Clean builds**: Auto-cleanup of temp files after AOT compilation
-- **Self-hosting**: Forth compiler written in Forth (stdlib/compiler.fth)
-- **Dual-strategy strings**: JIT mode uses HERE-based allocation, AOT mode uses LLVM global constants (see [docs/llvm-global-strings-notes.md](docs/llvm-global-strings-notes.md))
+- **Case-insensitive**: All words uppercase internally
+- **Self-hosting**: Forth compiler in `stdlib/compiler.fth`
+- **Dual primitives**: `runtime.rs` = single source for all modes
+- **TCO**: Tail-call optimization (verified to 500K calls)
+- See docs for: strings, JIT redefinition handling, AOT pipeline

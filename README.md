@@ -97,6 +97,8 @@ Uses the self-hosting Forth compiler to generate LLVM IR.
 cargo run myprogram.fth --jit       # JIT compile and run
 ```
 
+**Note:** If a file redefines a word multiple times (e.g., `: WORD1 42 ; : WORD1 99 ;`), JIT mode automatically falls back to interpreted mode for that file with a warning. This ensures correct execution order. Redefining words across different files (e.g., overriding stdlib words) works normally.
+
 #### 3. AOT Mode (Ahead-of-Time Compilation)
 Compiles Forth programs to standalone native executables via LLVM.
 Produces optimized binaries (~50KB) that can run without the Quarter interpreter.

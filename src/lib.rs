@@ -1143,6 +1143,11 @@ pub fn load_file(
     // Mark this file as included
     included_files.insert(filename.to_string());
 
+    // Start tracking word definitions for this file (to detect same-file redefinitions)
+    if options.define_only {
+        ctx.dict.start_file_tracking();
+    }
+
     let contents = fs::read_to_string(filename).map_err(|e| format!("Cannot read file: {}", e))?;
 
     // Process file as token stream to support multi-line definitions
@@ -1234,8 +1239,15 @@ pub fn execute_line(
                 // Validate that all words in the AST exist (allow forward reference for recursion)
                 ast.validate_with_name(ctx.dict, Some(&word_name))?;
 
-                // Try JIT compilation if enabled
+                // Track word definition in current file (detects same-file redefinitions)
+                if options.define_only {
+                    ctx.dict.track_word_definition(&word_name);
+                }
+
+                // Check for redefinition (for JIT compilation decision)
                 let is_redefinition = ctx.dict.has_word(&word_name);
+
+                // Try JIT compilation if enabled
                 if options.use_forth_compiler && !is_redefinition {
                     // Try to JIT compile - if successful, try_forth_compile will add it to dict
                     // If it fails, we fall back to interpreted mode below

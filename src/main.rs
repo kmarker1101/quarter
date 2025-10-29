@@ -704,44 +704,81 @@ fn main() {
 
         match result {
             Some(Ok(_)) => {
-                // If JIT mode, batch compile user words now
+                // If JIT mode, check for redefinitions first
                 if jit_mode {
-                    let compile_result = quarter::with_execution_context(|exec_ctx| {
-                        let mut ctx = RuntimeContext::new(&mut exec_ctx.stack, &mut exec_ctx.dict, &mut exec_ctx.loop_stack, &mut exec_ctx.return_stack, &mut exec_ctx.memory);
-                        quarter::batch_compile_all_words(
-                            &mut ctx,
-                            exec_ctx.config,
-                            &mut exec_ctx.included_files,
-                        )
-                    });
+                    let has_redefinitions = quarter::with_execution_context(|ctx| {
+                        ctx.dict.has_redefinitions()
+                    }).unwrap_or(false);
 
-                    if let Some(Err(e)) = compile_result {
-                        eprintln!("Batch compilation failed: {}", e);
-                        std::process::exit(1);
-                    }
+                    if has_redefinitions {
+                        // Redefinition detected - fall back to interpreted mode
+                        eprintln!("Warning: Word redefinition detected in '{}'", file);
+                        eprintln!("Falling back to interpreted mode for this file.");
 
-                    // Clear the stack and remove file from included_files
-                    quarter::with_execution_context(|ctx| {
-                        while ctx.stack.pop(&mut ctx.memory).is_some() {}
-                        ctx.included_files.remove(&file);
-                    });
+                        // Clear the stack and remove file from included_files
+                        quarter::with_execution_context(|ctx| {
+                            while ctx.stack.pop(&mut ctx.memory).is_some() {}
+                            ctx.included_files.remove(&file);
+                            // Clear redefinition flag for next file
+                            ctx.dict.clear_redefinition_flag();
+                        });
 
-                    // Now execute the file with JIT-compiled code
-                    let exec_result = quarter::with_execution_context(|exec_ctx| {
-                        let exec_options = ExecutionOptions::new(false, false);
-                        let mut ctx = RuntimeContext::new(&mut exec_ctx.stack, &mut exec_ctx.dict, &mut exec_ctx.loop_stack, &mut exec_ctx.return_stack, &mut exec_ctx.memory);
-                        load_file(
-                            &file,
-                            &mut ctx,
-                            exec_ctx.config,
-                            exec_options,
-                            &mut exec_ctx.included_files,
-                        )
-                    });
+                        // Execute in interpreted mode
+                        let exec_result = quarter::with_execution_context(|exec_ctx| {
+                            let exec_options = ExecutionOptions::new(false, false);
+                            let mut ctx = RuntimeContext::new(&mut exec_ctx.stack, &mut exec_ctx.dict, &mut exec_ctx.loop_stack, &mut exec_ctx.return_stack, &mut exec_ctx.memory);
+                            load_file(
+                                &file,
+                                &mut ctx,
+                                exec_ctx.config,
+                                exec_options,
+                                &mut exec_ctx.included_files,
+                            )
+                        });
 
-                    if let Some(Err(e)) = exec_result {
-                        eprintln!("JIT execution failed: {}", e);
-                        std::process::exit(1);
+                        if let Some(Err(e)) = exec_result {
+                            eprintln!("Interpreted execution failed: {}", e);
+                            std::process::exit(1);
+                        }
+                    } else {
+                        // No redefinitions - proceed with JIT compilation
+                        let compile_result = quarter::with_execution_context(|exec_ctx| {
+                            let mut ctx = RuntimeContext::new(&mut exec_ctx.stack, &mut exec_ctx.dict, &mut exec_ctx.loop_stack, &mut exec_ctx.return_stack, &mut exec_ctx.memory);
+                            quarter::batch_compile_all_words(
+                                &mut ctx,
+                                exec_ctx.config,
+                                &mut exec_ctx.included_files,
+                            )
+                        });
+
+                        if let Some(Err(e)) = compile_result {
+                            eprintln!("Batch compilation failed: {}", e);
+                            std::process::exit(1);
+                        }
+
+                        // Clear the stack and remove file from included_files
+                        quarter::with_execution_context(|ctx| {
+                            while ctx.stack.pop(&mut ctx.memory).is_some() {}
+                            ctx.included_files.remove(&file);
+                        });
+
+                        // Now execute the file with JIT-compiled code
+                        let exec_result = quarter::with_execution_context(|exec_ctx| {
+                            let exec_options = ExecutionOptions::new(false, false);
+                            let mut ctx = RuntimeContext::new(&mut exec_ctx.stack, &mut exec_ctx.dict, &mut exec_ctx.loop_stack, &mut exec_ctx.return_stack, &mut exec_ctx.memory);
+                            load_file(
+                                &file,
+                                &mut ctx,
+                                exec_ctx.config,
+                                exec_options,
+                                &mut exec_ctx.included_files,
+                            )
+                        });
+
+                        if let Some(Err(e)) = exec_result {
+                            eprintln!("JIT execution failed: {}", e);
+                            std::process::exit(1);
+                        }
                     }
                 }
                 return;
