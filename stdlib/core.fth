@@ -30,6 +30,9 @@
 : 2DROP ( a b -- ) DROP DROP ;
 : 2SWAP ( a b c d -- c d a b ) ROT >R ROT R> ;
 : 2OVER ( a b c d -- a b c d a b ) >R >R 2DUP R> R> 2SWAP ;
+: 2>R ( x1 x2 -- ) ( R: -- x1 x2 ) SWAP >R >R ;
+: 2R> ( -- x1 x2 ) ( R: x1 x2 -- ) R> R> SWAP ;
+: 2R@ ( -- x1 x2 ) ( R: x1 x2 -- x1 x2 ) R> R> 2DUP >R >R SWAP ;
 \ =============================================================================
 \ ARITHMETIC
 \ =============================================================================
@@ -103,6 +106,40 @@
 \ =============================================================================
 \ MEMORY FILL
 \ =============================================================================
+
 \ FILL ( c-addr u char -- )
 \ Fill memory region with character
 : FILL -ROT 0 DO 2DUP I + C! LOOP 2DROP ;
+
+\ =============================================================================
+\ STRING MANIPULATION
+\ =============================================================================
+
+\ BLANK ( c-addr u -- )
+\ Fill memory with spaces (BL = 32)
+: BLANK ( c-addr u -- ) BL FILL ;
+
+\ ERASE ( addr u -- )
+\ Fill memory with zeros
+: ERASE ( addr u -- ) 0 FILL ;
+
+\ /STRING ( c-addr1 u1 n -- c-addr2 u2 )
+\ Adjust string by advancing address and decreasing length
+: /STRING ( c-addr1 u1 n -- c-addr2 u2 )
+    OVER MIN       ( c-addr1 u1 n' )  \ clamp n to u1
+    ROT OVER +     ( u1 n' c-addr2 )
+    -ROT -         ( c-addr2 u2 )
+;
+
+\ COMPARE ( c-addr1 u1 c-addr2 u2 -- n )
+\ Compare two strings byte-by-byte, return -1 (less), 0 (equal), or 1 (greater)
+\ Now implemented as a primitive in words.rs
+
+\ -TRAILING ( c-addr u1 -- c-addr u2 )
+\ Remove trailing spaces from string
+\ Now implemented as a primitive in words.rs
+
+\ SEARCH ( c-addr1 u1 c-addr2 u2 -- c-addr3 u3 flag )
+\ Search for substring c-addr2/u2 in string c-addr1/u1
+\ Returns position where found (true flag) or original string (false flag)
+\ Now implemented as a primitive in words.rs

@@ -103,6 +103,11 @@ fn register_quarter_symbols() -> usize {
         crate::words::quarter_here,
         crate::words::quarter_allot,
         crate::words::quarter_comma,
+
+        // String operations
+        crate::words::quarter_compare,
+        crate::words::quarter_minus_trailing,
+        crate::words::quarter_search,
     );
     symbols[0] // Return something to prevent optimization
 }

@@ -68,6 +68,11 @@ unsafe extern "C" {
     pub fn quarter_r_fetch(memory: *mut u8, sp: *mut usize, rp: *mut usize);
 
     // I/O (emit, cr, dot, space are defined in this module)
+
+    // String operations
+    pub fn quarter_compare(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_minus_trailing(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_search(memory: *mut u8, sp: *mut usize, rp: *mut usize);
 }
 
 // Built-in word definitions
@@ -754,6 +759,180 @@ pub fn type_word(
         }
     } else {
         eprintln!("TYPE: stack underflow");
+    }
+}
+
+pub fn compare(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    // COMPARE ( c-addr1 u1 c-addr2 u2 -- n )
+    // Compare two strings, return -1 (less), 0 (equal), or 1 (greater)
+    if let (Some(u2), Some(addr2), Some(u1), Some(addr1)) = (
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+    ) {
+        if u1 < 0 || u2 < 0 {
+            eprintln!("COMPARE: negative length");
+            return;
+        }
+
+        let addr1 = addr1 as usize;
+        let u1 = u1 as usize;
+        let addr2 = addr2 as usize;
+        let u2 = u2 as usize;
+
+        // Compare byte by byte up to the minimum length
+        let min_len = u1.min(u2);
+        for i in 0..min_len {
+            match (memory.fetch_byte(addr1 + i), memory.fetch_byte(addr2 + i)) {
+                (Ok(byte1), Ok(byte2)) => {
+                    if byte1 < byte2 {
+                        stack.push(-1, memory);
+                        return;
+                    } else if byte1 > byte2 {
+                        stack.push(1, memory);
+                        return;
+                    }
+                    // If equal, continue to next byte
+                }
+                (Err(e), _) | (_, Err(e)) => {
+                    eprintln!("COMPARE: {}", e);
+                    return;
+                }
+            }
+        }
+
+        // All bytes equal up to min length, compare lengths
+        if u1 < u2 {
+            stack.push(-1, memory);
+        } else if u1 > u2 {
+            stack.push(1, memory);
+        } else {
+            stack.push(0, memory);
+        }
+    } else {
+        eprintln!("COMPARE: stack underflow");
+    }
+}
+
+pub fn minus_trailing(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    // -TRAILING ( c-addr u1 -- c-addr u2 )
+    // Remove trailing spaces from string
+    if let (Some(u), Some(addr)) = (stack.pop(memory), stack.pop(memory)) {
+        if u < 0 {
+            eprintln!("-TRAILING: negative length");
+            return;
+        }
+
+        let addr_usize = addr as usize;
+        let mut len = u as usize;
+
+        // Scan backwards to find last non-space character
+        while len > 0 {
+            match memory.fetch_byte(addr_usize + len - 1) {
+                Ok(byte) => {
+                    if byte != 32 {
+                        // Not a space
+                        break;
+                    }
+                    len -= 1;
+                }
+                Err(e) => {
+                    eprintln!("-TRAILING: {}", e);
+                    return;
+                }
+            }
+        }
+
+        stack.push(addr, memory);
+        stack.push(len as i64, memory);
+    } else {
+        eprintln!("-TRAILING: stack underflow");
+    }
+}
+
+pub fn search(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    // SEARCH ( c-addr1 u1 c-addr2 u2 -- c-addr3 u3 flag )
+    // Search for substring, return position if found or original string if not
+    if let (Some(needle_len), Some(needle_addr), Some(haystack_len), Some(haystack_addr)) = (
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+    ) {
+        if haystack_len < 0 || needle_len < 0 {
+            eprintln!("SEARCH: negative length");
+            return;
+        }
+
+        let haystack_addr_usize = haystack_addr as usize;
+        let haystack_len_usize = haystack_len as usize;
+        let needle_addr_usize = needle_addr as usize;
+        let needle_len_usize = needle_len as usize;
+
+        // Empty needle always matches at beginning
+        if needle_len_usize == 0 {
+            stack.push(haystack_addr, memory);
+            stack.push(haystack_len, memory);
+            stack.push(-1, memory); // TRUE
+            return;
+        }
+
+        // Search for needle in haystack
+        if haystack_len_usize >= needle_len_usize {
+            for i in 0..=(haystack_len_usize - needle_len_usize) {
+                let mut match_found = true;
+
+                // Compare needle with current position in haystack
+                for j in 0..needle_len_usize {
+                    match (
+                        memory.fetch_byte(haystack_addr_usize + i + j),
+                        memory.fetch_byte(needle_addr_usize + j),
+                    ) {
+                        (Ok(hay_byte), Ok(needle_byte)) => {
+                            if hay_byte != needle_byte {
+                                match_found = false;
+                                break;
+                            }
+                        }
+                        (Err(e), _) | (_, Err(e)) => {
+                            eprintln!("SEARCH: {}", e);
+                            return;
+                        }
+                    }
+                }
+
+                if match_found {
+                    // Found! Return address at match position
+                    stack.push((haystack_addr_usize + i) as i64, memory);
+                    stack.push((haystack_len_usize - i) as i64, memory);
+                    stack.push(-1, memory); // TRUE
+                    return;
+                }
+            }
+        }
+
+        // Not found - return original string
+        stack.push(haystack_addr, memory);
+        stack.push(haystack_len, memory);
+        stack.push(0, memory); // FALSE
+    } else {
+        eprintln!("SEARCH: stack underflow");
     }
 }
 

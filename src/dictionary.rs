@@ -59,6 +59,9 @@ impl Dictionary {
             "EMIT" => words::emit,
             "SPACE" => words::space,
             "TYPE" => words::type_word,
+            "COMPARE" => words::compare,
+            "-TRAILING" => words::minus_trailing,
+            "SEARCH" => words::search,
             "KEY" => words::key,
 
             // Arithmetic operations

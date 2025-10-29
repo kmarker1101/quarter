@@ -427,6 +427,184 @@ pub unsafe extern "C" fn quarter_cr(_memory: *mut u8, _sp: *mut usize, _rp: *mut
 }
 
 // ============================================================================
+// STRING OPERATIONS
+// ============================================================================
+
+/// COMPARE ( c-addr1 u1 c-addr2 u2 -- n )
+/// Compare two strings, return -1 (less), 0 (equal), or 1 (greater)
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn quarter_compare(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 32) {
+            return;
+        }
+
+        // Pop u2, addr2, u1, addr1
+        let u2 = (memory.add(sp_val - 8) as *const i64).read_unaligned();
+        let addr2 = (memory.add(sp_val - 16) as *const i64).read_unaligned();
+        let u1 = (memory.add(sp_val - 24) as *const i64).read_unaligned();
+        let addr1 = (memory.add(sp_val - 32) as *const i64).read_unaligned();
+
+        if u1 < 0 || u2 < 0 {
+            return;
+        }
+
+        let u1 = u1 as usize;
+        let u2 = u2 as usize;
+        let addr1 = addr1 as usize;
+        let addr2 = addr2 as usize;
+
+        // Compare byte by byte
+        let min_len = u1.min(u2);
+        for i in 0..min_len {
+            let byte1 = *memory.add(addr1 + i);
+            let byte2 = *memory.add(addr2 + i);
+            if byte1 < byte2 {
+                let result_addr = memory.add(sp_val - 32) as *mut i64;
+                *result_addr = -1;
+                *sp = sp_val - 24;
+                return;
+            } else if byte1 > byte2 {
+                let result_addr = memory.add(sp_val - 32) as *mut i64;
+                *result_addr = 1;
+                *sp = sp_val - 24;
+                return;
+            }
+        }
+
+        // All bytes equal, compare lengths
+        let result = if u1 < u2 {
+            -1
+        } else if u1 > u2 {
+            1
+        } else {
+            0
+        };
+
+        let result_addr = memory.add(sp_val - 32) as *mut i64;
+        *result_addr = result;
+        *sp = sp_val - 24;
+    }
+}
+
+/// -TRAILING ( c-addr u1 -- c-addr u2 )
+/// Remove trailing spaces from string
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn quarter_minus_trailing(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 16) {
+            return;
+        }
+
+        let u = (memory.add(sp_val - 8) as *const i64).read_unaligned();
+        let addr = (memory.add(sp_val - 16) as *const i64).read_unaligned();
+
+        if u < 0 {
+            return;
+        }
+
+        let mut len = u as usize;
+        let addr_usize = addr as usize;
+
+        // Scan backwards for trailing spaces
+        while len > 0 {
+            let byte = *memory.add(addr_usize + len - 1);
+            if byte != 32 {
+                break;
+            }
+            len -= 1;
+        }
+
+        // Update length on stack
+        let len_addr = memory.add(sp_val - 8) as *mut i64;
+        *len_addr = len as i64;
+    }
+}
+
+/// SEARCH ( c-addr1 u1 c-addr2 u2 -- c-addr3 u3 flag )
+/// Search for substring, return position if found or original string if not
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn quarter_search(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
+    unsafe {
+        let sp_val = *sp;
+        if !check_sp_read(sp_val, 32) {
+            return;
+        }
+
+        // Pop needle_len, needle_addr, haystack_len, haystack_addr
+        let needle_len = (memory.add(sp_val - 8) as *const i64).read_unaligned();
+        let needle_addr = (memory.add(sp_val - 16) as *const i64).read_unaligned();
+        let haystack_len = (memory.add(sp_val - 24) as *const i64).read_unaligned();
+        let haystack_addr = (memory.add(sp_val - 32) as *const i64).read_unaligned();
+
+        if haystack_len < 0 || needle_len < 0 {
+            return;
+        }
+
+        let needle_len = needle_len as usize;
+        let needle_addr = needle_addr as usize;
+        let haystack_len = haystack_len as usize;
+        let haystack_addr = haystack_addr as usize;
+
+        // Empty needle always matches
+        if needle_len == 0 {
+            // Push flag (TRUE)
+            if !check_sp_write(sp_val, 8) {
+                return;
+            }
+            let flag_addr = memory.add(sp_val) as *mut i64;
+            *flag_addr = -1;
+            *sp = sp_val + 8;
+            return;
+        }
+
+        // Search for needle in haystack
+        if haystack_len >= needle_len {
+            for i in 0..=(haystack_len - needle_len) {
+                let mut match_found = true;
+
+                // Compare needle with current position
+                for j in 0..needle_len {
+                    let hay_byte = *memory.add(haystack_addr + i + j);
+                    let needle_byte = *memory.add(needle_addr + j);
+                    if hay_byte != needle_byte {
+                        match_found = false;
+                        break;
+                    }
+                }
+
+                if match_found {
+                    // Found! Update address and length, push TRUE
+                    let addr_slot = memory.add(sp_val - 32) as *mut i64;
+                    let len_slot = memory.add(sp_val - 24) as *mut i64;
+                    *addr_slot = (haystack_addr + i) as i64;
+                    *len_slot = (haystack_len - i) as i64;
+
+                    // Push flag (TRUE)
+                    if !check_sp_write(sp_val - 16, 8) {
+                        return;
+                    }
+                    let flag_addr = memory.add(sp_val - 16) as *mut i64;
+                    *flag_addr = -1;
+                    *sp = sp_val - 8;
+                    return;
+                }
+            }
+        }
+
+        // Not found - leave original string, push FALSE
+        if !check_sp_write(sp_val - 16, 8) {
+            return;
+        }
+        let flag_addr = memory.add(sp_val - 16) as *mut i64;
+        *flag_addr = 0;
+        *sp = sp_val - 8;
+    }
+}
+
+// ============================================================================
 // RUNTIME INITIALIZATION
 // ============================================================================
 

@@ -700,6 +700,41 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
         THEN
     THEN
 
+    \ Check for -TRAILING (45, 84, 82, 65, 73, 76, 73, 78, 71) - '-', 'T', 'R', 'A', 'I', 'L', 'I', 'N', 'G'
+    DUP 9 = IF
+        OVER C@ 45 = 2 PICK 1 + C@ 84 = AND
+        2 PICK 2 + C@ 82 = AND 2 PICK 3 + C@ 65 = AND
+        2 PICK 4 + C@ 73 = AND 2 PICK 5 + C@ 76 = AND
+        2 PICK 6 + C@ 73 = AND 2 PICK 7 + C@ 78 = AND
+        2 PICK 8 + C@ 71 = AND IF
+            DROP DROP
+            \ Write "quarter_minus_trailing" (22 chars)
+            113 COMPILER-SCRATCH  0 + C!  \ q
+            117 COMPILER-SCRATCH  1 + C!  \ u
+            97  COMPILER-SCRATCH  2 + C!  \ a
+            114 COMPILER-SCRATCH  3 + C!  \ r
+            116 COMPILER-SCRATCH  4 + C!  \ t
+            101 COMPILER-SCRATCH  5 + C!  \ e
+            114 COMPILER-SCRATCH  6 + C!  \ r
+            95  COMPILER-SCRATCH  7 + C!  \ _
+            109 COMPILER-SCRATCH  8 + C!  \ m
+            105 COMPILER-SCRATCH  9 + C!  \ i
+            110 COMPILER-SCRATCH 10 + C!  \ n
+            117 COMPILER-SCRATCH 11 + C!  \ u
+            115 COMPILER-SCRATCH 12 + C!  \ s
+            95  COMPILER-SCRATCH 13 + C!  \ _
+            116 COMPILER-SCRATCH 14 + C!  \ t
+            114 COMPILER-SCRATCH 15 + C!  \ r
+            97  COMPILER-SCRATCH 16 + C!  \ a
+            105 COMPILER-SCRATCH 17 + C!  \ i
+            108 COMPILER-SCRATCH 18 + C!  \ l
+            105 COMPILER-SCRATCH 19 + C!  \ i
+            110 COMPILER-SCRATCH 20 + C!  \ n
+            103 COMPILER-SCRATCH 21 + C!  \ g
+            COMPILER-SCRATCH 22 EXIT
+        THEN
+    THEN
+
     \ For alphanumeric words (DUP, SWAP, DROP, AND, OR, etc.): lowercase + quarter_ prefix
     \ Build "quarter_" (8 chars)
     113 COMPILER-SCRATCH 0 + C!
@@ -2580,6 +2615,47 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
         EXIT
     THEN
 
+    \ AST-STACK-STRING (type 9) - S" string literal
+    DUP 9 = IF
+        DROP
+        \ Get the string from AST into COMPILER-SCRATCH
+        \ AST-GET-STRING stores string bytes and returns length
+        COMPILER-SCRATCH AST-GET-STRING
+        \ Stack: ( string-len )
+
+        \ Save current HERE - this will be the string address
+        HERE
+        \ Stack: ( string-len here-addr )
+
+        \ Copy string bytes from COMPILER-SCRATCH to saved address
+        \ Stack: ( string-len here-addr )
+        OVER 0 DO
+            COMPILER-SCRATCH I + C@
+            OVER I + C!
+        LOOP
+
+        \ Advance HERE by string length
+        OVER ALLOT
+
+        \ Stack: ( string-len here-addr )
+        \ Generate IR to push address constant
+        SWAP
+        \ Stack: ( here-addr string-len )
+        OVER
+        \ Stack: ( here-addr string-len here-addr )
+        CURRENT-CTX @ SWAP 64 LLVM-BUILD-CONST-INT
+        COMPILE-PUSH
+
+        \ Generate IR to push length constant
+        \ Stack: ( here-addr string-len )
+        CURRENT-CTX @ SWAP 64 LLVM-BUILD-CONST-INT
+        COMPILE-PUSH
+
+        \ Clean up
+        DROP
+        EXIT
+    THEN
+
     \ AST-EXIT (type 11) - early return
     DUP 11 = IF
         DROP DROP
@@ -3152,6 +3228,33 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
     112 COMPILER-SCRATCH 9 + C! 97 COMPILER-SCRATCH 10 + C! 99 COMPILER-SCRATCH 11 + C!
     101 COMPILER-SCRATCH 12 + C!
     COMPILER-SCRATCH 13 DECLARE-PRIMITIVE
+
+    \ String - quarter_compare
+    113 COMPILER-SCRATCH 0 + C! 117 COMPILER-SCRATCH 1 + C! 97 COMPILER-SCRATCH 2 + C!
+    114 COMPILER-SCRATCH 3 + C! 116 COMPILER-SCRATCH 4 + C! 101 COMPILER-SCRATCH 5 + C!
+    114 COMPILER-SCRATCH 6 + C! 95 COMPILER-SCRATCH 7 + C! 99 COMPILER-SCRATCH 8 + C!
+    111 COMPILER-SCRATCH 9 + C! 109 COMPILER-SCRATCH 10 + C! 112 COMPILER-SCRATCH 11 + C!
+    97 COMPILER-SCRATCH 12 + C! 114 COMPILER-SCRATCH 13 + C! 101 COMPILER-SCRATCH 14 + C!
+    COMPILER-SCRATCH 15 DECLARE-PRIMITIVE
+
+    \ String - quarter_minus_trailing
+    113 COMPILER-SCRATCH 0 + C! 117 COMPILER-SCRATCH 1 + C! 97 COMPILER-SCRATCH 2 + C!
+    114 COMPILER-SCRATCH 3 + C! 116 COMPILER-SCRATCH 4 + C! 101 COMPILER-SCRATCH 5 + C!
+    114 COMPILER-SCRATCH 6 + C! 95 COMPILER-SCRATCH 7 + C! 109 COMPILER-SCRATCH 8 + C!
+    105 COMPILER-SCRATCH 9 + C! 110 COMPILER-SCRATCH 10 + C! 117 COMPILER-SCRATCH 11 + C!
+    115 COMPILER-SCRATCH 12 + C! 95 COMPILER-SCRATCH 13 + C! 116 COMPILER-SCRATCH 14 + C!
+    114 COMPILER-SCRATCH 15 + C! 97 COMPILER-SCRATCH 16 + C! 105 COMPILER-SCRATCH 17 + C!
+    108 COMPILER-SCRATCH 18 + C! 105 COMPILER-SCRATCH 19 + C! 110 COMPILER-SCRATCH 20 + C!
+    103 COMPILER-SCRATCH 21 + C!
+    COMPILER-SCRATCH 22 DECLARE-PRIMITIVE
+
+    \ String - quarter_search
+    113 COMPILER-SCRATCH 0 + C! 117 COMPILER-SCRATCH 1 + C! 97 COMPILER-SCRATCH 2 + C!
+    114 COMPILER-SCRATCH 3 + C! 116 COMPILER-SCRATCH 4 + C! 101 COMPILER-SCRATCH 5 + C!
+    114 COMPILER-SCRATCH 6 + C! 95 COMPILER-SCRATCH 7 + C! 115 COMPILER-SCRATCH 8 + C!
+    101 COMPILER-SCRATCH 9 + C! 97 COMPILER-SCRATCH 10 + C! 114 COMPILER-SCRATCH 11 + C!
+    99 COMPILER-SCRATCH 12 + C! 104 COMPILER-SCRATCH 13 + C!
+    COMPILER-SCRATCH 14 DECLARE-PRIMITIVE
 ;
 
 \ =============================================================================
