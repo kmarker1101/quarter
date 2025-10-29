@@ -6,6 +6,8 @@ Detailed documentation for Quarter Forth features and implementation.
 
 ### User Documentation
 
+- **[Word Reference](word-reference.md)** - Complete alphabetical reference of all implemented words
+- **[JIT Compilation](jit-compilation.md)** - Just-in-time compilation mode, redefinition handling, performance
 - **[AOT Compilation](aot-compilation.md)** - Compiling Forth to standalone executables
 - **[Control Flow](control-flow.md)** - IF/THEN/ELSE, loops, LEAVE, EXIT, RECURSE
 - **[Memory Operations](memory.md)** - Memory access, allocation, alignment, FILL
