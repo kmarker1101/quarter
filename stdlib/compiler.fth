@@ -48,6 +48,12 @@ VARIABLE BATCH-MODE                \ Flag: 0 = single word, -1 = batch mode
 VARIABLE BATCH-JIT                 \ JIT engine handle for batch mode
 VARIABLE CURRENT-AST-HANDLE        \ Temporary storage for AST handle during compilation
 
+\ Compilation mode: 0 = JIT mode, -1 = AOT mode
+VARIABLE COMPILING-AOT?
+
+\ String name generation for global strings
+VARIABLE STRING-COUNTER
+
 \ DO/LOOP compilation temporaries
 VARIABLE LOOP-BODY-HANDLE          \ AST handle for loop body
 VARIABLE LOOP-INCREMENT            \ Loop increment value
@@ -91,6 +97,33 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
         THEN
     LOOP
     DROP DROP TRUE ;
+
+\ Generate unique string name for global strings
+\ Stores result at WORD-NAME-BUFFER, returns addr and len
+\ Format: ".str.N" where N is incrementing counter
+\ ( -- name-addr name-len )
+: NEXT-STRING-NAME
+    \ Write ".str." prefix (5 chars)
+    46 WORD-NAME-BUFFER C!      \ '.'
+    115 WORD-NAME-BUFFER 1 + C! \ 's'
+    116 WORD-NAME-BUFFER 2 + C! \ 't'
+    114 WORD-NAME-BUFFER 3 + C! \ 'r'
+    46 WORD-NAME-BUFFER 4 + C!  \ '.'
+
+    \ Get and increment counter
+    STRING-COUNTER @ DUP 1 + STRING-COUNTER !
+
+    \ Convert number to ASCII digits at offset 5
+    \ Simple approach: support 0-99
+    DUP 10 / DUP 0> IF
+        48 + WORD-NAME-BUFFER 5 + C!  \ tens digit
+        SWAP 10 MOD 48 + WORD-NAME-BUFFER 6 + C!  \ ones digit
+        WORD-NAME-BUFFER 7 EXIT
+    ELSE
+        DROP 48 + WORD-NAME-BUFFER 5 + C!  \ single digit
+        WORD-NAME-BUFFER 6 EXIT
+    THEN
+;
 
 \ =============================================================================
 \ WORD NAME MAPPING
@@ -697,6 +730,41 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
             111 COMPILER-SCRATCH  9 + C!
             116 COMPILER-SCRATCH 10 + C!
             COMPILER-SCRATCH 11 EXIT
+        THEN
+    THEN
+
+    \ Check for -TRAILING (45, 84, 82, 65, 73, 76, 73, 78, 71) - '-', 'T', 'R', 'A', 'I', 'L', 'I', 'N', 'G'
+    DUP 9 = IF
+        OVER C@ 45 = 2 PICK 1 + C@ 84 = AND
+        2 PICK 2 + C@ 82 = AND 2 PICK 3 + C@ 65 = AND
+        2 PICK 4 + C@ 73 = AND 2 PICK 5 + C@ 76 = AND
+        2 PICK 6 + C@ 73 = AND 2 PICK 7 + C@ 78 = AND
+        2 PICK 8 + C@ 71 = AND IF
+            DROP DROP
+            \ Write "quarter_minus_trailing" (22 chars)
+            113 COMPILER-SCRATCH  0 + C!  \ q
+            117 COMPILER-SCRATCH  1 + C!  \ u
+            97  COMPILER-SCRATCH  2 + C!  \ a
+            114 COMPILER-SCRATCH  3 + C!  \ r
+            116 COMPILER-SCRATCH  4 + C!  \ t
+            101 COMPILER-SCRATCH  5 + C!  \ e
+            114 COMPILER-SCRATCH  6 + C!  \ r
+            95  COMPILER-SCRATCH  7 + C!  \ _
+            109 COMPILER-SCRATCH  8 + C!  \ m
+            105 COMPILER-SCRATCH  9 + C!  \ i
+            110 COMPILER-SCRATCH 10 + C!  \ n
+            117 COMPILER-SCRATCH 11 + C!  \ u
+            115 COMPILER-SCRATCH 12 + C!  \ s
+            95  COMPILER-SCRATCH 13 + C!  \ _
+            116 COMPILER-SCRATCH 14 + C!  \ t
+            114 COMPILER-SCRATCH 15 + C!  \ r
+            97  COMPILER-SCRATCH 16 + C!  \ a
+            105 COMPILER-SCRATCH 17 + C!  \ i
+            108 COMPILER-SCRATCH 18 + C!  \ l
+            105 COMPILER-SCRATCH 19 + C!  \ i
+            110 COMPILER-SCRATCH 20 + C!  \ n
+            103 COMPILER-SCRATCH 21 + C!  \ g
+            COMPILER-SCRATCH 22 EXIT
         THEN
     THEN
 
@@ -2580,6 +2648,181 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
         EXIT
     THEN
 
+    \ AST-PRINT-STRING (type 8) - ." string literal
+    DUP 8 = IF
+        DROP
+        \ Get the string from AST into COMPILER-SCRATCH
+        COMPILER-SCRATCH AST-GET-STRING
+        \ Stack: ( string-len )
+
+        \ Check compilation mode
+        COMPILING-AOT? @ IF
+            \ AOT mode: Use LLVM global strings
+            \ Stack: ( string-len )
+
+            \ Generate unique string name
+            NEXT-STRING-NAME
+            \ Stack: ( string-len name-addr name-len )
+
+            \ Create global string constant
+            CURRENT-MODULE @ CURRENT-CTX @ COMPILER-SCRATCH 4 PICK 2OVER
+            \ Stack: ( string-len name-addr name-len module ctx string-addr string-len name-addr name-len )
+            LLVM-CREATE-GLOBAL-STRING
+            \ Stack: ( string-len name-addr name-len ptr-handle )
+
+            \ Convert pointer to integer
+            CURRENT-BUILDER @ CURRENT-CTX @ 2 PICK
+            \ Stack: ( string-len name-addr name-len ptr-handle builder ctx ptr-handle )
+            LLVM-BUILD-PTRTOINT
+            \ Stack: ( string-len name-addr name-len ptr-handle int-handle )
+
+            \ Clean up stack, keeping string-len and int-handle
+            NIP NIP NIP
+            \ Stack: ( string-len int-handle )
+
+            \ Push address to stack
+            COMPILE-PUSH
+
+            \ Push length to stack
+            CURRENT-CTX @ SWAP 64 LLVM-BUILD-CONST-INT
+            COMPILE-PUSH
+        ELSE
+            \ JIT mode: Use HERE-based allocation
+            \ Stack: ( string-len )
+
+            \ Save current HERE - this will be the string address
+            HERE
+            \ Stack: ( string-len here-addr )
+
+            \ Copy string bytes from COMPILER-SCRATCH to saved address
+            OVER 0 DO
+                COMPILER-SCRATCH I + C@
+                OVER I + C!
+            LOOP
+
+            \ Advance HERE by string length
+            OVER ALLOT
+
+            \ Stack: ( string-len here-addr )
+            \ Generate IR to push address constant
+            SWAP
+            \ Stack: ( here-addr string-len )
+            OVER
+            \ Stack: ( here-addr string-len here-addr )
+            CURRENT-CTX @ SWAP 64 LLVM-BUILD-CONST-INT
+            COMPILE-PUSH
+
+            \ Generate IR to push length constant
+            \ Stack: ( here-addr string-len )
+            CURRENT-CTX @ SWAP 64 LLVM-BUILD-CONST-INT
+            COMPILE-PUSH
+
+            \ Clean up here-addr
+            DROP
+        THEN
+
+        \ Now call TYPE primitive to print the string (both modes)
+        \ Look up quarter_type function
+        \ Build "TYPE" in WORD-NAME-BUFFER
+        84 WORD-NAME-BUFFER C!     \ T
+        89 WORD-NAME-BUFFER 1 + C! \ Y
+        80 WORD-NAME-BUFFER 2 + C! \ P
+        69 WORD-NAME-BUFFER 3 + C! \ E
+        WORD-NAME-BUFFER 4 MAP-WORD-NAME
+        \ Stack: ( mapped-name-addr mapped-name-len )
+
+        \ Look up the function
+        CURRENT-MODULE @ -ROT
+        LLVM-MODULE-GET-FUNCTION
+        \ Stack: ( fn-handle )
+
+        \ Call TYPE with (memory, sp, rp) parameters
+        CURRENT-BUILDER @ SWAP
+        PARAM-MEMORY @ PARAM-SP @ PARAM-RP @ 3
+        0  \ Not a tail call
+        LLVM-BUILD-CALL
+
+        EXIT
+    THEN
+
+    \ AST-STACK-STRING (type 9) - S" string literal
+    DUP 9 = IF
+        DROP
+        \ Get the string from AST into COMPILER-SCRATCH
+        \ AST-GET-STRING stores string bytes and returns length
+        COMPILER-SCRATCH AST-GET-STRING
+        \ Stack: ( string-len )
+
+        \ Check compilation mode
+        COMPILING-AOT? @ IF
+            \ AOT mode: Use LLVM global strings
+            \ Stack: ( string-len )
+
+            \ Generate unique string name
+            NEXT-STRING-NAME
+            \ Stack: ( string-len name-addr name-len )
+
+            \ Create global string constant
+            CURRENT-MODULE @ CURRENT-CTX @ COMPILER-SCRATCH 4 PICK 2OVER
+            \ Stack: ( string-len name-addr name-len module ctx string-addr string-len name-addr name-len )
+            LLVM-CREATE-GLOBAL-STRING
+            \ Stack: ( string-len name-addr name-len ptr-handle )
+
+            \ Convert pointer to integer
+            CURRENT-BUILDER @ CURRENT-CTX @ 2 PICK
+            \ Stack: ( string-len name-addr name-len ptr-handle builder ctx ptr-handle )
+            LLVM-BUILD-PTRTOINT
+            \ Stack: ( string-len name-addr name-len ptr-handle int-handle )
+
+            \ Clean up stack, keeping string-len and int-handle
+            NIP NIP NIP
+            \ Stack: ( string-len int-handle )
+
+            \ Push address to stack
+            COMPILE-PUSH
+
+            \ Push length to stack
+            CURRENT-CTX @ SWAP 64 LLVM-BUILD-CONST-INT
+            COMPILE-PUSH
+
+            EXIT
+        ELSE
+            \ JIT mode: Use HERE-based allocation
+            \ Stack: ( string-len )
+
+            \ Save current HERE - this will be the string address
+            HERE
+            \ Stack: ( string-len here-addr )
+
+            \ Copy string bytes from COMPILER-SCRATCH to saved address
+            OVER 0 DO
+                COMPILER-SCRATCH I + C@
+                OVER I + C!
+            LOOP
+
+            \ Advance HERE by string length
+            OVER ALLOT
+
+            \ Stack: ( string-len here-addr )
+            \ Generate IR to push address constant
+            SWAP
+            \ Stack: ( here-addr string-len )
+            OVER
+            \ Stack: ( here-addr string-len here-addr )
+            CURRENT-CTX @ SWAP 64 LLVM-BUILD-CONST-INT
+            COMPILE-PUSH
+
+            \ Generate IR to push length constant
+            \ Stack: ( here-addr string-len )
+            CURRENT-CTX @ SWAP 64 LLVM-BUILD-CONST-INT
+            COMPILE-PUSH
+
+            \ Clean up
+            DROP
+            EXIT
+        THEN
+    THEN
+
     \ AST-EXIT (type 11) - early return
     DUP 11 = IF
         DROP DROP
@@ -3152,6 +3395,33 @@ VARIABLE IF-MERGE-BLOCK            \ Merge block handle
     112 COMPILER-SCRATCH 9 + C! 97 COMPILER-SCRATCH 10 + C! 99 COMPILER-SCRATCH 11 + C!
     101 COMPILER-SCRATCH 12 + C!
     COMPILER-SCRATCH 13 DECLARE-PRIMITIVE
+
+    \ String - quarter_compare
+    113 COMPILER-SCRATCH 0 + C! 117 COMPILER-SCRATCH 1 + C! 97 COMPILER-SCRATCH 2 + C!
+    114 COMPILER-SCRATCH 3 + C! 116 COMPILER-SCRATCH 4 + C! 101 COMPILER-SCRATCH 5 + C!
+    114 COMPILER-SCRATCH 6 + C! 95 COMPILER-SCRATCH 7 + C! 99 COMPILER-SCRATCH 8 + C!
+    111 COMPILER-SCRATCH 9 + C! 109 COMPILER-SCRATCH 10 + C! 112 COMPILER-SCRATCH 11 + C!
+    97 COMPILER-SCRATCH 12 + C! 114 COMPILER-SCRATCH 13 + C! 101 COMPILER-SCRATCH 14 + C!
+    COMPILER-SCRATCH 15 DECLARE-PRIMITIVE
+
+    \ String - quarter_minus_trailing
+    113 COMPILER-SCRATCH 0 + C! 117 COMPILER-SCRATCH 1 + C! 97 COMPILER-SCRATCH 2 + C!
+    114 COMPILER-SCRATCH 3 + C! 116 COMPILER-SCRATCH 4 + C! 101 COMPILER-SCRATCH 5 + C!
+    114 COMPILER-SCRATCH 6 + C! 95 COMPILER-SCRATCH 7 + C! 109 COMPILER-SCRATCH 8 + C!
+    105 COMPILER-SCRATCH 9 + C! 110 COMPILER-SCRATCH 10 + C! 117 COMPILER-SCRATCH 11 + C!
+    115 COMPILER-SCRATCH 12 + C! 95 COMPILER-SCRATCH 13 + C! 116 COMPILER-SCRATCH 14 + C!
+    114 COMPILER-SCRATCH 15 + C! 97 COMPILER-SCRATCH 16 + C! 105 COMPILER-SCRATCH 17 + C!
+    108 COMPILER-SCRATCH 18 + C! 105 COMPILER-SCRATCH 19 + C! 110 COMPILER-SCRATCH 20 + C!
+    103 COMPILER-SCRATCH 21 + C!
+    COMPILER-SCRATCH 22 DECLARE-PRIMITIVE
+
+    \ String - quarter_search
+    113 COMPILER-SCRATCH 0 + C! 117 COMPILER-SCRATCH 1 + C! 97 COMPILER-SCRATCH 2 + C!
+    114 COMPILER-SCRATCH 3 + C! 116 COMPILER-SCRATCH 4 + C! 101 COMPILER-SCRATCH 5 + C!
+    114 COMPILER-SCRATCH 6 + C! 95 COMPILER-SCRATCH 7 + C! 115 COMPILER-SCRATCH 8 + C!
+    101 COMPILER-SCRATCH 9 + C! 97 COMPILER-SCRATCH 10 + C! 114 COMPILER-SCRATCH 11 + C!
+    99 COMPILER-SCRATCH 12 + C! 104 COMPILER-SCRATCH 13 + C!
+    COMPILER-SCRATCH 14 DECLARE-PRIMITIVE
 ;
 
 \ =============================================================================

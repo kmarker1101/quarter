@@ -827,6 +827,105 @@ S" >NUMBER accumulates to existing value" TEST:
 T{ 100 0 600301 2 >NUMBER -> 10099 0 600303 0 }T
 
 \ =============================================================================
+\ STRING TESTS
+\ =============================================================================
+S" BLANK fills with spaces " TEST:
+T{ CREATE BUF 5 ALLOT -> }T
+T{ BUF 5 BLANK -> }T
+T{ BUF C@ -> 32 }T
+T{ BUF 1+ C@ -> 32 }T
+T{ BUF 4 + C@ -> 32 }T
+
+S" ERASE fills with zeros" TEST:
+T{ CREATE BUF2 5 ALLOT -> }T
+T{ 65 BUF2 C! 66 BUF2 1+ C! -> }T
+T{ BUF2 5 ERASE -> }T
+T{ BUF2 C@ -> 0 }T
+T{ BUF2 1+ C@ -> 0 }T
+T{ BUF2 4 + C@ -> 0 }T
+
+S" /STRING with 0 offset" TEST:
+T{ S" ABCDE" 0 /STRING SWAP DROP -> 5 }T
+
+S" /STRING with positive offset" TEST:
+T{ S" ABCDE" 2 /STRING SWAP DROP -> 3 }T
+
+S" /STRING advances address" TEST:
+T{ S" ABCDE" 2 /STRING DROP C@ -> 67 }T
+
+S" /STRING with length greater than string" TEST:
+T{ S" ABC" 10 /STRING SWAP DROP -> 0 }T
+
+S" COMPARE equal strings" TEST:
+T{ S" ABC" S" ABC" COMPARE -> 0 }T
+
+S" COMPARE first string less than second" TEST:
+T{ S" ABC" S" ABD" COMPARE -> -1 }T
+
+S" COMPARE first string greater than second" TEST:
+T{ S" ABD" S" ABC" COMPARE -> 1 }T
+
+S" COMPARE shorter string less than longer" TEST:
+T{ S" AB" S" ABC" COMPARE -> -1 }T
+
+S" COMPARE longer string greater than shorter" TEST:
+T{ S" ABC" S" AB" COMPARE -> 1 }T
+
+S" COMPARE empty strings" TEST:
+T{ S" " S" " COMPARE -> 0 }T
+
+S" -TRAILING removes trailing spaces" TEST:
+T{ CREATE TRBUF 10 ALLOT -> }T
+T{ 65 TRBUF C! 66 TRBUF 1+ C! 67 TRBUF 2 + C! -> }T
+T{ 32 TRBUF 3 + C! 32 TRBUF 4 + C! -> }T
+T{ TRBUF 5 -TRAILING SWAP DROP 3 = -> TRUE }T
+
+S" -TRAILING no trailing spaces" TEST:
+T{ S" ABC" -TRAILING SWAP DROP 3 = -> TRUE }T
+
+S" -TRAILING all spaces" TEST:
+T{ CREATE SPBUF 5 ALLOT -> }T
+T{ SPBUF 5 BLANK -> }T
+T{ SPBUF 5 -TRAILING SWAP DROP 0 = -> TRUE }T
+
+S" -TRAILING empty string" TEST:
+T{ S" " -TRAILING SWAP DROP 0 = -> TRUE }T
+
+S" SEARCH finds substring at start" TEST:
+T{ S" ABCDEF" S" ABC" SEARCH ROT DROP -> 6 TRUE }T
+
+S" SEARCH finds substring in middle" TEST:
+T{ S" ABCDEF" S" CDE" SEARCH >R DROP C@ R> -> 67 TRUE }T
+
+S" SEARCH finds substring at end" TEST:
+T{ S" ABCDEF" S" DEF" SEARCH ROT DROP -> 3 TRUE }T
+
+S" SEARCH substring not found" TEST:
+T{ S" ABCDEF" S" XYZ" SEARCH ROT DROP -> 6 FALSE }T
+
+S" SEARCH empty substring always found" TEST:
+T{ S" ABC" S" " SEARCH ROT DROP -> 3 TRUE }T
+
+S" SEARCH in empty string" TEST:
+T{ S" " S" A" SEARCH ROT DROP -> 0 FALSE }T
+
+S" C\" creates null-terminated string" TEST:
+T{ : TEST-CSTRING C" Hello" ;  -> }T
+T{ TEST-CSTRING C@ 72 = -> TRUE }T
+T{ TEST-CSTRING 5 + C@ 0 = -> TRUE }T
+
+S" C\" string can be printed character by character" TEST:
+: COUNT-CSTRING ( addr -- n )
+  0 SWAP
+  BEGIN
+    DUP C@ DUP
+  WHILE
+    DROP 1+ SWAP 1+ SWAP
+  REPEAT
+  2DROP ;
+T{ C" Test" COUNT-CSTRING -> 4 }T
+
+\ =============================================================================
 \ REPORT
 \ =============================================================================
 

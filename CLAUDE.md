@@ -53,47 +53,57 @@ docs/                  # Detailed documentation (see below)
 
 **CRITICAL:** We use dual-implementation architecture for interpreter + JIT + AOT support.
 
-### Step 1: Add to `src/runtime.rs` (single source of truth)
+**See [docs/adding-llvm-primitives.md](docs/adding-llvm-primitives.md) for complete step-by-step guide.**
+
+### Quick Summary (6 steps required)
+
+1. **`src/runtime.rs`** - Implement `quarter_*` function (single source of truth)
+2. **`src/words.rs`** - Add extern declaration + wrapper for interpreted mode
+3. **`src/dictionary.rs`** - Register in `register_primitives!` macro
+4. **`src/llvm_forth.rs`** - Add to `register_quarter_symbols()` for AOT linking
+5. **`stdlib/compiler.fth`** - Add to `DECLARE-ALL-PRIMITIVES` (byte-by-byte ASCII)
+6. **`stdlib/compiler.fth`** - (Optional) Add name mapping in `MAP-WORD-NAME` for special characters
+
+### Example: Simple primitive
+
 ```rust
-#[no_mangle]
+// Step 1: src/runtime.rs
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn quarter_word_name(
     memory: *mut u8, sp: *mut usize, rp: *mut usize
 ) {
     unsafe {
         let sp_val = *sp;
-        // Check bounds with check_sp_read/check_sp_write
-        // Implement word using raw pointers
-        *sp = new_sp_val;
+        if !check_sp_read(sp_val, 8) { return; }
+        let val = (memory.add(sp_val - 8) as *const i64).read_unaligned();
+        // ... implement logic ...
+        let result_addr = memory.add(sp_val - 8) as *mut i64;
+        *result_addr = result;
     }
 }
-```
 
-### Step 2: Add wrapper to `src/words.rs` (for interpreter)
-```rust
-pub fn word_name(stack: &mut Stack, _loop_stack: &LoopStack,
-                 return_stack: &mut crate::ReturnStack,
-                 memory: &mut crate::Memory) {
-    unsafe {
-        crate::runtime::quarter_word_name(
-            memory.as_mut_ptr(),
-            stack.get_sp_ptr(),
-            return_stack.get_rp_ptr()
-        );
-    }
+// Step 2: src/words.rs - extern + wrapper
+unsafe extern "C" {
+    pub fn quarter_word_name(memory: *mut u8, sp: *mut usize, rp: *mut usize);
 }
-```
+pub fn word_name(stack: &mut Stack, ...) { /* wrapper impl */ }
 
-### Step 3: Register in `src/dictionary.rs`
-```rust
+// Step 3: src/dictionary.rs
 "WORD-NAME" => words::word_name,
-```
 
-### Step 4: Register for JIT in `src/llvm_forth.rs` (in `register_runtime_symbols`)
-```rust
+// Step 4: src/llvm_forth.rs
 crate::words::quarter_word_name,
+
+// Step 5: stdlib/compiler.fth (DECLARE-ALL-PRIMITIVES)
+\ ASCII bytes for "quarter_word_name" then DECLARE-PRIMITIVE
+
+// Step 6: stdlib/compiler.fth (MAP-WORD-NAME) - only if needed
+\ Custom mapping for special characters like "-TRAILING"
 ```
 
 **Why?** This architecture eliminates duplication - same code works for interpreter, JIT, and AOT modes.
+
+**Testing:** Test in all three modes (interpreted, `--jit`, `--compile`) before committing.
 
 ## Adding Other Word Types
 
@@ -148,7 +158,8 @@ Centralized in `Cargo.toml`, accessed via `const VERSION: &str = env!("CARGO_PKG
 **Core:** `+`, `-`, `*`, `/`, `MOD`, `DUP`, `DROP`, `SWAP`, `OVER`, `ROT`, `!`, `@`, `C!`, `C@`
 **Comparison:** `<`, `>`, `=`, `0=`, `0<`, `0>`
 **Control Flow:** `IF/THEN/ELSE`, `BEGIN/UNTIL`, `BEGIN/WHILE/REPEAT`, `DO/LOOP`, `+LOOP`, `LEAVE`, `EXIT`, `RECURSE`
-**I/O:** `.`, `.S`, `CR`, `EMIT`, `KEY`, `TYPE`, `."`, `S"`
+**I/O:** `.`, `.S`, `CR`, `EMIT`, `KEY`, `TYPE`, `."`, `S"`, `C"`
+**Strings:** `COMPARE`, `-TRAILING`, `SEARCH`, `/STRING`, `ERASE`
 **Memory:** `HERE`, `ALLOT`, `,`, `VARIABLE`, `CONSTANT`, `CREATE`, `ALIGNED`, `ALIGN`, `FILL`
 **Metaprogramming:** `EXECUTE`, `'`, `[']`, `FIND`, `IMMEDIATE`, `CHAR`, `[CHAR]`
 **Error Handling:** `ABORT`, `ABORT"`
@@ -159,7 +170,11 @@ Centralized in `Cargo.toml`, accessed via `const VERSION: &str = env!("CARGO_PKG
 See `docs/` for comprehensive guides:
 - **[AOT Compilation](docs/aot-compilation.md)** - Standalone executables, optimization levels, troubleshooting
 - **[Control Flow](docs/control-flow.md)**, **[Memory](docs/memory.md)**, **[Metaprogramming](docs/metaprogramming.md)**
-- **[I/O](docs/io.md)**, **[Stacks](docs/stacks.md)**, **[Error Handling](docs/error-handling.md)**, **[Arithmetic](docs/arithmetic.md)**
+- **[I/O](docs/io.md)**, **[Strings](docs/strings.md)**, **[Stacks](docs/stacks.md)**, **[Error Handling](docs/error-handling.md)**, **[Arithmetic](docs/arithmetic.md)**
+
+**Developer Documentation:**
+- **[Adding LLVM Primitives](docs/adding-llvm-primitives.md)** - Step-by-step implementation guide
+- **[LLVM Global Strings](docs/llvm-global-strings-notes.md)** - Dual-strategy string implementation
 
 See **[README.md](README.md)** for installation, examples, and feature overview.
 
@@ -182,3 +197,4 @@ See **[README.md](README.md)** for installation, examples, and feature overview.
 - **Dual primitives**: `runtime.rs` = single source, `words.rs` = wrappers, `build.rs` = separate compilation
 - **Clean builds**: Auto-cleanup of temp files after AOT compilation
 - **Self-hosting**: Forth compiler written in Forth (stdlib/compiler.fth)
+- **Dual-strategy strings**: JIT mode uses HERE-based allocation, AOT mode uses LLVM global constants (see [docs/llvm-global-strings-notes.md](docs/llvm-global-strings-notes.md))

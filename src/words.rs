@@ -67,7 +67,13 @@ unsafe extern "C" {
     pub fn quarter_from_r(memory: *mut u8, sp: *mut usize, rp: *mut usize);
     pub fn quarter_r_fetch(memory: *mut u8, sp: *mut usize, rp: *mut usize);
 
-    // I/O (emit, cr, dot, space are defined in this module)
+    // I/O operations
+    pub fn quarter_type(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+
+    // String operations
+    pub fn quarter_compare(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_minus_trailing(memory: *mut u8, sp: *mut usize, rp: *mut usize);
+    pub fn quarter_search(memory: *mut u8, sp: *mut usize, rp: *mut usize);
 }
 
 // Built-in word definitions
@@ -754,6 +760,180 @@ pub fn type_word(
         }
     } else {
         eprintln!("TYPE: stack underflow");
+    }
+}
+
+pub fn compare(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    // COMPARE ( c-addr1 u1 c-addr2 u2 -- n )
+    // Compare two strings, return -1 (less), 0 (equal), or 1 (greater)
+    if let (Some(u2), Some(addr2), Some(u1), Some(addr1)) = (
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+    ) {
+        if u1 < 0 || u2 < 0 {
+            eprintln!("COMPARE: negative length");
+            return;
+        }
+
+        let addr1 = addr1 as usize;
+        let u1 = u1 as usize;
+        let addr2 = addr2 as usize;
+        let u2 = u2 as usize;
+
+        // Compare byte by byte up to the minimum length
+        let min_len = u1.min(u2);
+        for i in 0..min_len {
+            match (memory.fetch_byte(addr1 + i), memory.fetch_byte(addr2 + i)) {
+                (Ok(byte1), Ok(byte2)) => {
+                    if byte1 < byte2 {
+                        stack.push(-1, memory);
+                        return;
+                    } else if byte1 > byte2 {
+                        stack.push(1, memory);
+                        return;
+                    }
+                    // If equal, continue to next byte
+                }
+                (Err(e), _) | (_, Err(e)) => {
+                    eprintln!("COMPARE: {}", e);
+                    return;
+                }
+            }
+        }
+
+        // All bytes equal up to min length, compare lengths
+        if u1 < u2 {
+            stack.push(-1, memory);
+        } else if u1 > u2 {
+            stack.push(1, memory);
+        } else {
+            stack.push(0, memory);
+        }
+    } else {
+        eprintln!("COMPARE: stack underflow");
+    }
+}
+
+pub fn minus_trailing(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    // -TRAILING ( c-addr u1 -- c-addr u2 )
+    // Remove trailing spaces from string
+    if let (Some(u), Some(addr)) = (stack.pop(memory), stack.pop(memory)) {
+        if u < 0 {
+            eprintln!("-TRAILING: negative length");
+            return;
+        }
+
+        let addr_usize = addr as usize;
+        let mut len = u as usize;
+
+        // Scan backwards to find last non-space character
+        while len > 0 {
+            match memory.fetch_byte(addr_usize + len - 1) {
+                Ok(byte) => {
+                    if byte != 32 {
+                        // Not a space
+                        break;
+                    }
+                    len -= 1;
+                }
+                Err(e) => {
+                    eprintln!("-TRAILING: {}", e);
+                    return;
+                }
+            }
+        }
+
+        stack.push(addr, memory);
+        stack.push(len as i64, memory);
+    } else {
+        eprintln!("-TRAILING: stack underflow");
+    }
+}
+
+pub fn search(
+    stack: &mut Stack,
+    _loop_stack: &LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    // SEARCH ( c-addr1 u1 c-addr2 u2 -- c-addr3 u3 flag )
+    // Search for substring, return position if found or original string if not
+    if let (Some(needle_len), Some(needle_addr), Some(haystack_len), Some(haystack_addr)) = (
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+    ) {
+        if haystack_len < 0 || needle_len < 0 {
+            eprintln!("SEARCH: negative length");
+            return;
+        }
+
+        let haystack_addr_usize = haystack_addr as usize;
+        let haystack_len_usize = haystack_len as usize;
+        let needle_addr_usize = needle_addr as usize;
+        let needle_len_usize = needle_len as usize;
+
+        // Empty needle always matches at beginning
+        if needle_len_usize == 0 {
+            stack.push(haystack_addr, memory);
+            stack.push(haystack_len, memory);
+            stack.push(-1, memory); // TRUE
+            return;
+        }
+
+        // Search for needle in haystack
+        if haystack_len_usize >= needle_len_usize {
+            for i in 0..=(haystack_len_usize - needle_len_usize) {
+                let mut match_found = true;
+
+                // Compare needle with current position in haystack
+                for j in 0..needle_len_usize {
+                    match (
+                        memory.fetch_byte(haystack_addr_usize + i + j),
+                        memory.fetch_byte(needle_addr_usize + j),
+                    ) {
+                        (Ok(hay_byte), Ok(needle_byte)) => {
+                            if hay_byte != needle_byte {
+                                match_found = false;
+                                break;
+                            }
+                        }
+                        (Err(e), _) | (_, Err(e)) => {
+                            eprintln!("SEARCH: {}", e);
+                            return;
+                        }
+                    }
+                }
+
+                if match_found {
+                    // Found! Return address at match position
+                    stack.push((haystack_addr_usize + i) as i64, memory);
+                    stack.push((haystack_len_usize - i) as i64, memory);
+                    stack.push(-1, memory); // TRUE
+                    return;
+                }
+            }
+        }
+
+        // Not found - return original string
+        stack.push(haystack_addr, memory);
+        stack.push(haystack_len, memory);
+        stack.push(0, memory); // FALSE
+    } else {
+        eprintln!("SEARCH: stack underflow");
     }
 }
 
@@ -1663,48 +1843,6 @@ pub unsafe extern "C" fn quarter_u_dot_r(memory: *mut u8, sp: *mut usize, _rp: *
     }
 }
 
-/// JIT-callable type: ( addr len -- )
-/// Prints string from memory
-/// # Safety
-/// The caller must ensure:
-/// - `memory` points to a valid memory buffer of at least 8MB
-/// - `sp` points to a valid stack pointer within data stack bounds (0-65535)
-/// - The data stack contains at least 2 values (16 bytes)
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quarter_type(memory: *mut u8, sp: *mut usize, _rp: *mut usize) {
-    unsafe {
-        let sp_val = *sp;
-        if !check_sp_read(sp_val, 16) {
-            return;
-        }
-        let addr_ptr = memory.add(sp_val - 16) as *const i64;
-        let len_ptr = memory.add(sp_val - 8) as *const i64;
-        let addr = addr_ptr.read_unaligned() as usize;
-        let len = len_ptr.read_unaligned();
-
-        if len < 0 {
-            eprintln!("TYPE: negative length");
-            *sp = sp_val - 16;
-            return;
-        }
-
-        let len = len as usize;
-        // Print each character from memory
-        for i in 0..len {
-            if addr + i < 8 * 1024 * 1024 {
-                let byte_ptr = memory.add(addr + i);
-                let byte = *byte_ptr;
-                if let Some(ch) = char::from_u32(byte as u32) {
-                    print!("{}", ch);
-                }
-            }
-        }
-        let new_sp = sp_val - 16;
-        debug_assert!(new_sp % 8 == 0, "Stack pointer misalignment after TYPE");
-        *sp = new_sp;
-    }
-}
-
 // ============================================================================
 // Stack Pointer and Memory Allocation Primitives
 // ============================================================================
@@ -2590,6 +2728,113 @@ pub fn llvm_build_trunc_word(
         }
     } else {
         eprintln!("LLVM-BUILD-TRUNC: Stack underflow");
+    }
+}
+
+/// LLVM-BUILD-PTRTOINT: Convert pointer to integer
+/// Stack: ( builder-handle ctx-handle ptr-handle -- value-handle )
+pub fn llvm_build_ptrtoint_word(
+    stack: &mut crate::Stack,
+    _loop_stack: &crate::LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    if let (Some(ptr_handle), Some(ctx_handle), Some(builder_handle)) = (
+        stack.pop(memory),
+        stack.pop(memory),
+        stack.pop(memory),
+    ) {
+        match crate::llvm_forth::llvm_build_ptrtoint(builder_handle, ctx_handle, ptr_handle) {
+            Ok(handle) => stack.push(handle, memory),
+            Err(e) => eprintln!("LLVM-BUILD-PTRTOINT error: {}", e),
+        }
+    } else {
+        eprintln!("LLVM-BUILD-PTRTOINT: Stack underflow");
+    }
+}
+
+/// LLVM-CREATE-GLOBAL-STRING: Create a global string constant in the module
+/// Stack: ( module-handle ctx-handle string-addr string-len name-addr name-len -- value-handle )
+/// Returns a pointer to the string data (i8*) that can be used in IR
+pub fn llvm_create_global_string_word(
+    stack: &mut crate::Stack,
+    _loop_stack: &crate::LoopStack,
+    _return_stack: &mut crate::ReturnStack,
+    memory: &mut crate::Memory,
+) {
+    let name_len = match stack.pop(memory) {
+        Some(n) => n as usize,
+        None => {
+            eprintln!("LLVM-CREATE-GLOBAL-STRING: Stack underflow (name_len)");
+            return;
+        }
+    };
+
+    let name_addr = match stack.pop(memory) {
+        Some(n) => n as usize,
+        None => {
+            eprintln!("LLVM-CREATE-GLOBAL-STRING: Stack underflow (name_addr)");
+            return;
+        }
+    };
+
+    let string_len = match stack.pop(memory) {
+        Some(n) => n as usize,
+        None => {
+            eprintln!("LLVM-CREATE-GLOBAL-STRING: Stack underflow (string_len)");
+            return;
+        }
+    };
+
+    let string_addr = match stack.pop(memory) {
+        Some(n) => n as usize,
+        None => {
+            eprintln!("LLVM-CREATE-GLOBAL-STRING: Stack underflow (string_addr)");
+            return;
+        }
+    };
+
+    let ctx_handle = match stack.pop(memory) {
+        Some(n) => n,
+        None => {
+            eprintln!("LLVM-CREATE-GLOBAL-STRING: Stack underflow (ctx_handle)");
+            return;
+        }
+    };
+
+    let module_handle = match stack.pop(memory) {
+        Some(n) => n,
+        None => {
+            eprintln!("LLVM-CREATE-GLOBAL-STRING: Stack underflow (module_handle)");
+            return;
+        }
+    };
+
+    // Read string bytes from memory
+    let string_bytes = (0..string_len)
+        .map(|i| {
+            memory.fetch_byte(string_addr + i).unwrap_or(0) as u8
+        })
+        .collect::<Vec<u8>>();
+
+    // Read name bytes from memory
+    let name_bytes = (0..name_len)
+        .map(|i| {
+            memory.fetch_byte(name_addr + i).unwrap_or(0) as u8
+        })
+        .collect::<Vec<u8>>();
+
+    let name = match std::str::from_utf8(&name_bytes) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("LLVM-CREATE-GLOBAL-STRING: Invalid UTF-8 in name: {}", e);
+            return;
+        }
+    };
+
+    match crate::llvm_forth::llvm_create_global_string(module_handle, ctx_handle, &string_bytes, name) {
+        Ok(handle) => stack.push(handle, memory),
+        Err(e) => eprintln!("LLVM-CREATE-GLOBAL-STRING error: {}", e),
     }
 }
 

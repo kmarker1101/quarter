@@ -103,6 +103,11 @@ fn register_quarter_symbols() -> usize {
         crate::words::quarter_here,
         crate::words::quarter_allot,
         crate::words::quarter_comma,
+
+        // String operations
+        crate::words::quarter_compare,
+        crate::words::quarter_minus_trailing,
+        crate::words::quarter_search,
     );
     symbols[0] // Return something to prevent optimization
 }
@@ -900,6 +905,74 @@ impl LLVMRegistry {
         Ok(handle)
     }
 
+    /// Build ptrtoint instruction (pointer -> i64)
+    pub fn build_ptrtoint(&mut self,
+                         builder_handle: BuilderHandle,
+                         ctx_handle: ContextHandle,
+                         ptr_handle: ValueHandle) -> Result<ValueHandle, String> {
+        let builder = self.builders.get(&builder_handle)
+            .ok_or_else(|| format!("Invalid builder handle: {}", builder_handle))?;
+
+        let context = self.contexts.get(&ctx_handle)
+            .ok_or_else(|| format!("Invalid context handle: {}", ctx_handle))?;
+
+        let ptr_value = self.values.get(&ptr_handle)
+            .ok_or_else(|| format!("Invalid pointer handle: {}", ptr_handle))?
+            .into_pointer_value();
+
+        let i64_type = context.i64_type();
+
+        let result = builder.build_ptr_to_int(ptr_value, i64_type, "ptrtoint")
+            .map_err(|e| format!("Failed to build ptrtoint: {}", e))?;
+
+        let handle = self.next_handle();
+        self.values.insert(handle, result.into());
+        Ok(handle)
+    }
+
+    /// Create a global string constant in the module
+    /// Returns a pointer to the string data (i8*)
+    pub fn create_global_string(&mut self,
+                                module_handle: ModuleHandle,
+                                ctx_handle: ContextHandle,
+                                string_data: &[u8],
+                                name: &str) -> Result<ValueHandle, String> {
+        let module = self.modules.get(&module_handle)
+            .ok_or_else(|| format!("Invalid module handle: {}", module_handle))?;
+
+        let context = self.contexts.get(&ctx_handle)
+            .ok_or_else(|| format!("Invalid context handle: {}", ctx_handle))?;
+
+        // Create array type for the string
+        let i8_type = context.i8_type();
+        let array_type = i8_type.array_type(string_data.len() as u32);
+
+        // Create initializer with string data
+        let string_values: Vec<_> = string_data.iter()
+            .map(|&b| i8_type.const_int(b as u64, false))
+            .collect();
+        let initializer = i8_type.const_array(&string_values);
+
+        // Create global variable with private linkage
+        let global = module.add_global(array_type, None, name);
+        global.set_linkage(inkwell::module::Linkage::Private);
+        global.set_constant(true);
+        global.set_initializer(&initializer);
+
+        // Get pointer to first element (GEP with indices [0, 0])
+        let zero = context.i64_type().const_int(0, false);
+        let ptr = unsafe {
+            global.as_pointer_value().const_gep(
+                array_type,
+                &[zero, zero]
+            )
+        };
+
+        let handle = self.next_handle();
+        self.values.insert(handle, ptr.into());
+        Ok(handle)
+    }
+
     /// Build function call
     pub fn build_call(&mut self,
                      builder_handle: BuilderHandle,
@@ -1418,5 +1491,33 @@ pub fn llvm_write_object_file(
     LLVM_REGISTRY.with(|cell| {
         let registry = cell.borrow();
         registry.write_object_file(module_handle, path, opt_level as u8)
+    })
+}
+
+/// Build ptrtoint instruction (pointer -> i64)
+/// Stack: ( builder-handle ctx-handle ptr-handle -- value-handle )
+pub fn llvm_build_ptrtoint(
+    builder_handle: i64,
+    ctx_handle: i64,
+    ptr_handle: i64,
+) -> Result<i64, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.build_ptrtoint(builder_handle, ctx_handle, ptr_handle)
+    })
+}
+
+/// Create a global string constant in the module
+/// Stack: ( module-handle ctx-handle string-addr string-len name-addr name-len -- value-handle )
+/// Returns a pointer to the string data (i8*) that can be used in IR
+pub fn llvm_create_global_string(
+    module_handle: i64,
+    ctx_handle: i64,
+    string_data: &[u8],
+    name: &str,
+) -> Result<i64, String> {
+    LLVM_REGISTRY.with(|cell| {
+        let mut registry = cell.borrow_mut();
+        registry.create_global_string(module_handle, ctx_handle, string_data, name)
     })
 }

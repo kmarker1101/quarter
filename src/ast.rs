@@ -23,6 +23,7 @@ pub enum AstNode {
     },
     PrintString(String),
     StackString(String),  // S" - push address and length
+    CString(String),  // C" - push address of null-terminated string
     AbortQuote(String),  // ABORT" - compile-only, conditionally abort with message
     Leave,
     Exit,
@@ -44,6 +45,7 @@ impl AstNode {
             AstNode::PushNumber(_) => Ok(()),
             AstNode::PrintString(_) => Ok(()),
             AstNode::StackString(_) => Ok(()),
+            AstNode::CString(_) => Ok(()),
             AstNode::AbortQuote(_) => Ok(()),
             AstNode::Leave => Ok(()),
             AstNode::Exit => Ok(()),
@@ -317,6 +319,27 @@ impl AstNode {
                 // Push address and length onto stack
                 stack.push(addr, memory);
                 stack.push(len, memory);
+                Ok(())
+            }
+            AstNode::CString(s) => {
+                // C" - Store null-terminated string in memory and push address only
+                let addr = memory.here();
+                let bytes = s.as_bytes();
+                let len = bytes.len() as i64;
+
+                // Store each byte in memory
+                for (i, &byte) in bytes.iter().enumerate() {
+                    memory.store_byte((addr as usize) + i, byte as i64)?;
+                }
+
+                // Add null terminator
+                memory.store_byte((addr as usize) + len as usize, 0)?;
+
+                // Advance HERE by string length + 1 (for null terminator)
+                memory.allot(len + 1)?;
+
+                // Push address only (not length)
+                stack.push(addr, memory);
                 Ok(())
             }
             AstNode::Leave => {

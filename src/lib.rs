@@ -616,6 +616,39 @@ pub fn parse_tokens(tokens: &[&str], dict: &crate::Dictionary, current_word: Opt
                 let string_content = string_parts.join(" ");
                 nodes.push(AstNode::StackString(string_content));
             }
+            "C\"" => {
+                // Handle C" string literals: collect tokens until closing "
+                let mut string_parts: Vec<String> = Vec::new();
+                i += 1; // Skip past C"
+
+                while i < tokens.len() {
+                    let part = tokens[i];
+                    if let Some(without_quote) = part.strip_suffix('"') {
+                        // Found closing quote
+                        if part == "\"" {
+                            // Just a closing quote - means there was a trailing space
+                            // Add space to the last part if there is one
+                            if !string_parts.is_empty() {
+                                let last_idx = string_parts.len() - 1;
+                                string_parts[last_idx].push(' ');
+                            }
+                        } else {
+                            // Text followed by quote
+                            if !without_quote.is_empty() {
+                                string_parts.push(without_quote.to_string());
+                            }
+                        }
+                        i += 1;
+                        break;
+                    } else {
+                        string_parts.push(part.to_string());
+                        i += 1;
+                    }
+                }
+
+                let string_content = string_parts.join(" ");
+                nodes.push(AstNode::CString(string_content));
+            }
             "ABORT\"" => {
                 // Handle ABORT" string literals: collect tokens until closing "
                 let mut string_parts: Vec<String> = Vec::new();
@@ -1403,6 +1436,20 @@ pub fn execute_line(
                             continue;
                         }
 
+                        // Skip C" string contents
+                        if upper == "C\"" {
+                            idx += 1;
+                            // Skip until we find the closing "
+                            while idx < exec_tokens.len() {
+                                if exec_tokens[idx].ends_with('"') {
+                                    idx += 1;
+                                    break;
+                                }
+                                idx += 1;
+                            }
+                            continue;
+                        }
+
                         // Skip ." string contents
                         if upper == ".\"" {
                             idx += 1;
@@ -1534,6 +1581,12 @@ pub fn batch_compile_all_words(
 
     // Step 1: Initialize batch compiler
     ctx.dict.execute_word("INIT-BATCH-COMPILER", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
+
+    // Set COMPILING-AOT? to 0 (false) for JIT mode
+    ctx.stack.push(0, ctx.memory); // false
+    ctx.dict.execute_word("COMPILING-AOT?", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
+    ctx.dict.execute_word("!", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
+
     if std::env::var("QUARTER_DEBUG").is_ok() {
         eprintln!("DEBUG (lib.rs): INIT-BATCH-COMPILER completed, starting declarations");
     }
@@ -1693,6 +1746,11 @@ pub fn compile_to_object_file(
 
     // Step 1: Initialize batch compiler (sets up CURRENT-MODULE variable)
     ctx.dict.execute_word("INIT-BATCH-COMPILER", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
+
+    // Set COMPILING-AOT? to -1 (true) for AOT mode
+    ctx.stack.push(-1, ctx.memory); // true
+    ctx.dict.execute_word("COMPILING-AOT?", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
+    ctx.dict.execute_word("!", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
 
     // Step 2: Get module handle from CURRENT-MODULE variable
     ctx.dict.execute_word("CURRENT-MODULE", ctx.stack, ctx.loop_stack, ctx.return_stack, ctx.memory)?;
